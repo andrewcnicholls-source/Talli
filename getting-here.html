@@ -36,14 +36,15 @@
     <a class="btn btn-primary" href="https://www.google.com/maps/dir/?api=1&destination=86+Paice+Ave%2C+Sandringham%2C+Auckland" target="_blank" rel="noopener">
       Open in Google Maps
     </a>
-    <a class="btn btn-outline" href="https://maps.apple.com/?daddr=86+Paice+Ave,+Sandringham,+Auckland,+New+Zealand&q=Talli+Parking" target="_blank" rel="noopener">
+    <a class="btn btn-outline" href="https://maps.apple.com/?daddr=86+Paice+Ave,+Sandringham,+Auckland,+New+Zealand&saddr=Current+Location" target="_blank" rel="noopener">
       Open in Apple Maps
     </a>
   </div>
 
-  <div class="map-container box">
+  <div class="map-container box" style="height: 450px;">
     <iframe
       src="https://www.google.com/maps?q=86+Paice+Ave,+Sandringham,+Auckland,+New+Zealand&output=embed"
+      style="height: 100%; width: 100%;"
       allowfullscreen=""
       loading="lazy"
       referrerpolicy="no-referrer-when-downgrade">
@@ -52,42 +53,44 @@
 
   <hr class="thin">
 
-  <div class="callout">
-    <h3>Please come straight back after the event</h3>
-    <p>We double-park to fit more cars in, which means we sometimes need to move vehicles to let others out. Please head back to your car as soon as the event finishes — it keeps things moving and gets everyone home faster.</p>
-  </div>
-
   <div class="box" style="margin-top:24px;">
-    <h3>Save this page for next time</h3>
-    <p>Bookmark this page, or add it to your home screen, so you can find us again without hunting for the link. On iPhone: Share → Add to Home Screen. On Android: Menu (⋮) → Add to Home screen.</p>
-  </div>
-
-  <div class="box" style="margin-top:16px;">
-    <h3>Walking route to Eden Park</h3>
-    <div class="photo-placeholder">
-      Photo of the walking route from 86 Paice Ave to Eden Park — coming soon
+    <h3>Share this location</h3>
+    <p>Meeting mates? Send them the link so they know where to park.</p>
+    <div class="btn-row">
+      <button id="saveBtn" class="btn btn-outline">Share / Save Page</button>
     </div>
-  </div>
-
-  <div class="box" style="margin-top:16px;">
-    <h3>Scan on the night</h3>
-    <p>Point your phone camera at this code to come straight back to this page — works whether you use Google or Apple Maps.</p>
-    <img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=https://talli.co.nz/getting-here.html" alt="QR code linking to this Getting Here page" width="180" height="180" style="margin-top:12px;">
   </div>
 
 </main>
 
 <div class="sticky-cta">
   <a class="btn btn-primary" href="https://www.google.com/maps/dir/?api=1&destination=86+Paice+Ave%2C+Sandringham%2C+Auckland" target="_blank" rel="noopener">Google Maps</a>
-  <a class="btn btn-outline" href="https://maps.apple.com/?daddr=86+Paice+Ave,+Sandringham,+Auckland,+New+Zealand&q=Talli+Parking" target="_blank" rel="noopener">Apple Maps</a>
+  <a class="btn btn-outline" href="https://maps.apple.com/?daddr=86+Paice+Ave,+Sandringham,+Auckland,+New+Zealand&saddr=Current+Location" target="_blank" rel="noopener">Apple Maps</a>
 </div>
 
 <footer>
   <div class="footer-inner">
-    <div><strong>Talli Parking</strong><br>86 Paice Ave, Sandringham, Auckland</div>
+    <div><strong>Talli Parking</strong><br>86 Paice Ave, Sandringham, Auckland<br><a href="terms.html" style="font-size: 0.85em; text-decoration: underline;">Terms & Conditions</a></div>
     <div>Book or ask a question:<br><a href="mailto:talli.parking@gmail.com">talli.parking@gmail.com</a></div>
   </div>
 </footer>
+
+<script>
+    document.getElementById('saveBtn').addEventListener('click', async () => {
+        if (navigator.share) {
+            try {
+                await navigator.share({
+                    title: 'Talli Parking - 86 Paice Ave',
+                    url: window.location.href
+                });
+            } catch (err) {
+                console.log('Share cancelled');
+            }
+        } else {
+            alert('To save this page, press Ctrl+D (Windows) or Cmd+D (Mac) to bookmark!');
+        }
+    });
+</script>
 
 </body>
 </html>

@@ -34,13 +34,13 @@
 
   <div class="box">
     <h3>Walking time from 86 Paice Ave</h3>
-    <p>Around 1.6km, roughly a 20&ndash;22 minute walk to the Eden Park gates. Allow a bit longer once crowds build up close to kick-off.</p>
+    <p><strong>750m | 8-minute walk</strong> to the Eden Park gates. Make sure to allow some time to get to your seat.</p>
   </div>
 
   <hr class="thin">
 
   <div class="section-label">Before You Go</div>
-  <h2>Good to check on the official site</h2>
+  <h2>Entering Eden Park</h2>
   <p>Rules can change event to event, so it's always worth a quick check before you head in.</p>
 
   <div class="steps" style="margin-top:8px;">
@@ -54,15 +54,16 @@
 
     <div class="box" style="margin-bottom:12px;">
       <h3>Gates, seating &amp; stadium map</h3>
-      <p>For gate opening times, your seating area and a map of the stadium, the official Eden Park event page for your match or show is the best source.</p>
+      <p>From Talli, head straight up Sandringham Road towards the stadium. You will be approaching Eden Park from the South-West side.</p>
+      <p>Depending on where your tickets are located, it's best to check which gate you need before you arrive.</p>
       <div class="btn-row" style="margin:14px 0 0;">
-        <a class="btn btn-outline" href="https://edenpark.co.nz/" target="_blank" rel="noopener">Eden Park official site →</a>
+        <button id="mapToggleBtn" class="btn btn-outline">View Official Stadium Gate Map</button>
       </div>
-    </div>
-
-    <div class="box">
-      <h3>On the day</h3>
-      <p>Aim to arrive with plenty of time before gates close, especially for big fixtures. A liquor ban applies in the neighbourhood around the stadium on event days, and re-entry once you've left is not always allowed &mdash; check your ticket type.</p>
+      
+      <!-- Interactive Map Embed Container (Taller Height) -->
+      <div id="mapEmbedContainer" style="display: none; margin-top: 20px; width: 100%; height: 800px; border: 1px solid var(--line); border-radius: 4px; overflow: hidden;">
+         <iframe src="https://edenpark.co.nz/wp-content/uploads/2025/06/Eden-Park-Stadium-Gate-Locations-Map.pdf" width="100%" height="100%" style="border: none;"></iframe>
+      </div>
     </div>
   </div>
 
@@ -70,10 +71,24 @@
 
 <footer>
   <div class="footer-inner">
-    <div><strong>Talli Parking</strong><br>86 Paice Ave, Sandringham, Auckland</div>
+    <div><strong>Talli Parking</strong><br>86 Paice Ave, Sandringham, Auckland<br><a href="terms.html" style="font-size: 0.85em; text-decoration: underline;">Terms & Conditions</a></div>
     <div>Book or ask a question:<br><a href="mailto:talli.parking@gmail.com">talli.parking@gmail.com</a></div>
   </div>
 </footer>
+
+<script>
+  // Script to toggle the map viewer
+  document.getElementById('mapToggleBtn').addEventListener('click', function() {
+    var container = document.getElementById('mapEmbedContainer');
+    if (container.style.display === 'none') {
+      container.style.display = 'block';
+      this.textContent = 'Hide Stadium Gate Map';
+    } else {
+      container.style.display = 'none';
+      this.textContent = 'View Official Stadium Gate Map';
+    }
+  });
+</script>
 
 </body>
 </html>

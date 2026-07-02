@@ -345,3 +345,19 @@ footer a { color: var(--blue); }
 }
 .sticky-cta .btn { flex: 1; padding: 13px 10px; font-size: 0.86rem; }
 @media (min-width: 760px) { .sticky-cta { display: none; } }
+
+
+/* Update Merch Grid for Images */
+.merch-photo {
+  background: var(--blue-tint);
+  color: var(--blue);
+  height: 180px; /* Increased height for images */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  text-align: center;
+  padding: 0;
+  overflow: hidden;
+}
