@@ -15,7 +15,7 @@
   --grey: #7A7A74;
   --orange-flag: #B5502E; /* used once, only for the return-promptly notice */
 
-  --display: 'Poiret One', cursive;
+--display: 'Poiret One', sans-serif;
   --body: 'Jost', 'Work Sans', Arial, sans-serif;
 }
 
@@ -358,6 +358,16 @@ footer a { color: var(--blue); }
   font-size: 0.78rem;
   letter-spacing: 0.04em;
   text-align: center;
+
+   /* ---------- Text Logo Override ---------- */
+.brand-logo-text {
+  font-family: var(--display);
+  font-size: 2.2rem;
+  font-weight: bold; /* Forces the browser to thicken the naturally thin Poiret One */
+  color: var(--ink);
+  letter-spacing: 0.02em;
+  line-height: 1;
+}
   padding: 0;
   overflow: hidden;
 }
