@@ -1,0 +1,347 @@
+/* ============================================
+   TALLI PARKING — shared styles (v2, clean)
+   Palette: white, ink, thin cobalt-blue accent
+   Type: Poiret One (display, sparing) + Jost (body/UI)
+   ============================================ */
+
+:root {
+  --white: #FFFFFF;
+  --offwhite: #FAFAF8;
+  --ink: #1A1A1A;
+  --blue: #2B4C7E;
+  --blue-deep: #1C3255;
+  --blue-tint: #EEF2F7;
+  --line: #E4E2DC;
+  --grey: #7A7A74;
+  --orange-flag: #B5502E; /* used once, only for the return-promptly notice */
+
+  --display: 'Poiret One', cursive;
+  --body: 'Jost', 'Work Sans', Arial, sans-serif;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: var(--body);
+  font-weight: 400;
+  background: var(--white);
+  color: var(--ink);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: inherit; text-decoration: none; }
+img { max-width: 100%; display: block; }
+
+a:focus-visible, button:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
+
+/* ---------- Top bar ---------- */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: var(--white);
+  border-bottom: 1px solid var(--line);
+}
+.topbar-inner {
+  max-width: 1080px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+}
+.brand-logo { height: 34px; width: auto; }
+
+.topnav {
+  display: flex;
+  gap: 26px;
+  flex-wrap: wrap;
+  font-size: 0.86rem;
+  letter-spacing: 0.03em;
+  color: var(--ink);
+}
+.topnav a { opacity: 0.62; padding-bottom: 3px; border-bottom: 1px solid transparent; }
+.topnav a:hover, .topnav a.active { opacity: 1; border-bottom-color: var(--blue); }
+
+@media (max-width: 480px) {
+  .topbar-inner { flex-wrap: wrap; gap: 12px; }
+  .topnav { gap: 16px; font-size: 0.78rem; }
+}
+
+/* ---------- Hero ---------- */
+.hero {
+  padding: 64px 24px 48px;
+  max-width: 1080px;
+  margin: 0 auto;
+}
+.hero-rule {
+  width: 46px;
+  height: 1px;
+  background: var(--blue);
+  margin-bottom: 20px;
+}
+.eyebrow {
+  display: block;
+  font-size: 0.76rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--blue);
+  margin-bottom: 14px;
+}
+.hero h1 {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: clamp(2.4rem, 8vw, 4rem);
+  line-height: 1.08;
+  color: var(--ink);
+  max-width: 16ch;
+}
+.hero p {
+  font-size: clamp(1rem, 2.4vw, 1.15rem);
+  max-width: 46ch;
+  margin-top: 16px;
+  color: #4B4B46;
+  font-weight: 300;
+}
+.hero.compact { padding-bottom: 28px; }
+.hero.compact h1 { font-size: clamp(2rem, 6vw, 2.8rem); }
+
+/* ---------- Sections / containers ---------- */
+.wrap {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 48px 24px;
+}
+.wrap.tight { padding-top: 8px; padding-bottom: 32px; }
+
+.section-label {
+  font-size: 0.76rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--blue);
+  margin-bottom: 10px;
+}
+
+h2 {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: clamp(1.7rem, 4vw, 2.4rem);
+  margin-bottom: 16px;
+  color: var(--ink);
+}
+
+h3 {
+  font-family: var(--body);
+  font-weight: 500;
+  font-size: 1.05rem;
+  color: var(--ink);
+  margin-bottom: 8px;
+  letter-spacing: 0.01em;
+}
+
+p { max-width: 62ch; font-weight: 300; color: #3A3A36; }
+p + p { margin-top: 12px; }
+
+hr.thin {
+  border: none;
+  border-top: 1px solid var(--line);
+  margin: 40px 0;
+}
+
+/* ---------- Gate cards (signature element) ---------- */
+.gates {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+}
+@media (max-width: 760px) {
+  .gates { grid-template-columns: 1fr; }
+}
+
+.gate-card {
+  background: var(--white);
+  padding: 34px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: background 0.15s ease;
+}
+.gate-card:hover { background: var(--blue-tint); }
+
+.gate-num {
+  font-family: var(--display);
+  font-size: 1.6rem;
+  color: var(--blue);
+  line-height: 1;
+}
+.gate-card h3 { font-size: 1.15rem; font-weight: 500; }
+.gate-card p { font-size: 0.92rem; color: var(--grey); }
+.gate-go {
+  margin-top: auto;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--blue);
+  padding-top: 14px;
+}
+
+/* ---------- Buttons ---------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-family: var(--body);
+  font-weight: 500;
+  font-size: 0.96rem;
+  letter-spacing: 0.02em;
+  padding: 15px 24px;
+  border-radius: 3px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  text-align: center;
+  width: 100%;
+}
+@media (min-width: 520px) { .btn { width: auto; } }
+
+.btn-primary { background: var(--blue); color: var(--white); }
+.btn-primary:hover { background: var(--blue-deep); }
+
+.btn-outline { background: transparent; border-color: var(--ink); color: var(--ink); }
+.btn-outline:hover { border-color: var(--blue); color: var(--blue); }
+
+.btn-row { display: flex; flex-wrap: wrap; gap: 12px; margin: 22px 0; }
+
+/* ---------- Cards / boxes ---------- */
+.box {
+  background: var(--offwhite);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 26px;
+}
+.box + .box { margin-top: 16px; }
+
+.callout {
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--orange-flag);
+  border-radius: 4px;
+  padding: 24px 26px;
+}
+.callout h3 { color: var(--ink); }
+
+/* ---------- Map ---------- */
+.map-container iframe {
+  width: 100%;
+  height: 380px;
+  border: 0;
+  border-radius: 4px;
+  display: block;
+  filter: grayscale(0.15);
+}
+
+/* ---------- Photo placeholder ---------- */
+.photo-placeholder {
+  background: var(--offwhite);
+  border: 1px dashed #C7C4BB;
+  border-radius: 4px;
+  min-height: 220px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--grey);
+  font-size: 0.88rem;
+  text-align: center;
+  padding: 20px;
+}
+
+/* ---------- Lists ---------- */
+.checklist { list-style: none; margin-top: 10px; }
+.checklist li {
+  padding-left: 26px;
+  position: relative;
+  margin-bottom: 9px;
+  font-size: 0.95rem;
+  font-weight: 300;
+  color: #3A3A36;
+}
+.checklist li::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 6px;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--blue);
+}
+
+/* ---------- Merch grid ---------- */
+.merch-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  margin-top: 20px;
+}
+.merch-item { background: var(--white); }
+.merch-photo {
+  background: var(--blue-tint);
+  color: var(--blue);
+  height: 110px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  text-align: center;
+  padding: 10px;
+}
+.merch-body { padding: 16px 18px; }
+.merch-body h3 { font-size: 1rem; }
+.merch-body p { font-size: 0.88rem; color: var(--grey); }
+
+/* ---------- Footer ---------- */
+footer {
+  background: var(--offwhite);
+  border-top: 1px solid var(--line);
+  color: #55554F;
+  padding: 32px 24px 40px;
+  margin-top: 40px;
+}
+.footer-inner {
+  max-width: 1080px;
+  margin: 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 20px;
+  font-size: 0.88rem;
+  font-weight: 300;
+}
+.footer-inner strong { color: var(--ink); font-weight: 500; }
+footer a { color: var(--blue); }
+
+/* ---------- Sticky mobile CTA (Getting Here page) ---------- */
+.sticky-cta {
+  position: sticky;
+  bottom: 0;
+  z-index: 40;
+  background: var(--white);
+  border-top: 1px solid var(--line);
+  padding: 12px 16px;
+  display: flex;
+  gap: 10px;
+}
+.sticky-cta .btn { flex: 1; padding: 13px 10px; font-size: 0.86rem; }
+@media (min-width: 760px) { .sticky-cta { display: none; } }

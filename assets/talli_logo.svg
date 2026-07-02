@@ -1,0 +1,18 @@
+<svg width="400" height="200" viewBox="0 0 400 200" xmlns="http://www.w3.org/2000/svg">
+  <text 
+    x="200" 
+    y="120" 
+    font-family="'Poiret One', cursive" 
+    font-size="72" 
+    fill="#000000"
+    font-weight="400"
+    text-anchor="middle"
+    stroke-width="2"
+    stroke="#000000"
+  >
+    talli.
+  </text>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Poiret+One&amp;display=swap');
+  </style>
+</svg>
