@@ -59,7 +59,7 @@ a:focus-visible, button:focus-visible {
   justify-content: space-between;
   padding: 16px 24px;
 }
-.brand-logo { height: 50px; width: auto; }
+.brand-logo { height: 40px; width: auto; }
 
 .topnav {
   display: flex;
