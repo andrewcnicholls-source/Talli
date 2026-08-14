@@ -11,7 +11,7 @@
 # ---------------------------------------------------------------------------
 #
 # Each camera drives its own zone of lights, independently. A zone is just a
-# short slug ("driveway", "carpark") plus a set of entities named after it:
+# short slug ("driveway", "backyard") plus a set of entities named after it:
 #
 #   switch.<zone>_lights              the lights that zone controls (a group)
 #   input_select.<zone>_mode          Auto / Force on / Force off
@@ -30,8 +30,12 @@
 # group for its lights, and add one line to each of the three maps marked
 # ZONE MAP below. Nothing else changes.
 #
-# Two zones are defined here as "driveway" and "carpark" — rename them to suit,
-# but rename consistently.
+# The two zones are "driveway" and "backyard", deliberately matching the camera
+# names in the Arlo app. Because hass-aarlo derives its entity IDs from those
+# names, every Arlo entity below should already be correct — lines marked VERIFY
+# just need checking against Developer Tools → States, not replacing.
+#
+# If you ever rename a camera in the Arlo app, rename the zone here to match.
 
 # ---------------------------------------------------------------------------
 # Light groups — which physical lights belong to which zone
@@ -49,11 +53,11 @@ switch:
       - switch.tapo_sign_light # <<REPLACE>>
 
   - platform: group
-    name: Carpark lights
-    unique_id: talli_carpark_lights_group
+    name: Backyard lights
+    unique_id: talli_backyard_lights_group
     entities:
-      - switch.tapo_carpark_flood # <<REPLACE>>
-      - switch.tapo_bollard_lights # <<REPLACE>>
+      - switch.tapo_backyard_flood # <<REPLACE>>
+      - switch.tapo_deck_light # <<REPLACE>>
 
 # ---------------------------------------------------------------------------
 # Helpers — one block per zone
@@ -65,8 +69,8 @@ input_select:
     icon: mdi:tune-variant
     options: [Auto, Force on, Force off]
 
-  carpark_mode:
-    name: Carpark lighting mode
+  backyard_mode:
+    name: Backyard lighting mode
     icon: mdi:tune-variant
     options: [Auto, Force on, Force off]
 
@@ -78,11 +82,11 @@ input_boolean:
     name: Driveway revert force-on at sunrise
     icon: mdi:weather-sunset-up
 
-  carpark_system_acting:
-    name: Carpark system acting
+  backyard_system_acting:
+    name: Backyard system acting
     icon: mdi:robot
-  carpark_sunrise_revert:
-    name: Carpark revert force-on at sunrise
+  backyard_sunrise_revert:
+    name: Backyard revert force-on at sunrise
     icon: mdi:weather-sunset-up
 
 input_number:
@@ -100,15 +104,15 @@ input_number:
     step: 1
     icon: mdi:bug-outline
 
-  carpark_light_minutes:
-    name: Carpark light duration
+  backyard_light_minutes:
+    name: Backyard light duration
     min: 1
     max: 30
     step: 1
     unit_of_measurement: min
     icon: mdi:timer-outline
-  carpark_trip_limit:
-    name: Carpark trips before lockout
+  backyard_trip_limit:
+    name: Backyard trips before lockout
     min: 3
     max: 60
     step: 1
@@ -119,8 +123,8 @@ counter:
     name: Driveway motion trips this hour
     initial: 0
     step: 1
-  carpark_motion_trips:
-    name: Carpark motion trips this hour
+  backyard_motion_trips:
+    name: Backyard motion trips this hour
     initial: 0
     step: 1
 
@@ -134,12 +138,12 @@ timer:
     duration: "01:00:00"
     restore: true
 
-  carpark_lights:
-    name: Carpark light timer
+  backyard_lights:
+    name: Backyard light timer
     duration: "00:05:00"
     restore: true
-  carpark_lockout:
-    name: Carpark motion lockout
+  backyard_lockout:
+    name: Backyard motion lockout
     duration: "01:00:00"
     restore: true
 
@@ -172,28 +176,28 @@ script:
         target: {entity_id: input_select.driveway_mode}
         data: {option: Auto}
 
-  carpark_force_on:
-    alias: "Carpark: force lights on"
+  backyard_force_on:
+    alias: "Backyard: force lights on"
     icon: mdi:lightbulb-on
     sequence:
       - action: input_select.select_option
-        target: {entity_id: input_select.carpark_mode}
+        target: {entity_id: input_select.backyard_mode}
         data: {option: Force on}
 
-  carpark_force_off:
-    alias: "Carpark: force lights off"
+  backyard_force_off:
+    alias: "Backyard: force lights off"
     icon: mdi:lightbulb-off
     sequence:
       - action: input_select.select_option
-        target: {entity_id: input_select.carpark_mode}
+        target: {entity_id: input_select.backyard_mode}
         data: {option: Force off}
 
-  carpark_auto:
-    alias: "Carpark: back to motion control"
+  backyard_auto:
+    alias: "Backyard: back to motion control"
     icon: mdi:motion-sensor
     sequence:
       - action: input_select.select_option
-        target: {entity_id: input_select.carpark_mode}
+        target: {entity_id: input_select.backyard_mode}
         data: {option: Auto}
 
   # Both zones at once, for when you're opening or closing up the whole site.
@@ -205,7 +209,7 @@ script:
         target:
           entity_id:
             - input_select.driveway_mode
-            - input_select.carpark_mode
+            - input_select.backyard_mode
         data: {option: Force on}
 
   all_zones_auto:
@@ -216,7 +220,7 @@ script:
         target:
           entity_id:
             - input_select.driveway_mode
-            - input_select.carpark_mode
+            - input_select.backyard_mode
         data: {option: Auto}
 
 # ---------------------------------------------------------------------------
@@ -234,7 +238,7 @@ automation:
       - trigger: state
         entity_id:
           - input_select.driveway_mode # ZONE MAP
-          - input_select.carpark_mode # ZONE MAP
+          - input_select.backyard_mode # ZONE MAP
     conditions:
       # Ignore restarts and attribute-only changes.
       - condition: template
@@ -286,18 +290,18 @@ automation:
     triggers:
       - trigger: state
         entity_id:
-          - binary_sensor.aarlo_motion_driveway # <<REPLACE>> ZONE MAP
-          - binary_sensor.aarlo_motion_carpark # <<REPLACE>> ZONE MAP
+          - binary_sensor.aarlo_motion_driveway # VERIFY · ZONE MAP
+          - binary_sensor.aarlo_motion_backyard # VERIFY · ZONE MAP
         to: "on"
     variables:
       # ZONE MAP — motion sensor to zone
       zone_map:
-        binary_sensor.aarlo_motion_driveway: driveway # <<REPLACE>>
-        binary_sensor.aarlo_motion_carpark: carpark # <<REPLACE>>
+        binary_sensor.aarlo_motion_driveway: driveway # VERIFY
+        binary_sensor.aarlo_motion_backyard: backyard # VERIFY
       # ZONE MAP — zone to camera, for deterrent snapshots
       camera_map:
-        driveway: camera.aarlo_driveway # <<REPLACE>>
-        carpark: camera.aarlo_carpark # <<REPLACE>>
+        driveway: camera.aarlo_driveway # VERIFY
+        backyard: camera.aarlo_backyard # VERIFY
       zone: "{{ zone_map[trigger.entity_id] }}"
       lights: "switch.{{ zone }}_lights"
     conditions:
@@ -387,7 +391,7 @@ automation:
       - condition: template
         value_template: >-
           {{ trigger.event.data.entity_id in
-             ['timer.driveway_lights', 'timer.carpark_lights'] }}
+             ['timer.driveway_lights', 'timer.backyard_lights'] }}
       - condition: template
         value_template: "{{ states('input_select.' ~ zone ~ '_mode') == 'Auto' }}"
     variables:
@@ -420,7 +424,7 @@ automation:
       - trigger: state
         entity_id:
           - counter.driveway_motion_trips # ZONE MAP
-          - counter.carpark_motion_trips # ZONE MAP
+          - counter.backyard_motion_trips # ZONE MAP
     variables:
       zone: "{{ trigger.entity_id.split('.')[1] | replace('_motion_trips', '') }}"
     conditions:
@@ -473,7 +477,7 @@ automation:
         target:
           entity_id:
             - counter.driveway_motion_trips # ZONE MAP
-            - counter.carpark_motion_trips # ZONE MAP
+            - counter.backyard_motion_trips # ZONE MAP
 
   # 6. Physical switch use is treated as an override for that zone, so flipping a
   #    switch on the wall or in the vendor app behaves the same as tapping Force on.
@@ -485,7 +489,7 @@ automation:
       - trigger: state
         entity_id:
           - switch.driveway_lights # ZONE MAP
-          - switch.carpark_lights # ZONE MAP
+          - switch.backyard_lights # ZONE MAP
         to: "on"
     variables:
       zone: "{{ trigger.entity_id.split('.')[1] | replace('_lights', '') }}"
@@ -513,7 +517,7 @@ automation:
       - trigger: state
         entity_id:
           - switch.driveway_lights # ZONE MAP
-          - switch.carpark_lights # ZONE MAP
+          - switch.backyard_lights # ZONE MAP
         to: "off"
     variables:
       zone: "{{ trigger.entity_id.split('.')[1] | replace('_lights', '') }}"
@@ -541,7 +545,7 @@ automation:
         event: sunrise
     actions:
       - repeat:
-          for_each: [driveway, carpark] # ZONE MAP
+          for_each: [driveway, backyard] # ZONE MAP
           sequence:
             - if:
                 - condition: template
@@ -568,7 +572,7 @@ automation:
         target:
           entity_id:
             - input_boolean.driveway_system_acting # ZONE MAP
-            - input_boolean.carpark_system_acting # ZONE MAP
+            - input_boolean.backyard_system_acting # ZONE MAP
 
   # 9. Battery warning, per camera.
   - id: talli_battery_warning
@@ -578,8 +582,8 @@ automation:
     triggers:
       - trigger: numeric_state
         entity_id:
-          - sensor.aarlo_battery_level_driveway # <<REPLACE>> ZONE MAP
-          - sensor.aarlo_battery_level_carpark # <<REPLACE>> ZONE MAP
+          - sensor.aarlo_battery_level_driveway # VERIFY · ZONE MAP
+          - sensor.aarlo_battery_level_backyard # VERIFY · ZONE MAP
         below: 25
         for: "00:10:00"
     actions:

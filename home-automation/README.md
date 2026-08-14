@@ -6,9 +6,17 @@ plugs and a Grid Connect (Arlec) light switch.
 **Each camera drives its own set of lights, independently.** Two behaviours per zone:
 
 1. **Motion after dark turns that zone's lights on**, then off again after a set
-   delay — so arriving guests aren't parking in the dark.
+   delay.
 2. **After-hours motion (23:00–05:00) acts as a deterrent** — that zone's lights
    flash, then you get a phone notification with a snapshot from that camera.
+
+The same logic serves both zones, but they matter for different reasons, and it's
+worth tuning them differently:
+
+| Zone | Mainly for | Tuning implication |
+|---|---|---|
+| **Driveway** | Guests arriving for events not parking in the dark | Longer duration, higher trip limit — matchday traffic is legitimate and frequent |
+| **Backyard** | Knowing when someone's out there who shouldn't be | Shorter duration, and the after-hours deterrent is the point rather than a side effect |
 
 …and a manual override that beats both, described next.
 
@@ -16,8 +24,17 @@ plugs and a Grid Connect (Arlec) light switch.
 
 ## Zones
 
-A **zone** is one camera plus the lights it controls. Two are defined:
-`driveway` and `carpark` — rename to suit, as long as you rename consistently.
+A **zone** is one camera plus the lights it controls. Two are defined: `driveway`
+and `backyard`, **matching the camera names in the Arlo app**.
+
+That match is deliberate and worth preserving. `hass-aarlo` derives its entity IDs
+from the camera names, so a camera called "Backyard" becomes
+`binary_sensor.aarlo_motion_backyard`, `camera.aarlo_backyard` and
+`sensor.aarlo_battery_level_backyard` — all of which the package already expects.
+Keeping the names aligned means there are no Arlo entity IDs to hand-edit, and
+adding a camera later is close to copy-paste.
+
+If you rename a camera in the Arlo app, rename its zone here to match.
 
 Everything about a zone is named after it, and the automations work out which zone
 they're acting on from whatever triggered them:
@@ -44,14 +61,14 @@ switch:
       - switch.tapo_sign_light
 
   - platform: group
-    name: Carpark lights           # becomes switch.carpark_lights
+    name: Backyard lights           # becomes switch.backyard_lights
     entities:
-      - switch.tapo_carpark_flood
-      - switch.tapo_bollard_lights
+      - switch.tapo_backyard_flood
+      - switch.tapo_deck_light
 ```
 
 Zones are fully independent: separate timers, separate durations, separate lockouts,
-separate overrides. The carpark locking out for insects doesn't touch the driveway.
+separate overrides. The backyard locking out for insects doesn't touch the driveway.
 
 **A light should belong to one zone.** If you put the same switch in both groups it
 will work, but whichever camera acted last wins — so one zone's auto-off can turn
@@ -84,7 +101,7 @@ Force on, the timer is cancelled and the lights stay up until you say otherwise.
 Four ways to drive it, all equivalent:
 
 - **The mode dropdown** for that zone on your dashboard.
-- **Per-zone scripts** — `script.driveway_force_on`, `script.carpark_force_on`, and
+- **Per-zone scripts** — `script.driveway_force_on`, `script.backyard_force_on`, and
   the matching `_force_off` / `_auto`. These exist so you get one-tap actions: bind
   one to a home-screen widget in the Home Assistant mobile app and forcing a zone on
   is a single tap from your pocket.
@@ -149,10 +166,15 @@ re-triggers the light, and the loop runs until the camera battery is flat by
 morning. It is the single most common complaint about motion-automated floodlight
 cameras.
 
-The package handles this with a **runaway guard**: more than N motion trips in a
-rolling hour (default 12) and it kills the lights and locks out for an hour, then
-notifies you. Tune `input_number.driveway_trip_limit` to your site — start at 12
-and raise it if legitimate matchday traffic trips the lockout.
+The package handles this with a **runaway guard**, per zone: more than N motion trips
+in a rolling hour (default 12) and it kills that zone's lights and locks out for an
+hour, then notifies you.
+
+Tune the two zones separately. The driveway will legitimately trip often on a
+matchday, so raise `input_number.driveway_trip_limit` if you get spurious lockouts.
+The backyard should be quiet — if *it* keeps hitting the limit, that's the guard
+doing its job and telling you something (insects, a spider on the lens, or a
+branch in the wind) rather than a threshold to raise.
 
 ### 2. No Arlo Secure means no person detection
 
@@ -248,7 +270,7 @@ For lights that need to come on the moment a car arrives, go local.
      packages: !include_dir_named packages
    ```
 
-3. Rename the zones if `driveway` / `carpark` don't suit. Rename consistently —
+3. Rename the zones if `driveway` / `backyard` don't suit. Rename consistently —
    every entity name and every `ZONE MAP` entry must use the same slug.
 4. Put each zone's real switches into its switch group.
 5. Replace every `<<REPLACE>>` entity ID (table below).
@@ -307,22 +329,31 @@ mobile app, add a home-screen widget bound to `script.driveway_force_on` (or
 
 ### Entity IDs to replace
 
-Find your real IDs under Developer Tools → States. `<zone>` is `driveway` or
-`carpark`.
+Find your real IDs under Developer Tools → States.
+
+**Marked `<<REPLACE>>` — you must edit these:**
 
 | Placeholder | What it is | Typical real value |
 |---|---|---|
-| `binary_sensor.aarlo_motion_<zone>` | Arlo motion sensor | `binary_sensor.aarlo_motion_<camera name>` |
-| `camera.aarlo_<zone>` | Arlo camera, for snapshots | `camera.aarlo_<camera name>` |
-| `sensor.aarlo_battery_level_<zone>` | Camera battery | `sensor.aarlo_battery_level_<camera name>` |
 | `switch.grid_connect_driveway` | Grid Connect light switch | Whatever `tuya-local` names it |
-| `switch.tapo_*` | Tapo/Kasa plugs | `switch.<plug name>` |
+| `switch.tapo_sign_light` | Tapo/Kasa plug, driveway | `switch.<plug name>` |
+| `switch.tapo_backyard_flood` | Tapo/Kasa plug, backyard | `switch.<plug name>` |
+| `switch.tapo_deck_light` | Tapo/Kasa plug, backyard | `switch.<plug name>` |
 | `notify.mobile_app_phone` | Your phone | `notify.mobile_app_<your device>` |
 
-The Arlo names derive from what you called each camera in the Arlo app, so naming
-them to match your zone slugs saves work.
+**Marked `VERIFY` — should already be right, just confirm:**
 
-**Don't replace `switch.<zone>_lights`** — those are the switch groups the package
+| Entity | What it is |
+|---|---|
+| `binary_sensor.aarlo_motion_driveway` / `_backyard` | Arlo motion sensors |
+| `camera.aarlo_driveway` / `_backyard` | Arlo cameras, for snapshots |
+| `sensor.aarlo_battery_level_driveway` / `_backyard` | Camera batteries |
+
+These follow from your camera names being Driveway and Backyard. If `hass-aarlo`
+has named them slightly differently (it occasionally appends or reformats), fix
+them to whatever Developer Tools → States actually shows.
+
+**Don't touch `switch.<zone>_lights`** — those are the switch groups the package
 creates for you, and the automations rely on that exact naming.
 
 ---
