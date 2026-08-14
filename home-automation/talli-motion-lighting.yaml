@@ -89,6 +89,21 @@ input_boolean:
     name: Backyard revert force-on at sunrise
     icon: mdi:weather-sunset-up
 
+  # Flip one of these on to simulate motion on that zone. It resets itself
+  # immediately so it's ready to fire again.
+  driveway_test_motion:
+    name: Driveway simulate motion
+    icon: mdi:motion-sensor
+  backyard_test_motion:
+    name: Backyard simulate motion
+    icon: mdi:motion-sensor
+
+  # Lets motion run in daylight, so the full chain can be tested without waiting
+  # for dusk. Leave this OFF in normal use or the lights will run all day.
+  test_ignore_daylight:
+    name: Test — ignore daylight
+    icon: mdi:weather-sunny-alert
+
 input_number:
   driveway_light_minutes:
     name: Driveway light duration
@@ -292,12 +307,19 @@ automation:
         entity_id:
           - binary_sensor.aarlo_motion_driveway # VERIFY · ZONE MAP
           - binary_sensor.aarlo_motion_backyard # VERIFY · ZONE MAP
+          # Test toggles — behave exactly like real motion, so the whole package
+          # can be exercised before Arlo is connected. Harmless in production:
+          # nothing flips them except you.
+          - input_boolean.driveway_test_motion # ZONE MAP
+          - input_boolean.backyard_test_motion # ZONE MAP
         to: "on"
     variables:
       # ZONE MAP — motion sensor to zone
       zone_map:
         binary_sensor.aarlo_motion_driveway: driveway # VERIFY
         binary_sensor.aarlo_motion_backyard: backyard # VERIFY
+        input_boolean.driveway_test_motion: driveway
+        input_boolean.backyard_test_motion: backyard
       # ZONE MAP — zone to camera, for deterrent snapshots
       camera_map:
         driveway: camera.aarlo_driveway # VERIFY
@@ -312,12 +334,24 @@ automation:
       - condition: template
         value_template: "{{ is_state('timer.' ~ zone ~ '_lockout', 'idle') }}"
       # Only after dark. Elevation -4 is roughly civil dusk, so the lights come on
-      # slightly before full dark rather than well after it.
-      - condition: numeric_state
-        entity_id: sun.sun
-        attribute: elevation
-        below: -4
+      # slightly before full dark rather than well after it. The test toggle
+      # bypasses this so the full chain can be exercised in daylight.
+      - condition: or
+        conditions:
+          - condition: numeric_state
+            entity_id: sun.sun
+            attribute: elevation
+            below: -4
+          - condition: state
+            entity_id: input_boolean.test_ignore_daylight
+            state: "on"
     actions:
+      # Reset the test toggle straight away so it can be fired again without
+      # having to switch it off first. No-op for real motion triggers.
+      - action: input_boolean.turn_off
+        target:
+          entity_id: "input_boolean.{{ zone }}_test_motion"
+
       - action: input_boolean.turn_on
         target:
           entity_id: "input_boolean.{{ zone }}_system_acting"

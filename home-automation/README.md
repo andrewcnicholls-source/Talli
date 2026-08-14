@@ -360,32 +360,71 @@ creates for you, and the automations rely on that exact naming.
 
 ## Testing
 
-Do this before relying on it:
+### You don't need Arlo working to start
 
-1. **Daylight test** — walk in front of the camera. Nothing should happen; the sun
-   elevation condition blocks it. If lights come on, check your HA location.
-2. **After-dark test** — walk in front of the camera. Lights on within a couple of
-   seconds, off again after your set duration.
-3. **Re-trigger test** — walk past, wait 2 minutes, walk past again. The timer
-   should restart from full, not stack.
+Arlo's two-factor setup is the fiddliest part of the build, and it blocks almost
+nothing. Everything except the motion trigger itself can be tested without a camera
+connected, using two built-in helpers:
+
+- **`input_boolean.<zone>_test_motion`** — flip it on to simulate motion on that
+  zone. It runs the identical code path real motion does, and resets itself
+  immediately so you can fire it repeatedly.
+- **`input_boolean.test_ignore_daylight`** — lets motion run in daylight, so you can
+  test the whole chain without waiting for dusk. **Leave it off in normal use**, or
+  the lights will run all day.
+
+So the practical order is: get the plugs and switch into HA, install the package,
+test the whole thing with the toggles, and only then take on the Arlo integration.
+By the time you connect the camera, the only new thing being tested is whether the
+motion sensor fires.
+
+### Stages
+
+**Stage 1 — plugs and switch only.** No package, no camera. Confirm you can switch
+every light from HA and note each entity ID. If a plug won't switch reliably here,
+nothing built on top will help.
+
+**Stage 2 — package installed, no camera.** Fill in the five `<<REPLACE>>` IDs,
+restart, and run tests 2–9 below using the test toggles. This is the bulk of it.
+
+**Stage 3 — Arlo connected.** Run test 1, then re-run tests 2 and 7 driven by real
+motion instead of the toggles.
+
+### Tests
+
+Turn on `test_ignore_daylight` for tests 2–9, and turn it off when you're done.
+
+1. **Daylight test** *(needs Arlo)* — with `test_ignore_daylight` **off**, walk in
+   front of the camera in daylight. Nothing should happen. If lights come on, your
+   HA location is wrong.
+2. **Basic trigger** — fire `driveway_test_motion`. Lights on within a couple of
+   seconds, off again after your set duration. Repeat for the backyard.
+3. **Re-trigger test** — fire the toggle, wait 2 minutes, fire it again. The timer
+   should restart from full, not stack, and the lights should stay on.
 4. **Override test** — set the mode to Force on. Lights on immediately and stay on,
-   and walking past the camera changes nothing. Set it back to Auto; lights go off.
-5. **Override-beats-timer test** — trigger motion after dark so the timer is
-   running, then set Force on. The timer should cancel and the lights stay up well
-   past the normal duration.
+   and firing the test toggle changes nothing. Set it back to Auto; lights go off.
+5. **Override-beats-timer test** — fire the toggle so the timer is running, then set
+   Force on. The timer should cancel and the lights stay up well past the normal
+   duration. This is the one that was broken in the first version, so it's worth
+   doing properly.
 6. **Wall switch test** — flip the Grid Connect switch on by hand. That zone's mode
    should flip to Force on within a couple of seconds. Flip it off; mode returns
    to Auto.
-7. **Zone isolation test** — the important one for a two-camera setup. Trigger
-   motion on camera 1 after dark and confirm **only** zone 1's lights come on.
-   Then set zone 1 to Force on and confirm zone 2 still responds to motion
-   normally, and that zone 1's auto-off never touches zone 2's lights.
+7. **Zone isolation test** — the important one for a two-camera setup. Fire
+   `driveway_test_motion` and confirm **only** the driveway lights come on. Then set
+   the driveway to Force on and confirm the backyard still responds normally, and
+   that the driveway's auto-off never touches backyard lights.
 8. **Deterrent test** — temporarily widen the after-hours window in the package to
-   include now, then trigger motion. Expect three flashes on that zone only, and a
-   notification with a snapshot from that zone's camera. Put the window back after.
-9. **Runaway guard test** — temporarily set one zone's trip limit to 3, trigger
-   motion three times, and confirm that zone locks out, notifies, and that **the
-   other zone still works**. Set it back to 12.
+   include now, then fire a test toggle. Expect three flashes on that zone only, and
+   a notification with a snapshot from that zone's camera. (The snapshot needs Arlo;
+   before that, expect the notification with a broken image.) Put the window back
+   afterwards.
+9. **Runaway guard test** — temporarily set one zone's trip limit to 3, fire its
+   test toggle three times, and confirm that zone locks out, notifies, and that
+   **the other zone still works**. Set it back to 12.
+
+When you're finished: turn `test_ignore_daylight` **off**, and check both zones are
+back in Auto.
 
 ## Tuning
 
