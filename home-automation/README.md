@@ -10,6 +10,41 @@ Two behaviours:
 2. **After-hours motion (23:00–05:00) acts as a deterrent** — the lights flash,
    then you get a phone notification with a snapshot from the camera.
 
+…and a manual override that beats both, described next.
+
+---
+
+## The override
+
+Everything runs off a single control, `input_select.driveway_mode`:
+
+| Mode | Behaviour |
+|---|---|
+| **Auto** | Motion controls the lights. Normal running |
+| **Force on** | Lights on and **stay** on. Motion ignored, timers cancelled, runaway guard suppressed |
+| **Force off** | Lights off and stay off. Motion ignored |
+
+A mode change **applies instantly and always wins** — including mid-cycle. If motion
+has just turned the lights on with four minutes left on the timer and you hit
+Force on, the timer is cancelled and the lights stay up until you say otherwise.
+
+Three ways to drive it, all equivalent:
+
+- **The mode dropdown** on your dashboard.
+- **The scripts** — `script.driveway_force_on`, `script.driveway_force_off`,
+  `script.driveway_auto`. These exist so you get one-tap actions: assign them to a
+  home-screen widget in the Home Assistant mobile app, an Apple Watch complication,
+  or a dashboard button, and forcing the lights on is a single tap from your pocket.
+- **The physical switch.** Flipping the Grid Connect switch on by hand (or in the
+  Grid Connect app) is *detected* and flips the mode to Force on automatically.
+  Turning it off by hand returns you to Auto. So the wall switch behaves exactly
+  the way anyone would expect it to, with no app required — worth knowing if
+  someone else is ever minding the property.
+
+**Safety net:** Force on reverts to Auto at sunrise, so lights left on overnight by
+accident don't burn all day. Turn off `input_boolean.driveway_sunrise_revert` if you
+ever want them held on across a full day.
+
 ---
 
 ## Why this needs Home Assistant
@@ -159,11 +194,41 @@ For lights that need to come on the moment a car arrives, go local.
 
 3. Replace every `<<REPLACE>>` entity ID (table below).
 4. Developer Tools → **Check Configuration**, then restart.
-5. Set the two helper values in Settings → Devices & Services → Helpers:
-   **Driveway light duration** → 5 minutes, **Motion trips before lockout** → 12.
-   (They deliberately have no hardcoded initial value, so your tuning survives
-   restarts.)
-6. Turn on **Driveway automations enabled**.
+5. Set the helper values in Settings → Devices & Services → Helpers:
+   **Driveway light duration** → 5 minutes, **Motion trips before lockout** → 12,
+   **Revert force-on at sunrise** → on. (The numbers deliberately have no hardcoded
+   initial value, so your tuning survives restarts.)
+6. Set **Driveway lighting mode** to **Auto**.
+
+### Dashboard card
+
+Add this to a dashboard for one-tap control:
+
+```yaml
+type: entities
+title: Driveway
+entities:
+  - entity: input_select.driveway_mode
+    name: Mode
+  - type: buttons
+    entities:
+      - entity: script.driveway_force_on
+        name: Lights on
+      - entity: script.driveway_force_off
+        name: Lights off
+      - entity: script.driveway_auto
+        name: Auto
+  - type: divider
+  - entity: switch.driveway_floodlights   # <<REPLACE>>
+  - entity: timer.driveway_lights
+    name: Auto-off in
+  - entity: input_number.driveway_light_minutes
+  - entity: counter.driveway_motion_trips
+  - entity: timer.driveway_lockout
+```
+
+For the override on your phone without opening the app: in the Home Assistant
+mobile app, add a home-screen widget bound to `script.driveway_force_on`.
 
 ### Entity IDs to replace
 
@@ -193,12 +258,17 @@ Do this before relying on it:
    seconds, off again after your set duration.
 3. **Re-trigger test** — walk past, wait 2 minutes, walk past again. The timer
    should restart from full, not stack.
-4. **Manual override test** — switch the lights on by hand. They should stay on
-   until you switch them off, with no auto-off.
-5. **Deterrent test** — temporarily widen the after-hours window in the package to
+4. **Override test** — set the mode to Force on. Lights on immediately and stay on,
+   and walking past the camera changes nothing. Set it back to Auto; lights go off.
+5. **Override-beats-timer test** — trigger motion after dark so the timer is
+   running, then set Force on. The timer should cancel and the lights stay up well
+   past the normal duration.
+6. **Wall switch test** — flip the Grid Connect switch on by hand. The mode should
+   flip to Force on within a couple of seconds. Flip it off; mode returns to Auto.
+7. **Deterrent test** — temporarily widen the after-hours window in the package to
    include now, then trigger motion. Expect three flashes and a notification with
    a snapshot. Put the window back afterwards.
-6. **Runaway guard test** — temporarily set the trip limit to 3, trigger motion
+8. **Runaway guard test** — temporarily set the trip limit to 3, trigger motion
    three times, and confirm lockout plus notification. Set it back to 12.
 
 ## Tuning
@@ -209,7 +279,8 @@ Do this before relying on it:
 | Lockout firing on busy matchdays | Raise `driveway_trip_limit` to 20–30 |
 | Lights come on too late | Raise the sun elevation threshold from `-4` toward `0` in the motion response automation |
 | Too many after-hours notifications | Narrow the window, or subscribe to Arlo Secure for person detection |
-| Lights cut out while guests are still arriving | Raise `driveway_light_minutes` |
+| Lights cut out while guests are still arriving | Raise `driveway_light_minutes`, or just hit Force on for the event |
+| Lockout tripped but you need the lights now | Force on ignores the lockout entirely |
 
 ## A note on scope
 
