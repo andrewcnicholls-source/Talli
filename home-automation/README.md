@@ -1,49 +1,105 @@
-# Driveway motion automations — Talli Parking
+# Motion lighting — Talli Parking
 
-Motion automations for 86 Paice Ave built around the Arlo Pro 3 Floodlight, TP-Link
-smart plugs and a Grid Connect (Arlec) light switch.
+Motion automations for 86 Paice Ave built around two Arlo cameras, TP-Link smart
+plugs and a Grid Connect (Arlec) light switch.
 
-Two behaviours:
+**Each camera drives its own set of lights, independently.** Two behaviours per zone:
 
-1. **Motion after dark turns the driveway lights on**, then off again after a set
+1. **Motion after dark turns that zone's lights on**, then off again after a set
    delay — so arriving guests aren't parking in the dark.
-2. **After-hours motion (23:00–05:00) acts as a deterrent** — the lights flash,
-   then you get a phone notification with a snapshot from the camera.
+2. **After-hours motion (23:00–05:00) acts as a deterrent** — that zone's lights
+   flash, then you get a phone notification with a snapshot from that camera.
 
 …and a manual override that beats both, described next.
 
 ---
 
+## Zones
+
+A **zone** is one camera plus the lights it controls. Two are defined:
+`driveway` and `carpark` — rename to suit, as long as you rename consistently.
+
+Everything about a zone is named after it, and the automations work out which zone
+they're acting on from whatever triggered them:
+
+| Entity | Purpose |
+|---|---|
+| `switch.<zone>_lights` | The lights this zone controls — a **switch group** |
+| `input_select.<zone>_mode` | Auto / Force on / Force off |
+| `timer.<zone>_lights` | Auto-off timer |
+| `timer.<zone>_lockout` | Runaway lockout |
+| `counter.<zone>_motion_trips` | Trips this hour |
+| `input_number.<zone>_light_minutes` | How long lights stay on |
+| `input_number.<zone>_trip_limit` | Trips before lockout |
+
+**Which lights belong to which camera is decided by the switch groups** at the top of
+the package. Put each zone's real switches in its group and you're done:
+
+```yaml
+switch:
+  - platform: group
+    name: Driveway lights          # becomes switch.driveway_lights
+    entities:
+      - switch.grid_connect_driveway
+      - switch.tapo_sign_light
+
+  - platform: group
+    name: Carpark lights           # becomes switch.carpark_lights
+    entities:
+      - switch.tapo_carpark_flood
+      - switch.tapo_bollard_lights
+```
+
+Zones are fully independent: separate timers, separate durations, separate lockouts,
+separate overrides. The carpark locking out for insects doesn't touch the driveway.
+
+**A light should belong to one zone.** If you put the same switch in both groups it
+will work, but whichever camera acted last wins — so one zone's auto-off can turn
+off a light the other zone just turned on.
+
+### Adding a third camera
+
+1. Add its helpers in the Helpers section (copy a zone block, change the prefix).
+2. Add a switch group for its lights.
+3. Add one line to each spot marked `ZONE MAP` in the package.
+
+No automation logic changes.
+
+---
+
 ## The override
 
-Everything runs off a single control, `input_select.driveway_mode`:
+Each zone has its own control, `input_select.<zone>_mode`:
 
 | Mode | Behaviour |
 |---|---|
-| **Auto** | Motion controls the lights. Normal running |
-| **Force on** | Lights on and **stay** on. Motion ignored, timers cancelled, runaway guard suppressed |
+| **Auto** | Motion controls that zone's lights. Normal running |
+| **Force on** | Lights on and **stay** on. Motion ignored, timer cancelled, runaway lockout bypassed |
 | **Force off** | Lights off and stay off. Motion ignored |
 
 A mode change **applies instantly and always wins** — including mid-cycle. If motion
 has just turned the lights on with four minutes left on the timer and you hit
 Force on, the timer is cancelled and the lights stay up until you say otherwise.
 
-Three ways to drive it, all equivalent:
+Four ways to drive it, all equivalent:
 
-- **The mode dropdown** on your dashboard.
-- **The scripts** — `script.driveway_force_on`, `script.driveway_force_off`,
-  `script.driveway_auto`. These exist so you get one-tap actions: assign them to a
-  home-screen widget in the Home Assistant mobile app, an Apple Watch complication,
-  or a dashboard button, and forcing the lights on is a single tap from your pocket.
-- **The physical switch.** Flipping the Grid Connect switch on by hand (or in the
-  Grid Connect app) is *detected* and flips the mode to Force on automatically.
-  Turning it off by hand returns you to Auto. So the wall switch behaves exactly
-  the way anyone would expect it to, with no app required — worth knowing if
-  someone else is ever minding the property.
+- **The mode dropdown** for that zone on your dashboard.
+- **Per-zone scripts** — `script.driveway_force_on`, `script.carpark_force_on`, and
+  the matching `_force_off` / `_auto`. These exist so you get one-tap actions: bind
+  one to a home-screen widget in the Home Assistant mobile app and forcing a zone on
+  is a single tap from your pocket.
+- **Both zones at once** — `script.all_zones_force_on` and `script.all_zones_auto`,
+  for opening up or closing down the whole site.
+- **The physical switch.** Flipping a switch on by hand (or in the Grid Connect /
+  Tapo app) is *detected* and flips **that zone** to Force on automatically. Turning
+  it off by hand returns that zone to Auto. So the wall switch behaves the way
+  anyone would expect, with no app required — worth knowing if someone else is ever
+  minding the property.
 
-**Safety net:** Force on reverts to Auto at sunrise, so lights left on overnight by
-accident don't burn all day. Turn off `input_boolean.driveway_sunrise_revert` if you
-ever want them held on across a full day.
+**Safety net:** Force on reverts to Auto at sunrise, per zone, so lights left on
+overnight by accident don't burn all day. Turn off
+`input_boolean.<zone>_sunrise_revert` if you ever want a zone held on across a
+full day.
 
 ---
 
@@ -184,7 +240,7 @@ For lights that need to come on the moment a car arrives, go local.
 
 ### Step 5 — Install the package
 
-1. Copy `talli-driveway.yaml` into `config/packages/` on your HA instance.
+1. Copy `talli-motion-lighting.yaml` into `config/packages/` on your HA instance.
 2. Add to `configuration.yaml`, if it isn't there already:
 
    ```yaml
@@ -192,17 +248,23 @@ For lights that need to come on the moment a car arrives, go local.
      packages: !include_dir_named packages
    ```
 
-3. Replace every `<<REPLACE>>` entity ID (table below).
-4. Developer Tools → **Check Configuration**, then restart.
-5. Set the helper values in Settings → Devices & Services → Helpers:
-   **Driveway light duration** → 5 minutes, **Motion trips before lockout** → 12,
-   **Revert force-on at sunrise** → on. (The numbers deliberately have no hardcoded
+3. Rename the zones if `driveway` / `carpark` don't suit. Rename consistently —
+   every entity name and every `ZONE MAP` entry must use the same slug.
+4. Put each zone's real switches into its switch group.
+5. Replace every `<<REPLACE>>` entity ID (table below).
+6. Developer Tools → **Check Configuration**, then restart.
+7. Set the helper values for **each zone** in Settings → Devices & Services →
+   Helpers: **light duration** → 5 minutes, **trips before lockout** → 12,
+   **revert force-on at sunrise** → on. (The numbers deliberately have no hardcoded
    initial value, so your tuning survives restarts.)
-6. Set **Driveway lighting mode** to **Auto**.
+8. Set both **lighting mode** selects to **Auto**.
 
 ### Dashboard card
 
 Add this to a dashboard for one-tap control:
+
+One card per zone, plus a site-wide row. Duplicate the first block per zone,
+changing the prefix:
 
 ```yaml
 type: entities
@@ -219,7 +281,7 @@ entities:
       - entity: script.driveway_auto
         name: Auto
   - type: divider
-  - entity: switch.driveway_floodlights   # <<REPLACE>>
+  - entity: switch.driveway_lights
   - entity: timer.driveway_lights
     name: Auto-off in
   - entity: input_number.driveway_light_minutes
@@ -227,24 +289,41 @@ entities:
   - entity: timer.driveway_lockout
 ```
 
+```yaml
+type: entities
+title: Whole site
+entities:
+  - type: buttons
+    entities:
+      - entity: script.all_zones_force_on
+        name: All on
+      - entity: script.all_zones_auto
+        name: All auto
+```
+
 For the override on your phone without opening the app: in the Home Assistant
-mobile app, add a home-screen widget bound to `script.driveway_force_on`.
+mobile app, add a home-screen widget bound to `script.driveway_force_on` (or
+`script.all_zones_force_on`).
 
 ### Entity IDs to replace
 
-Find your real IDs under Developer Tools → States.
+Find your real IDs under Developer Tools → States. `<zone>` is `driveway` or
+`carpark`.
 
 | Placeholder | What it is | Typical real value |
 |---|---|---|
-| `binary_sensor.aarlo_motion_driveway` | Arlo motion sensor | `binary_sensor.aarlo_motion_<camera name>` |
-| `camera.aarlo_driveway` | Arlo camera, for snapshots | `camera.aarlo_<camera name>` |
-| `sensor.aarlo_battery_level_driveway` | Camera battery | `sensor.aarlo_battery_level_<camera name>` |
-| `switch.driveway_floodlights` | Grid Connect light switch | Whatever `tuya-local` names it |
-| `switch.sign_light` | Tapo/Kasa plug | `switch.<plug name>` |
+| `binary_sensor.aarlo_motion_<zone>` | Arlo motion sensor | `binary_sensor.aarlo_motion_<camera name>` |
+| `camera.aarlo_<zone>` | Arlo camera, for snapshots | `camera.aarlo_<camera name>` |
+| `sensor.aarlo_battery_level_<zone>` | Camera battery | `sensor.aarlo_battery_level_<camera name>` |
+| `switch.grid_connect_driveway` | Grid Connect light switch | Whatever `tuya-local` names it |
+| `switch.tapo_*` | Tapo/Kasa plugs | `switch.<plug name>` |
 | `notify.mobile_app_phone` | Your phone | `notify.mobile_app_<your device>` |
 
-The Arlo names derive from what you called the camera in the Arlo app, so if it's
-"Driveway" there the defaults may already match.
+The Arlo names derive from what you called each camera in the Arlo app, so naming
+them to match your zone slugs saves work.
+
+**Don't replace `switch.<zone>_lights`** — those are the switch groups the package
+creates for you, and the automations rely on that exact naming.
 
 ---
 
@@ -263,24 +342,32 @@ Do this before relying on it:
 5. **Override-beats-timer test** — trigger motion after dark so the timer is
    running, then set Force on. The timer should cancel and the lights stay up well
    past the normal duration.
-6. **Wall switch test** — flip the Grid Connect switch on by hand. The mode should
-   flip to Force on within a couple of seconds. Flip it off; mode returns to Auto.
-7. **Deterrent test** — temporarily widen the after-hours window in the package to
-   include now, then trigger motion. Expect three flashes and a notification with
-   a snapshot. Put the window back afterwards.
-8. **Runaway guard test** — temporarily set the trip limit to 3, trigger motion
-   three times, and confirm lockout plus notification. Set it back to 12.
+6. **Wall switch test** — flip the Grid Connect switch on by hand. That zone's mode
+   should flip to Force on within a couple of seconds. Flip it off; mode returns
+   to Auto.
+7. **Zone isolation test** — the important one for a two-camera setup. Trigger
+   motion on camera 1 after dark and confirm **only** zone 1's lights come on.
+   Then set zone 1 to Force on and confirm zone 2 still responds to motion
+   normally, and that zone 1's auto-off never touches zone 2's lights.
+8. **Deterrent test** — temporarily widen the after-hours window in the package to
+   include now, then trigger motion. Expect three flashes on that zone only, and a
+   notification with a snapshot from that zone's camera. Put the window back after.
+9. **Runaway guard test** — temporarily set one zone's trip limit to 3, trigger
+   motion three times, and confirm that zone locks out, notifies, and that **the
+   other zone still works**. Set it back to 12.
 
 ## Tuning
 
 | Symptom | Fix |
 |---|---|
 | Lights trip constantly at night | Lower Arlo's motion sensitivity in the Arlo app first — it's a better filter than anything in HA. Then consider a dedicated PIR |
-| Lockout firing on busy matchdays | Raise `driveway_trip_limit` to 20–30 |
-| Lights come on too late | Raise the sun elevation threshold from `-4` toward `0` in the motion response automation |
+| Lockout firing on busy matchdays | Raise that zone's `_trip_limit` to 20–30 |
+| Lights come on too late | Raise the sun elevation threshold from `-4` toward `0` in the motion response automation. Affects all zones |
 | Too many after-hours notifications | Narrow the window, or subscribe to Arlo Secure for person detection |
-| Lights cut out while guests are still arriving | Raise `driveway_light_minutes`, or just hit Force on for the event |
+| Lights cut out while guests are still arriving | Raise that zone's `_light_minutes`, or just hit Force on for the event |
 | Lockout tripped but you need the lights now | Force on ignores the lockout entirely |
+| One camera should trigger both zones' lights | Add a second line to `zone_map` pointing that camera at the other zone — but consider one wide switch group instead |
+| Two zones fire at once and one is a beat slow | Expected. The motion handler is `queued`, so simultaneous triggers serialise rather than interleave — a couple of seconds, deliberately traded for not corrupting the override state |
 
 ## A note on scope
 

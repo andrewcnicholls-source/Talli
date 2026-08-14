@@ -1,0 +1,591 @@
+# Talli Parking — motion lighting, multi-zone
+#
+# Home Assistant package. Drop this in config/packages/talli-motion-lighting.yaml
+# and add to configuration.yaml:
+#
+#   homeassistant:
+#     packages: !include_dir_named packages
+#
+# ---------------------------------------------------------------------------
+# HOW ZONES WORK
+# ---------------------------------------------------------------------------
+#
+# Each camera drives its own zone of lights, independently. A zone is just a
+# short slug ("driveway", "carpark") plus a set of entities named after it:
+#
+#   switch.<zone>_lights              the lights that zone controls (a group)
+#   input_select.<zone>_mode          Auto / Force on / Force off
+#   timer.<zone>_lights               auto-off timer
+#   timer.<zone>_lockout              runaway lockout
+#   counter.<zone>_motion_trips       trips this hour
+#   input_number.<zone>_light_minutes how long lights stay on
+#   input_number.<zone>_trip_limit    trips before lockout
+#   input_boolean.<zone>_system_acting
+#   input_boolean.<zone>_sunrise_revert
+#
+# The automations below are written once and work out which zone they're acting
+# on from whatever triggered them, so there is no per-camera duplication.
+#
+# TO ADD A THIRD CAMERA: add its helpers in the Helpers section, add a switch
+# group for its lights, and add one line to each of the three maps marked
+# ZONE MAP below. Nothing else changes.
+#
+# Two zones are defined here as "driveway" and "carpark" — rename them to suit,
+# but rename consistently.
+
+# ---------------------------------------------------------------------------
+# Light groups — which physical lights belong to which zone
+# ---------------------------------------------------------------------------
+# Put each zone's real switches here. A light can only sensibly belong to one
+# zone; if you want a light driven by either camera, add it to both groups and
+# accept that whichever zone last acted wins.
+
+switch:
+  - platform: group
+    name: Driveway lights
+    unique_id: talli_driveway_lights_group
+    entities:
+      - switch.grid_connect_driveway # <<REPLACE>>
+      - switch.tapo_sign_light # <<REPLACE>>
+
+  - platform: group
+    name: Carpark lights
+    unique_id: talli_carpark_lights_group
+    entities:
+      - switch.tapo_carpark_flood # <<REPLACE>>
+      - switch.tapo_bollard_lights # <<REPLACE>>
+
+# ---------------------------------------------------------------------------
+# Helpers — one block per zone
+# ---------------------------------------------------------------------------
+
+input_select:
+  driveway_mode:
+    name: Driveway lighting mode
+    icon: mdi:tune-variant
+    options: [Auto, Force on, Force off]
+
+  carpark_mode:
+    name: Carpark lighting mode
+    icon: mdi:tune-variant
+    options: [Auto, Force on, Force off]
+
+input_boolean:
+  driveway_system_acting:
+    name: Driveway system acting
+    icon: mdi:robot
+  driveway_sunrise_revert:
+    name: Driveway revert force-on at sunrise
+    icon: mdi:weather-sunset-up
+
+  carpark_system_acting:
+    name: Carpark system acting
+    icon: mdi:robot
+  carpark_sunrise_revert:
+    name: Carpark revert force-on at sunrise
+    icon: mdi:weather-sunset-up
+
+input_number:
+  driveway_light_minutes:
+    name: Driveway light duration
+    min: 1
+    max: 30
+    step: 1
+    unit_of_measurement: min
+    icon: mdi:timer-outline
+  driveway_trip_limit:
+    name: Driveway trips before lockout
+    min: 3
+    max: 60
+    step: 1
+    icon: mdi:bug-outline
+
+  carpark_light_minutes:
+    name: Carpark light duration
+    min: 1
+    max: 30
+    step: 1
+    unit_of_measurement: min
+    icon: mdi:timer-outline
+  carpark_trip_limit:
+    name: Carpark trips before lockout
+    min: 3
+    max: 60
+    step: 1
+    icon: mdi:bug-outline
+
+counter:
+  driveway_motion_trips:
+    name: Driveway motion trips this hour
+    initial: 0
+    step: 1
+  carpark_motion_trips:
+    name: Carpark motion trips this hour
+    initial: 0
+    step: 1
+
+timer:
+  driveway_lights:
+    name: Driveway light timer
+    duration: "00:05:00"
+    restore: true
+  driveway_lockout:
+    name: Driveway motion lockout
+    duration: "01:00:00"
+    restore: true
+
+  carpark_lights:
+    name: Carpark light timer
+    duration: "00:05:00"
+    restore: true
+  carpark_lockout:
+    name: Carpark motion lockout
+    duration: "01:00:00"
+    restore: true
+
+# ---------------------------------------------------------------------------
+# Scripts — one-tap overrides, per zone
+# ---------------------------------------------------------------------------
+
+script:
+  driveway_force_on:
+    alias: "Driveway: force lights on"
+    icon: mdi:lightbulb-on
+    sequence:
+      - action: input_select.select_option
+        target: {entity_id: input_select.driveway_mode}
+        data: {option: Force on}
+
+  driveway_force_off:
+    alias: "Driveway: force lights off"
+    icon: mdi:lightbulb-off
+    sequence:
+      - action: input_select.select_option
+        target: {entity_id: input_select.driveway_mode}
+        data: {option: Force off}
+
+  driveway_auto:
+    alias: "Driveway: back to motion control"
+    icon: mdi:motion-sensor
+    sequence:
+      - action: input_select.select_option
+        target: {entity_id: input_select.driveway_mode}
+        data: {option: Auto}
+
+  carpark_force_on:
+    alias: "Carpark: force lights on"
+    icon: mdi:lightbulb-on
+    sequence:
+      - action: input_select.select_option
+        target: {entity_id: input_select.carpark_mode}
+        data: {option: Force on}
+
+  carpark_force_off:
+    alias: "Carpark: force lights off"
+    icon: mdi:lightbulb-off
+    sequence:
+      - action: input_select.select_option
+        target: {entity_id: input_select.carpark_mode}
+        data: {option: Force off}
+
+  carpark_auto:
+    alias: "Carpark: back to motion control"
+    icon: mdi:motion-sensor
+    sequence:
+      - action: input_select.select_option
+        target: {entity_id: input_select.carpark_mode}
+        data: {option: Auto}
+
+  # Both zones at once, for when you're opening or closing up the whole site.
+  all_zones_force_on:
+    alias: "All zones: force lights on"
+    icon: mdi:lightbulb-group
+    sequence:
+      - action: input_select.select_option
+        target:
+          entity_id:
+            - input_select.driveway_mode
+            - input_select.carpark_mode
+        data: {option: Force on}
+
+  all_zones_auto:
+    alias: "All zones: back to motion control"
+    icon: mdi:motion-sensor
+    sequence:
+      - action: input_select.select_option
+        target:
+          entity_id:
+            - input_select.driveway_mode
+            - input_select.carpark_mode
+        data: {option: Auto}
+
+# ---------------------------------------------------------------------------
+# Automations — written once, applied to every zone
+# ---------------------------------------------------------------------------
+
+automation:
+  # 1. The override. A mode change applies immediately to that zone only, and
+  #    cancels whatever the motion automations were doing. This always wins.
+  - id: talli_apply_mode
+    alias: "Zones: apply lighting mode"
+    mode: queued
+    max: 25
+    triggers:
+      - trigger: state
+        entity_id:
+          - input_select.driveway_mode # ZONE MAP
+          - input_select.carpark_mode # ZONE MAP
+    conditions:
+      # Ignore restarts and attribute-only changes.
+      - condition: template
+        value_template: >-
+          {{ trigger.from_state is not none
+             and trigger.to_state is not none
+             and trigger.from_state.state != trigger.to_state.state }}
+    variables:
+      zone: "{{ trigger.entity_id.split('.')[1] | replace('_mode', '') }}"
+    actions:
+      - action: input_boolean.turn_on
+        target:
+          entity_id: "input_boolean.{{ zone }}_system_acting"
+
+      - action: timer.cancel
+        target:
+          entity_id: "timer.{{ zone }}_lights"
+
+      - choose:
+          - conditions:
+              - condition: template
+                value_template: "{{ trigger.to_state.state == 'Force on' }}"
+            sequence:
+              - action: homeassistant.turn_on
+                target:
+                  entity_id: "switch.{{ zone }}_lights"
+        # Force off and Auto both return the lights to off; in Auto, motion takes
+        # over again from a known state.
+        default:
+          - action: homeassistant.turn_off
+            target:
+              entity_id: "switch.{{ zone }}_lights"
+
+      # Let the switches report their new state before re-arming manual detection,
+      # otherwise our own switching can be misread as a human at the switch.
+      - delay: "00:00:02"
+
+      - action: input_boolean.turn_off
+        target:
+          entity_id: "input_boolean.{{ zone }}_system_acting"
+
+  # 2. The motion handler. Each camera drives only its own zone's lights.
+  #    mode: parallel so both cameras can be handled at once; max_exceeded is
+  #    silent because repeated motion on one zone is normal.
+  - id: talli_motion_response
+    alias: "Zones: motion response"
+    mode: queued
+    max: 25
+    triggers:
+      - trigger: state
+        entity_id:
+          - binary_sensor.aarlo_motion_driveway # <<REPLACE>> ZONE MAP
+          - binary_sensor.aarlo_motion_carpark # <<REPLACE>> ZONE MAP
+        to: "on"
+    variables:
+      # ZONE MAP — motion sensor to zone
+      zone_map:
+        binary_sensor.aarlo_motion_driveway: driveway # <<REPLACE>>
+        binary_sensor.aarlo_motion_carpark: carpark # <<REPLACE>>
+      # ZONE MAP — zone to camera, for deterrent snapshots
+      camera_map:
+        driveway: camera.aarlo_driveway # <<REPLACE>>
+        carpark: camera.aarlo_carpark # <<REPLACE>>
+      zone: "{{ zone_map[trigger.entity_id] }}"
+      lights: "switch.{{ zone }}_lights"
+    conditions:
+      # Motion only acts in Auto — a manual override suppresses it entirely.
+      - condition: template
+        value_template: "{{ states('input_select.' ~ zone ~ '_mode') == 'Auto' }}"
+      # Lockout active means the runaway guard has tripped for this zone.
+      - condition: template
+        value_template: "{{ is_state('timer.' ~ zone ~ '_lockout', 'idle') }}"
+      # Only after dark. Elevation -4 is roughly civil dusk, so the lights come on
+      # slightly before full dark rather than well after it.
+      - condition: numeric_state
+        entity_id: sun.sun
+        attribute: elevation
+        below: -4
+    actions:
+      - action: input_boolean.turn_on
+        target:
+          entity_id: "input_boolean.{{ zone }}_system_acting"
+
+      - action: counter.increment
+        target:
+          entity_id: "counter.{{ zone }}_motion_trips"
+
+      # Start the timer before switching anything, so the manual-use detector
+      # never sees an idle timer during our own switching.
+      - action: timer.start
+        target:
+          entity_id: "timer.{{ zone }}_lights"
+        data:
+          duration: >-
+            {{ (states('input_number.' ~ zone ~ '_light_minutes') | int(5) * 60)
+               | timestamp_custom('%H:%M:%S', false) }}
+
+      - action: homeassistant.turn_on
+        target:
+          entity_id: "{{ lights }}"
+
+      # Between 23:00 and 05:00 nobody should be on the property: flash that zone's
+      # lights as a deterrent, then notify with a snapshot from that zone's camera.
+      - if:
+          - condition: time
+            after: "23:00:00"
+            before: "05:00:00"
+        then:
+          - repeat:
+              count: 3
+              sequence:
+                - action: homeassistant.turn_off
+                  target:
+                    entity_id: "{{ lights }}"
+                - delay: "00:00:01"
+                - action: homeassistant.turn_on
+                  target:
+                    entity_id: "{{ lights }}"
+                - delay: "00:00:01"
+
+          - action: camera.snapshot
+            target:
+              entity_id: "{{ camera_map[zone] }}"
+            data:
+              filename: "/config/www/{{ zone }}_latest.jpg"
+
+          - action: notify.mobile_app_phone # <<REPLACE>>
+            data:
+              title: "After-hours motion — {{ zone | title }}"
+              message: "Motion detected at {{ now().strftime('%H:%M') }}."
+              data:
+                image: "/local/{{ zone }}_latest.jpg"
+
+      - delay: "00:00:02"
+
+      - action: input_boolean.turn_off
+        target:
+          entity_id: "input_boolean.{{ zone }}_system_acting"
+
+  # 3. Timer expiry turns that zone's lights back off. Only in Auto — if an
+  #    override came in while the timer was running, the override owns them now.
+  - id: talli_lights_off
+    alias: "Zones: timer expiry turns lights off"
+    mode: queued
+    max: 25
+    triggers:
+      - trigger: event
+        event_type: timer.finished
+    conditions:
+      - condition: template
+        value_template: >-
+          {{ trigger.event.data.entity_id in
+             ['timer.driveway_lights', 'timer.carpark_lights'] }}
+      - condition: template
+        value_template: "{{ states('input_select.' ~ zone ~ '_mode') == 'Auto' }}"
+    variables:
+      zone: >-
+        {{ trigger.event.data.entity_id.split('.')[1] | replace('_lights', '') }}
+    actions:
+      - action: input_boolean.turn_on
+        target:
+          entity_id: "input_boolean.{{ zone }}_system_acting"
+
+      - action: homeassistant.turn_off
+        target:
+          entity_id: "switch.{{ zone }}_lights"
+
+      - delay: "00:00:02"
+
+      - action: input_boolean.turn_off
+        target:
+          entity_id: "input_boolean.{{ zone }}_system_acting"
+
+  # 4. Runaway guard, per zone. Insects drawn to a floodlight, heavy rain, or a
+  #    tree in the wind can retrigger motion endlessly and flatten a camera battery
+  #    overnight. One zone locking out does not affect the other.
+  #    Never overrides a deliberate Force on.
+  - id: talli_runaway_guard
+    alias: "Zones: runaway motion lockout"
+    mode: queued
+    max: 25
+    triggers:
+      - trigger: state
+        entity_id:
+          - counter.driveway_motion_trips # ZONE MAP
+          - counter.carpark_motion_trips # ZONE MAP
+    variables:
+      zone: "{{ trigger.entity_id.split('.')[1] | replace('_motion_trips', '') }}"
+    conditions:
+      - condition: template
+        value_template: "{{ states('input_select.' ~ zone ~ '_mode') == 'Auto' }}"
+      - condition: template
+        value_template: >-
+          {{ states('counter.' ~ zone ~ '_motion_trips') | int(0)
+             >= states('input_number.' ~ zone ~ '_trip_limit') | int(12) }}
+    actions:
+      - action: input_boolean.turn_on
+        target:
+          entity_id: "input_boolean.{{ zone }}_system_acting"
+
+      - action: timer.cancel
+        target:
+          entity_id: "timer.{{ zone }}_lights"
+
+      - action: homeassistant.turn_off
+        target:
+          entity_id: "switch.{{ zone }}_lights"
+
+      - action: timer.start
+        target:
+          entity_id: "timer.{{ zone }}_lockout"
+
+      - delay: "00:00:02"
+
+      - action: input_boolean.turn_off
+        target:
+          entity_id: "input_boolean.{{ zone }}_system_acting"
+
+      - action: notify.mobile_app_phone # <<REPLACE>>
+        data:
+          title: "Motion lockout — {{ zone | title }}"
+          message: >-
+            {{ states('counter.' ~ zone ~ '_motion_trips') }} motion trips in the
+            last hour — {{ zone }} lights off for 60 minutes. Most likely insects
+            on the floodlight. Set that zone to Force on if you need them anyway.
+
+  # 5. Reset every zone's trip counter hourly, so the guard measures a rolling hour.
+  - id: talli_counter_reset
+    alias: "Zones: hourly trip counter reset"
+    mode: single
+    triggers:
+      - trigger: time_pattern
+        hours: "/1"
+    actions:
+      - action: counter.reset
+        target:
+          entity_id:
+            - counter.driveway_motion_trips # ZONE MAP
+            - counter.carpark_motion_trips # ZONE MAP
+
+  # 6. Physical switch use is treated as an override for that zone, so flipping a
+  #    switch on the wall or in the vendor app behaves the same as tapping Force on.
+  - id: talli_manual_detect
+    alias: "Zones: switch used by hand means force on"
+    mode: parallel
+    max: 10
+    triggers:
+      - trigger: state
+        entity_id:
+          - switch.driveway_lights # ZONE MAP
+          - switch.carpark_lights # ZONE MAP
+        to: "on"
+    variables:
+      zone: "{{ trigger.entity_id.split('.')[1] | replace('_lights', '') }}"
+    conditions:
+      - condition: template
+        value_template: >-
+          {{ is_state('input_boolean.' ~ zone ~ '_system_acting', 'off') }}
+      - condition: template
+        value_template: "{{ is_state('timer.' ~ zone ~ '_lights', 'idle') }}"
+      - condition: template
+        value_template: >-
+          {{ states('input_select.' ~ zone ~ '_mode') != 'Force on' }}
+    actions:
+      - action: input_select.select_option
+        target:
+          entity_id: "input_select.{{ zone }}_mode"
+        data:
+          option: Force on
+
+  - id: talli_manual_clear
+    alias: "Zones: switch turned off by hand returns to auto"
+    mode: parallel
+    max: 10
+    triggers:
+      - trigger: state
+        entity_id:
+          - switch.driveway_lights # ZONE MAP
+          - switch.carpark_lights # ZONE MAP
+        to: "off"
+    variables:
+      zone: "{{ trigger.entity_id.split('.')[1] | replace('_lights', '') }}"
+    conditions:
+      - condition: template
+        value_template: >-
+          {{ is_state('input_boolean.' ~ zone ~ '_system_acting', 'off') }}
+      - condition: template
+        value_template: >-
+          {{ states('input_select.' ~ zone ~ '_mode') == 'Force on' }}
+    actions:
+      - action: input_select.select_option
+        target:
+          entity_id: "input_select.{{ zone }}_mode"
+        data:
+          option: Auto
+
+  # 7. Safety net for a Force on left running: revert to Auto at sunrise so the
+  #    lights don't burn all day. Per zone, via each zone's revert toggle.
+  - id: talli_sunrise_revert
+    alias: "Zones: revert force-on at sunrise"
+    mode: single
+    triggers:
+      - trigger: sun
+        event: sunrise
+    actions:
+      - repeat:
+          for_each: [driveway, carpark] # ZONE MAP
+          sequence:
+            - if:
+                - condition: template
+                  value_template: >-
+                    {{ states('input_select.' ~ repeat.item ~ '_mode') == 'Force on'
+                       and is_state('input_boolean.' ~ repeat.item ~ '_sunrise_revert', 'on') }}
+              then:
+                - action: input_select.select_option
+                  target:
+                    entity_id: "input_select.{{ repeat.item }}_mode"
+                  data:
+                    option: Auto
+
+  # 8. Clear the acting flags on restart, in case HA went down mid-run and left one
+  #    stuck on, which would disable manual-use detection for that zone.
+  - id: talli_reset_acting_flags
+    alias: "Zones: clear acting flags on restart"
+    mode: single
+    triggers:
+      - trigger: homeassistant
+        event: start
+    actions:
+      - action: input_boolean.turn_off
+        target:
+          entity_id:
+            - input_boolean.driveway_system_acting # ZONE MAP
+            - input_boolean.carpark_system_acting # ZONE MAP
+
+  # 9. Battery warning, per camera.
+  - id: talli_battery_warning
+    alias: "Zones: camera battery low"
+    mode: parallel
+    max: 10
+    triggers:
+      - trigger: numeric_state
+        entity_id:
+          - sensor.aarlo_battery_level_driveway # <<REPLACE>> ZONE MAP
+          - sensor.aarlo_battery_level_carpark # <<REPLACE>> ZONE MAP
+        below: 25
+        for: "00:10:00"
+    actions:
+      - action: notify.mobile_app_phone # <<REPLACE>>
+        data:
+          title: Arlo battery low
+          message: >-
+            {{ trigger.to_state.name }} at {{ trigger.to_state.state }}%.
+            Charge it or that zone's motion automations stop working.
