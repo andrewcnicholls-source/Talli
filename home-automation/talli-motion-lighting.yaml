@@ -43,21 +43,28 @@
 # Put each zone's real switches here. A light can only sensibly belong to one
 # zone; if you want a light driven by either camera, add it to both groups and
 # accept that whichever zone last acted wins.
+#
+# ONLY LIST ENTITIES THAT ACTUALLY EXIST. A group made entirely of entities that
+# don't resolve reports itself unavailable, and the automations then switch
+# something that isn't there — failing silently, which is the worst way to fail.
+# Add each light here as you confirm its entity ID, not before.
 
 switch:
+  # CONFIRMED: Kasa plug "Outdoor lights", driven by the Backyard camera.
+  - platform: group
+    name: Backyard lights
+    unique_id: talli_backyard_lights_group
+    entities:
+      - switch.outdoor_lights # Kasa plug "Outdoor lights" — VERIFY exact ID
+
+  # NOT YET WIRED UP. The Grid Connect switch is a placeholder — replace it with
+  # the real entity ID before enabling the driveway zone, or comment this group
+  # out and drop "driveway" from the ZONE MAP entries until you're ready.
   - platform: group
     name: Driveway lights
     unique_id: talli_driveway_lights_group
     entities:
       - switch.grid_connect_driveway # <<REPLACE>>
-      - switch.tapo_sign_light # <<REPLACE>>
-
-  - platform: group
-    name: Backyard lights
-    unique_id: talli_backyard_lights_group
-    entities:
-      - switch.tapo_backyard_flood # <<REPLACE>>
-      - switch.tapo_deck_light # <<REPLACE>>
 
 # ---------------------------------------------------------------------------
 # Helpers — one block per zone

@@ -55,17 +55,27 @@ the package. Put each zone's real switches in its group and you're done:
 ```yaml
 switch:
   - platform: group
+    name: Backyard lights          # becomes switch.backyard_lights
+    entities:
+      - switch.outdoor_lights      # Kasa plug "Outdoor lights"
+
+  - platform: group
     name: Driveway lights          # becomes switch.driveway_lights
     entities:
       - switch.grid_connect_driveway
-      - switch.tapo_sign_light
-
-  - platform: group
-    name: Backyard lights           # becomes switch.backyard_lights
-    entities:
-      - switch.tapo_backyard_flood
-      - switch.tapo_deck_light
 ```
+
+**Only list entities that actually exist.** A group whose members don't resolve
+reports itself unavailable, and the automations then switch something that isn't
+there — failing silently, which is the worst way to fail. Add each light as you
+confirm its entity ID, not in advance.
+
+### Current wiring
+
+| Zone | Camera | Lights | Status |
+|---|---|---|---|
+| `backyard` | Backyard | Kasa plug "Outdoor lights" | **Wired up** |
+| `driveway` | Driveway | Grid Connect switch | Placeholder — needs the real entity ID |
 
 Zones are fully independent: separate timers, separate durations, separate lockouts,
 separate overrides. The backyard locking out for insects doesn't touch the driveway.
@@ -336,10 +346,10 @@ Find your real IDs under Developer Tools → States.
 | Placeholder | What it is | Typical real value |
 |---|---|---|
 | `switch.grid_connect_driveway` | Grid Connect light switch | Whatever `tuya-local` names it |
-| `switch.tapo_sign_light` | Tapo/Kasa plug, driveway | `switch.<plug name>` |
-| `switch.tapo_backyard_flood` | Tapo/Kasa plug, backyard | `switch.<plug name>` |
-| `switch.tapo_deck_light` | Tapo/Kasa plug, backyard | `switch.<plug name>` |
 | `notify.mobile_app_phone` | Your phone | `notify.mobile_app_<your device>` |
+
+Plus `switch.outdoor_lights` — that's the Kasa plug, and it should be right if the
+plug is named "Outdoor lights" in the Kasa app, but confirm it in Developer Tools.
 
 **Marked `VERIFY` — should already be right, just confirm:**
 
