@@ -1,0 +1,305 @@
+# Talli Parking — driveway motion automations
+#
+# Home Assistant package. Drop this in config/packages/talli-driveway.yaml and add
+# to configuration.yaml:
+#
+#   homeassistant:
+#     packages: !include_dir_named packages
+#
+# BEFORE IT WILL RUN: replace every entity ID marked <<REPLACE>> with your own.
+# See README.md for how to find each one.
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+input_boolean:
+  driveway_automations:
+    name: Driveway automations enabled
+    icon: mdi:motion-sensor
+
+  # Set while an automation is driving the switches, so manual-use detection can
+  # tell a human pressing the switch apart from our own actions.
+  driveway_system_acting:
+    name: Driveway system acting
+    icon: mdi:robot
+
+  # Set when a human turns the lights on by hand. Suppresses the auto-off.
+  driveway_manual_hold:
+    name: Driveway manual hold
+    icon: mdi:hand-back-right
+
+input_number:
+  driveway_light_minutes:
+    name: Driveway light duration
+    min: 1
+    max: 30
+    step: 1
+    unit_of_measurement: min
+    icon: mdi:timer-outline
+
+  driveway_trip_limit:
+    name: Motion trips before lockout
+    min: 3
+    max: 60
+    step: 1
+    icon: mdi:bug-outline
+
+counter:
+  driveway_motion_trips:
+    name: Driveway motion trips this hour
+    initial: 0
+    step: 1
+
+timer:
+  driveway_lights:
+    name: Driveway light timer
+    duration: "00:05:00"
+    restore: true
+
+  driveway_lockout:
+    name: Driveway motion lockout
+    duration: "01:00:00"
+    restore: true
+
+# ---------------------------------------------------------------------------
+# Automations
+# ---------------------------------------------------------------------------
+
+automation:
+  # 1. The single motion handler. Everything motion-triggered lives here so that
+  #    normal lighting and the after-hours deterrent can't fight over the same
+  #    switch. mode: restart means fresh motion extends the timer, never stacks.
+  - id: talli_driveway_motion_response
+    alias: "Driveway: motion response"
+    mode: restart
+    triggers:
+      - trigger: state
+        entity_id: binary_sensor.aarlo_motion_driveway # <<REPLACE>>
+        to: "on"
+    conditions:
+      - condition: state
+        entity_id: input_boolean.driveway_automations
+        state: "on"
+      # Lockout active means the runaway guard has tripped — stay off.
+      - condition: state
+        entity_id: timer.driveway_lockout
+        state: idle
+      # Only after dark. Elevation -4 is roughly civil dusk, so the lights come on
+      # slightly before full dark rather than well after it.
+      - condition: numeric_state
+        entity_id: sun.sun
+        attribute: elevation
+        below: -4
+    actions:
+      - action: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.driveway_system_acting
+
+      - action: counter.increment
+        target:
+          entity_id: counter.driveway_motion_trips
+
+      # Start the timer before switching anything, so the manual-use detector
+      # never sees an idle timer during our own switching.
+      - action: timer.start
+        target:
+          entity_id: timer.driveway_lights
+        data:
+          duration: >-
+            {{ (states('input_number.driveway_light_minutes') | int(5) * 60)
+               | timestamp_custom('%H:%M:%S', false) }}
+
+      - action: homeassistant.turn_on
+        target:
+          entity_id:
+            - switch.driveway_floodlights # <<REPLACE>> Grid Connect switch
+            - switch.sign_light # <<REPLACE>> Tapo/Kasa plug
+
+      # Between 23:00 and 05:00 nobody should be on the property: flash the lights
+      # as a deterrent, then notify with a snapshot.
+      - if:
+          - condition: time
+            after: "23:00:00"
+            before: "05:00:00"
+        then:
+          - repeat:
+              count: 3
+              sequence:
+                - action: homeassistant.turn_off
+                  target:
+                    entity_id: switch.driveway_floodlights # <<REPLACE>>
+                - delay: "00:00:01"
+                - action: homeassistant.turn_on
+                  target:
+                    entity_id: switch.driveway_floodlights # <<REPLACE>>
+                - delay: "00:00:01"
+
+          - action: camera.snapshot
+            target:
+              entity_id: camera.aarlo_driveway # <<REPLACE>>
+            data:
+              filename: /config/www/driveway_latest.jpg
+
+          - action: notify.mobile_app_phone # <<REPLACE>>
+            data:
+              title: After-hours driveway motion
+              message: "Motion detected at {{ now().strftime('%H:%M') }}."
+              data:
+                image: /local/driveway_latest.jpg
+
+      - action: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.driveway_system_acting
+
+  # 2. Timer expiry turns the lights back off, unless a human is holding them on.
+  - id: talli_driveway_lights_off
+    alias: "Driveway: timer expiry turns lights off"
+    mode: single
+    triggers:
+      - trigger: event
+        event_type: timer.finished
+        event_data:
+          entity_id: timer.driveway_lights
+    conditions:
+      - condition: state
+        entity_id: input_boolean.driveway_manual_hold
+        state: "off"
+    actions:
+      - action: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.driveway_system_acting
+
+      - action: homeassistant.turn_off
+        target:
+          entity_id:
+            - switch.driveway_floodlights # <<REPLACE>>
+            - switch.sign_light # <<REPLACE>>
+
+      - action: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.driveway_system_acting
+
+  # 3. Runaway guard. Insects drawn to the floodlight, heavy rain, or a tree in the
+  #    wind can retrigger motion endlessly and flatten the camera battery overnight.
+  #    Exceed the trip limit within an hour and we kill the lights and lock out.
+  - id: talli_driveway_runaway_guard
+    alias: "Driveway: runaway motion lockout"
+    mode: single
+    triggers:
+      - trigger: state
+        entity_id: counter.driveway_motion_trips
+    conditions:
+      - condition: template
+        value_template: >-
+          {{ states('counter.driveway_motion_trips') | int(0)
+             >= states('input_number.driveway_trip_limit') | int(12) }}
+    actions:
+      - action: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.driveway_system_acting
+
+      - action: timer.cancel
+        target:
+          entity_id: timer.driveway_lights
+
+      - action: homeassistant.turn_off
+        target:
+          entity_id:
+            - switch.driveway_floodlights # <<REPLACE>>
+            - switch.sign_light # <<REPLACE>>
+
+      - action: timer.start
+        target:
+          entity_id: timer.driveway_lockout
+
+      - action: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.driveway_system_acting
+
+      - action: notify.mobile_app_phone # <<REPLACE>>
+        data:
+          title: Driveway motion lockout
+          message: >-
+            {{ states('counter.driveway_motion_trips') }} motion trips in the last
+            hour — lights off for 60 minutes. Most likely insects on the floodlight.
+
+  # 4. Reset the trip counter hourly, so the guard measures a rolling hour.
+  - id: talli_driveway_counter_reset
+    alias: "Driveway: hourly trip counter reset"
+    mode: single
+    triggers:
+      - trigger: time_pattern
+        hours: "/1"
+    actions:
+      - action: counter.reset
+        target:
+          entity_id: counter.driveway_motion_trips
+
+  # 5. Manual override. A switch coming on while no timer is running and no
+  #    automation is acting means a human did it — hold until they turn it off.
+  - id: talli_driveway_manual_detect
+    alias: "Driveway: detect manual switch use"
+    mode: single
+    triggers:
+      - trigger: state
+        entity_id: switch.driveway_floodlights # <<REPLACE>>
+        to: "on"
+    conditions:
+      - condition: state
+        entity_id: input_boolean.driveway_system_acting
+        state: "off"
+      - condition: state
+        entity_id: timer.driveway_lights
+        state: idle
+    actions:
+      - action: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.driveway_manual_hold
+
+  - id: talli_driveway_manual_clear
+    alias: "Driveway: clear manual hold"
+    mode: single
+    triggers:
+      - trigger: state
+        entity_id: switch.driveway_floodlights # <<REPLACE>>
+        to: "off"
+    conditions:
+      - condition: state
+        entity_id: input_boolean.driveway_system_acting
+        state: "off"
+    actions:
+      - action: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.driveway_manual_hold
+
+  # 6. Safety net: clear the acting flag on restart, in case HA went down mid-run
+  #    and left it stuck on (which would disable manual-use detection).
+  - id: talli_driveway_reset_acting_flag
+    alias: "Driveway: clear acting flag on restart"
+    mode: single
+    triggers:
+      - trigger: homeassistant
+        event: start
+    actions:
+      - action: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.driveway_system_acting
+
+  # 7. Battery warning. A Pro 3 Floodlight serving frequent motion events drains
+  #    much faster than Arlo's rated life — catch it before the automations die.
+  - id: talli_driveway_battery_warning
+    alias: "Driveway: camera battery low"
+    mode: single
+    triggers:
+      - trigger: numeric_state
+        entity_id: sensor.aarlo_battery_level_driveway # <<REPLACE>>
+        below: 25
+        for: "00:10:00"
+    actions:
+      - action: notify.mobile_app_phone # <<REPLACE>>
+        data:
+          title: Arlo battery low
+          message: >-
+            Driveway camera at {{ states('sensor.aarlo_battery_level_driveway') }}%.
+            Charge it or the motion automations stop working.
