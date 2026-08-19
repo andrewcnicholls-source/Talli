@@ -371,3 +371,345 @@ footer a { color: var(--blue); }
   padding: 0;
   overflow: hidden;
 }
+
+/* ============================================
+   BOOKING FLOW
+   Three revealed steps on book.html, plus the
+   confirmation page. Mobile-first: the cards are
+   full-width taps until there's room for a grid.
+   ============================================ */
+
+/* Class selectors here out-specify the user-agent [hidden] rule, so state it
+   once and loudly — several of these steps are hidden until they're reached. */
+[hidden] { display: none !important; }
+
+.bk-flow { margin-top: 8px; }
+
+.bk-step { margin-top: 44px; }
+.bk-step:first-child { margin-top: 8px; }
+
+.bk-step-head {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  margin-bottom: 6px;
+}
+.bk-step-num {
+  font-family: var(--display);
+  font-size: 1.5rem;
+  line-height: 1;
+  color: var(--blue);
+}
+.bk-step-head h2 { margin-bottom: 0; font-size: clamp(1.5rem, 3.5vw, 2rem); }
+
+.bk-step-context {
+  font-size: 0.9rem;
+  color: var(--blue);
+  letter-spacing: 0.02em;
+  margin-bottom: 2px;
+}
+.bk-step-note { font-size: 0.9rem; color: var(--grey); margin-bottom: 4px; }
+
+.bk-empty {
+  font-size: 0.94rem;
+  color: var(--grey);
+  padding: 18px 0;
+}
+
+/* ---------- Selectable cards ---------- */
+.bk-cards {
+  display: grid;
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  margin-top: 16px;
+}
+.bk-cards:empty { display: none; border: 0; margin-top: 0; }
+
+.bk-card {
+  position: relative;
+  display: block;
+  background: var(--white);
+  padding: 20px 22px 20px 52px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.bk-card:hover { background: var(--blue-tint); }
+
+/* The radio itself is the selection indicator — a ring that fills in.
+   Keeping a real input keeps keyboard and screen-reader behaviour intact. */
+.bk-radio {
+  position: absolute;
+  left: 20px;
+  top: 22px;
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  border: 1px solid #BFBCB4;
+  border-radius: 50%;
+  background: var(--white);
+  cursor: pointer;
+  flex: none;
+}
+.bk-radio:checked {
+  border-color: var(--blue);
+  border-width: 5px;
+}
+.bk-radio:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
+
+.bk-card:has(.bk-radio:checked) {
+  background: var(--blue-tint);
+  box-shadow: inset 3px 0 0 var(--blue);
+}
+
+.bk-card-body { display: block; }
+.bk-card-title {
+  display: block;
+  font-weight: 500;
+  font-size: 1.02rem;
+  color: var(--ink);
+  letter-spacing: 0.01em;
+}
+.bk-card-meta {
+  display: block;
+  font-size: 0.88rem;
+  font-weight: 300;
+  color: var(--grey);
+  margin-top: 3px;
+}
+
+.bk-tier-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+}
+.bk-tier-price {
+  font-family: var(--display);
+  font-size: 1.45rem;
+  line-height: 1;
+  color: var(--blue);
+  flex: none;
+}
+
+.bk-tier-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.bk-fact {
+  font-size: 0.72rem;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--blue);
+  background: var(--blue-tint);
+  border-radius: 2px;
+  padding: 4px 9px;
+}
+.bk-fact-low { color: #8A5A12; background: #FBF3E4; }
+.bk-fact-warn { color: var(--orange-flag); background: #FFF4F0; }
+
+.bk-card.is-soldout { cursor: not-allowed; opacity: 0.55; }
+.bk-card.is-soldout:hover { background: var(--white); }
+
+.bk-more {
+  display: inline-block;
+  margin-top: 16px;
+  padding: 0 0 3px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--blue);
+  font-family: var(--body);
+  font-size: 0.78rem;
+  font-weight: 400;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--blue);
+  cursor: pointer;
+}
+
+/* ---------- Summary of what's being bought ---------- */
+.bk-summary {
+  background: var(--blue-tint);
+  border-left: 3px solid var(--blue);
+  border-radius: 3px;
+  padding: 18px 22px;
+  margin: 18px 0 26px;
+}
+.bk-summary-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+}
+.bk-summary-tier { font-weight: 500; color: var(--blue-deep); }
+.bk-summary-price {
+  font-family: var(--display);
+  font-size: 1.5rem;
+  line-height: 1;
+  color: var(--blue-deep);
+  flex: none;
+}
+.bk-summary-meta {
+  font-size: 0.86rem;
+  font-weight: 300;
+  color: var(--blue);
+  margin-top: 5px;
+}
+
+/* ---------- Form ---------- */
+.bk-field { margin-bottom: 18px; }
+.bk-field label {
+  display: block;
+  font-size: 0.8rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--grey);
+  margin-bottom: 7px;
+}
+.bk-optional { text-transform: none; letter-spacing: 0.02em; opacity: 0.75; }
+
+.bk-field input {
+  width: 100%;
+  font-family: var(--body);
+  font-size: 1rem;
+  font-weight: 300;
+  color: var(--ink);
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 13px 14px;
+}
+.bk-field input:focus {
+  outline: none;
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(43, 76, 126, 0.12);
+}
+.bk-hint {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 300;
+  color: var(--grey);
+  margin-top: 6px;
+}
+
+.bk-field-row { display: grid; gap: 0 18px; }
+@media (min-width: 560px) { .bk-field-row { grid-template-columns: 1fr 1fr; } }
+
+.bk-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  font-size: 0.9rem;
+  font-weight: 300;
+  color: #3A3A36;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  cursor: pointer;
+}
+.bk-check input { margin-top: 3px; accent-color: var(--blue); flex: none; }
+.bk-check.is-flagged {
+  border-color: var(--orange-flag);
+  background: #FFF4F0;
+}
+
+.bk-error {
+  background: #FFF4F0;
+  border-left: 3px solid var(--orange-flag);
+  border-radius: 3px;
+  color: var(--orange-flag);
+  font-size: 0.92rem;
+  font-weight: 400;
+  padding: 14px 16px;
+  margin-top: 20px;
+  max-width: none;
+}
+
+.bk-submit { margin-top: 22px; }
+.bk-submit:disabled { opacity: 0.6; cursor: wait; }
+
+.bk-fineprint {
+  font-size: 0.82rem;
+  font-weight: 300;
+  color: var(--grey);
+  margin-top: 14px;
+}
+.bk-fineprint a { color: var(--blue); text-decoration: underline; }
+
+/* ============================================
+   CONFIRMATION PAGE
+   ============================================ */
+.cf-wrap { padding-top: 48px; min-height: 50vh; }
+
+.cf-loading { color: var(--grey); font-size: 0.95rem; }
+
+.cf-problem h1 {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: clamp(1.8rem, 5vw, 2.4rem);
+  margin-bottom: 14px;
+}
+
+.cf-headline {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: clamp(2rem, 6vw, 2.8rem);
+  line-height: 1.1;
+  margin-bottom: 12px;
+}
+.cf-sub { font-size: 1.02rem; color: #4B4B46; }
+
+.cf-ref {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 12px;
+  background: var(--blue-tint);
+  border-radius: 3px;
+  padding: 12px 18px;
+  margin: 26px 0 8px;
+}
+.cf-ref-label {
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--blue);
+}
+.cf-ref strong {
+  font-size: 1.2rem;
+  letter-spacing: 0.1em;
+  color: var(--blue-deep);
+  font-weight: 500;
+}
+
+.cf-details {
+  border-top: 1px solid var(--line);
+  margin-top: 18px;
+}
+.cf-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 20px;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--line);
+}
+.cf-row-key {
+  flex: 0 0 110px;
+  font-size: 0.76rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--grey);
+  padding-top: 3px;
+}
+.cf-row-val { flex: 1 1 200px; font-weight: 400; color: var(--ink); }
+
+.cf-pending {
+  font-size: 0.88rem;
+  color: var(--grey);
+  margin-top: 16px;
+}
+
+.cf-next { margin-top: 32px; }

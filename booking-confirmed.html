@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>You're booked — Talli Parking</title>
+<meta name="description" content="Your Talli Parking booking confirmation.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poiret+One&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <a href="index.html"><img class="brand-logo" src="assets/talli-logo.png" alt="talli."></a>
+    <nav class="topnav">
+      <a href="index.html">Home</a>
+      <a href="getting-here.html">Getting Here</a>
+      <a href="book.html">Book &amp; Extras</a>
+      <a href="eden-park.html">Eden Park Guide</a>
+    </nav>
+  </div>
+</div>
+
+<main class="wrap tight cf-wrap">
+
+  <p class="cf-loading" id="cf-loading">Confirming your booking…</p>
+
+  <div class="cf-problem" id="cf-problem" hidden>
+    <h1>Something's not right</h1>
+    <p id="cf-problem-text"></p>
+    <p>Email <a href="mailto:talli.parking@gmail.com">talli.parking@gmail.com</a> and we'll sort it out.</p>
+  </div>
+
+  <div id="cf-body" hidden>
+    <div class="hero-rule"></div>
+    <span class="eyebrow">Booking confirmed</span>
+    <h1 class="cf-headline" id="cf-headline"></h1>
+    <p class="cf-sub" id="cf-sub"></p>
+
+    <div class="cf-ref">
+      <span class="cf-ref-label">Reference</span>
+      <strong id="cf-reference"></strong>
+    </div>
+
+    <div class="cf-details" id="cf-details"></div>
+
+    <p class="cf-pending" id="cf-pending" hidden>
+      Still confirming with our payment provider — this usually takes a few seconds.
+    </p>
+
+    <div class="box cf-next">
+      <h3>On the night</h3>
+      <ul class="checklist">
+        <li>Come to 86 Paice Avenue, Sandringham — turn in and a marshal will meet you.</li>
+        <li>Have your license plate handy; that's how we find your booking.</li>
+        <li>Follow the marshal's directions on where to park. We double-park to fit everyone in.</li>
+        <li>Ponchos, earplugs and lolly bags are available on arrival, cash or bank transfer.</li>
+      </ul>
+      <div class="btn-row">
+        <a class="btn btn-outline" href="getting-here.html">Directions &amp; map</a>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<footer>
+  <div class="footer-inner">
+    <div><strong>Talli Parking</strong><br>86 Paice Ave, Sandringham, Auckland<br><a href="terms.html" style="font-size: 0.85em; text-decoration: underline;">Terms &amp; Conditions</a></div>
+    <div>Questions about your booking:<br><a href="mailto:talli.parking@gmail.com">talli.parking@gmail.com</a></div>
+  </div>
+</footer>
+
+<script src="assets/talli-config.js"></script>
+<script src="assets/confirmed.js"></script>
+</body>
+</html>
