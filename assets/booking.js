@@ -22,6 +22,7 @@
     event: null,
     tiers: [],
     tier: null,
+    interestEvent: null,
     submitting: false,
   };
 
@@ -94,32 +95,39 @@
   function loadEvents() {
     var list = el('bk-events');
     read(
-      '/event?status=eq.on_sale&order=starts_at.asc' +
-      '&select=id,name,venue,starts_at,gates_open_at,online_sales_close_at'
+      '/event?status=in.(on_sale,announced)&order=starts_at.asc' +
+      '&select=id,name,venue,starts_at,gates_open_at,online_sales_close_at,status'
     )
       .then(function (events) {
         var now = Date.now();
-        var open = events.filter(function (e) {
-          // The server enforces this too; filtering here just avoids offering
-          // a fixture that will immediately reject.
-          return !e.online_sales_close_at || new Date(e.online_sales_close_at) > now;
-        });
+
+        var listed = events
+          .filter(function (e) { return new Date(e.starts_at) > now; })
+          .map(function (e) {
+            // Sales close before kick-off. Past that the fixture is still worth
+            // showing — people do turn up on the night — but it cannot be booked.
+            var closed = !!e.online_sales_close_at &&
+                         new Date(e.online_sales_close_at) <= now;
+            e.sellable = e.status === 'on_sale' && !closed;
+            e.closed = closed;
+            return e;
+          });
 
         list.innerHTML = '';
 
-        if (!open.length) {
+        if (!listed.length) {
           list.appendChild(
             make(
               'p',
               'bk-empty',
-              'No events are open for online booking right now. We take arrivals ' +
-              'on the night as well — come to 86 Paice Ave and ask the marshal.'
+              'Nothing on the calendar just now. We take arrivals on the night ' +
+              'as well — come to 86 Paice Ave and ask the marshal.'
             )
           );
           return;
         }
 
-        open.forEach(function (ev) { list.appendChild(eventCard(ev)); });
+        listed.forEach(function (ev) { list.appendChild(eventCard(ev)); });
       })
       .catch(function (err) {
         list.innerHTML = '';
@@ -127,26 +135,103 @@
       });
   }
 
+  // People pick a night, not an opponent — you go to support your team, and the
+  // date is the thing you have to fit around. So the date leads, big enough to
+  // read at a glance, and the fixture sits beside it.
   function eventCard(ev) {
-    var label = make('label', 'bk-card bk-card-event');
+    var d = new Date(ev.starts_at);
+    var row = make(ev.sellable ? 'label' : 'button',
+      'bk-fixture' + (ev.sellable ? '' : ' is-unsellable'));
 
-    var input = document.createElement('input');
-    input.type = 'radio';
-    input.name = 'bk-event';
-    input.value = ev.id;
-    input.className = 'bk-radio';
-    input.addEventListener('change', function () { chooseEvent(ev); });
+    if (ev.sellable) {
+      var input = document.createElement('input');
+      input.type = 'radio';
+      input.name = 'bk-event';
+      input.value = ev.id;
+      input.className = 'bk-radio bk-radio-fixture';
+      input.addEventListener('change', function () { chooseEvent(ev); });
+      row.appendChild(input);
+    } else {
+      row.type = 'button';
+      row.addEventListener('click', function () { openInterest(ev); });
+    }
 
-    var body = make('span', 'bk-card-body');
+    var date = make('span', 'bk-date');
+    date.appendChild(make('span', 'bk-date-dow', fmt(ev.starts_at, { weekday: 'short' })));
+    date.appendChild(make('span', 'bk-date-day', String(d.getDate())));
+    date.appendChild(make('span', 'bk-date-mon', fmt(ev.starts_at, { month: 'short' })));
+    row.appendChild(date);
+
+    var body = make('span', 'bk-fixture-body');
     body.appendChild(make('span', 'bk-card-title', ev.name));
-    body.appendChild(
-      make('span', 'bk-card-meta', asDate(ev.starts_at) + ' · ' + asTime(ev.starts_at) +
-        (ev.venue ? ' · ' + ev.venue : ''))
-    );
+    body.appendChild(make('span', 'bk-card-meta',
+      asTime(ev.starts_at) + (ev.venue ? ' · ' + ev.venue : '')));
 
-    label.appendChild(input);
-    label.appendChild(body);
-    return label;
+    if (!ev.sellable) {
+      body.appendChild(make('span', 'bk-fixture-tag',
+        ev.closed ? 'Online booking closed — tap to ask'
+                  : 'Not bookable yet — tap to be told first'));
+    }
+    row.appendChild(body);
+
+    return row;
+  }
+
+  /* ------------------------------------------------- interest in a fixture */
+
+  function openInterest(ev) {
+    state.interestEvent = ev;
+    text(el('bk-interest-name'), ev.name);
+    text(el('bk-interest-when'), asDate(ev.starts_at) + ' · ' + asTime(ev.starts_at));
+    text(el('bk-interest-lead'), ev.closed
+      ? 'Online booking has closed for this one. Leave your email and we\u2019ll let ' +
+        'you know if a space frees up — or just come to 86 Paice Ave on the night.'
+      : 'We haven\u2019t set prices for this one yet. Leave your email and you\u2019ll be ' +
+        'the first to know when it opens.');
+    el('bk-interest-error').hidden = true;
+    el('bk-interest-done').hidden = true;
+    el('bk-interest-form').hidden = false;
+    el('bk-interest-form').reset();
+    el('bk-interest').hidden = false;
+  }
+
+  function submitInterest(e) {
+    e.preventDefault();
+    var form = el('bk-interest-form');
+    var button = el('bk-interest-submit');
+    button.disabled = true;
+    el('bk-interest-error').hidden = true;
+
+    fetch(FN + '/register-interest', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: CFG.anonKey,
+        Authorization: 'Bearer ' + CFG.anonKey,
+      },
+      body: JSON.stringify({
+        event_id: state.interestEvent.id,
+        email: form.interestemail.value.trim(),
+        name: form.interestname.value.trim() || null,
+      }),
+    })
+      .then(function (res) {
+        return res.json().then(function (d) { return { ok: res.ok, data: d }; });
+      })
+      .then(function (result) {
+        if (!result.ok) throw new Error(result.data.error || 'That did not work.');
+        el('bk-interest-form').hidden = true;
+        text(el('bk-interest-done'), result.data.already
+          ? 'You\u2019re already on the list for this one — we\u2019ll be in touch.'
+          : 'Done. We\u2019ll email you the moment this one opens.');
+        el('bk-interest-done').hidden = false;
+      })
+      .catch(function (err) {
+        var box = el('bk-interest-error');
+        text(box, err.message);
+        box.hidden = false;
+      })
+      .finally(function () { button.disabled = false; });
   }
 
   function chooseEvent(ev) {
@@ -372,6 +457,10 @@
     });
 
     el('bk-form').addEventListener('submit', submit);
+    el('bk-interest-form').addEventListener('submit', submitInterest);
+    el('bk-interest-close').addEventListener('click', function () {
+      el('bk-interest').hidden = true;
+    });
 
     loadEvents();
   }

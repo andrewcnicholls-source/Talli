@@ -38,10 +38,11 @@
     <section class="bk-step" aria-labelledby="bk-h-event">
       <div class="bk-step-head">
         <span class="bk-step-num">01</span>
-        <h2 id="bk-h-event">Which event?</h2>
+        <h2 id="bk-h-event">Which night?</h2>
       </div>
-      <div class="bk-cards" id="bk-events">
-        <p class="bk-empty">Loading events…</p>
+      <p class="bk-step-note">Everything coming up at Eden Park. Tap a date.</p>
+      <div class="bk-fixtures" id="bk-events">
+        <p class="bk-empty">Loading fixtures…</p>
       </div>
     </section>
 
@@ -101,7 +102,7 @@
 
         <label class="bk-check" id="bk-street-row">
           <input type="checkbox" id="bk-street" name="accepts_street">
-          <span>I'm happy to be parked on the street verge if that's what's left.</span>
+          <span>I&rsquo;m happy to go in the overflow area &mdash; the grass verge by the road &mdash; if that&rsquo;s what&rsquo;s left.</span>
         </label>
 
         <p class="bk-error" id="bk-error" role="alert" hidden></p>
@@ -182,6 +183,37 @@
     <div>Book or ask a question:<br><a href="mailto:talli.parking@gmail.com">talli.parking@gmail.com</a></div>
   </div>
 </footer>
+
+<!-- ------------------------------------ interest in a fixture not yet on sale -->
+<div class="bk-sheet" id="bk-interest" hidden>
+  <div class="bk-sheet-card">
+    <div class="bk-sheet-head">
+      <div>
+        <h2 id="bk-interest-name"></h2>
+        <p class="bk-sheet-when" id="bk-interest-when"></p>
+      </div>
+      <button type="button" class="bk-sheet-close" id="bk-interest-close" aria-label="Close">&times;</button>
+    </div>
+
+    <p class="bk-sheet-lead" id="bk-interest-lead"></p>
+
+    <form id="bk-interest-form">
+      <div class="bk-field">
+        <label for="bk-interest-email">Email</label>
+        <input type="email" id="bk-interest-email" name="interestemail" autocomplete="email" required>
+      </div>
+      <div class="bk-field">
+        <label for="bk-interest-yourname">Name <span class="bk-optional">optional</span></label>
+        <input type="text" id="bk-interest-yourname" name="interestname" autocomplete="name">
+      </div>
+      <p class="bk-error" id="bk-interest-error" role="alert" hidden></p>
+      <button type="submit" class="btn btn-primary" id="bk-interest-submit">Tell me when it opens</button>
+      <p class="bk-fineprint">We&rsquo;ll only email you about this event. No newsletter, and we don&rsquo;t share your address.</p>
+    </form>
+
+    <p class="bk-sheet-done" id="bk-interest-done" role="status" hidden></p>
+  </div>
+</div>
 
 <script src="assets/talli-config.js"></script>
 <script src="assets/booking.js"></script>

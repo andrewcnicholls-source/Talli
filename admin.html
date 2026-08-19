@@ -73,9 +73,9 @@
     <label class="ad-label" for="ad-sell-tier">Spot</label>
     <select id="ad-sell-tier" name="tier" class="ad-select" required></select>
 
-    <label class="ad-label" for="ad-sell-rego">License plate</label>
+    <label class="ad-label" for="ad-sell-rego">License plate <span>optional</span></label>
     <input type="text" id="ad-sell-rego" name="rego" class="ad-input"
-           autocapitalize="characters" spellcheck="false" required>
+           autocapitalize="characters" spellcheck="false">
 
     <label class="ad-label" for="ad-sell-payment">Paid by</label>
     <select id="ad-sell-payment" name="payment" class="ad-select">
@@ -94,11 +94,6 @@
         <input type="tel" id="ad-sell-phone" name="sellphone" class="ad-input">
       </div>
     </div>
-
-    <label class="ad-check">
-      <input type="checkbox" id="ad-sell-street" name="sellstreet">
-      <span>Happy to go on the berm</span>
-    </label>
 
     <p class="ad-sheet-error" id="ad-sell-error" role="alert" hidden></p>
 

@@ -74,6 +74,7 @@
         if (!res.ok) {
           var err = new Error(data.error || ('Request failed (' + res.status + ')'));
           err.status = res.status;
+          err.code = data.code;
           throw err;
         }
         return data;
@@ -217,19 +218,76 @@
       meta.appendChild(make('span', 'ad-chip is-cash', r.payment_method + ' ' + money(r.amount_cents)));
     }
     if (r.status === 'held') meta.appendChild(make('span', 'ad-chip is-warn', 'unpaid hold'));
-    if (r.accepts_street_parking) meta.appendChild(make('span', 'ad-chip', 'berm ok'));
+    if (r.accepts_street_parking && r.channel === 'online') {
+      meta.appendChild(make('span', 'ad-chip', 'overflow ok'));
+    }
     main.appendChild(meta);
 
     card.appendChild(main);
+
+    var actions = make('div', 'ad-row-actions');
 
     var btn = make('button', 'ad-tick' + (r.arrived ? ' is-on' : ''),
       r.arrived ? 'Here' : 'Tick in');
     btn.type = 'button';
     btn.disabled = !!state.busy[r.booking_id];
     btn.addEventListener('click', function () { toggleArrived(r, btn); });
-    card.appendChild(btn);
+    actions.appendChild(btn);
+
+    // Valet holds keys, so those cars are already movable by hand and do not
+    // need this. Anything already out on the verge has nowhere further to go.
+    var inOverflow = /overflow/i.test(String(r.zone_label || ''));
+    if (!inOverflow && r.tier_code !== 'valet') {
+      var move = make('button', 'ad-move', '\u2192 Overflow');
+      move.type = 'button';
+      move.title = 'Move this car to overflow and free its bay';
+      move.disabled = !!state.busy[r.booking_id];
+      move.addEventListener('click', function () { moveToOverflow(r, move); });
+      actions.appendChild(move);
+    }
+
+    card.appendChild(actions);
 
     return card;
+  }
+
+  // Moving a prepaid car out to the verge puts its bay back on sale. That is
+  // the point: when there is a queue at the gate, a Standard sitting in the
+  // back yard is worth more to you parked on the overflow.
+  function moveToOverflow(r, btn) {
+    var who = r.vehicle_rego || r.customer_name || 'this car';
+
+    function go(confirmedConsent) {
+      state.busy[r.booking_id] = true;
+      btn.disabled = true;
+      call('move_to_overflow', {
+        booking_id: r.booking_id,
+        confirmed_consent: confirmedConsent === true,
+      })
+        .then(function (data) {
+          toast(who + ' moved to ' + (data.moved_to || 'overflow'), 'good');
+          return loadList(true);
+        })
+        .catch(function (err) {
+          if (err.code === 'NEEDS_CONSENT' || /did not agree/.test(err.message)) {
+            if (window.confirm(
+              who + ' did not tick the overflow box when booking.\n\n' +
+              'Have they agreed to it just now?'
+            )) {
+              go(true);
+              return;
+            }
+            return;
+          }
+          toast(err.message, 'bad');
+        })
+        .finally(function () {
+          delete state.busy[r.booking_id];
+          btn.disabled = false;
+        });
+    }
+
+    go(false);
   }
 
   function toggleArrived(r, btn) {
@@ -290,14 +348,20 @@
       property_id: tier.property_id,
       tier_code: tier.code,
       payment_method: form.payment.value,
-      vehicle_rego: form.rego.value.trim(),
+      vehicle_rego: form.rego.value.trim() || null,
       name: form.sellname.value.trim() || null,
       phone: form.sellphone.value.trim() || null,
-      accepts_street: form.sellstreet.checked,
+      // Always true at the gate. This flag is what lets sell_at_gate reach the
+      // berm zones at all, and standing in the driveway telling someone where
+      // to put their car IS the consent conversation — there is no second
+      // party to ask. Leaving it as a checkbox would mean an unticked box
+      // silently made the berm unsellable on the busiest night of the year.
+      accepts_street: true,
     })
       .then(function () {
         hide(el('ad-sell'));
-        toast('Sold — ' + form.rego.value.trim().toUpperCase(), 'good');
+        var plate = form.rego.value.trim().toUpperCase();
+        toast(plate ? 'Sold — ' + plate : 'Sold', 'good');
         return loadList(true);
       })
       .catch(function (err) {

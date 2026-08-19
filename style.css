@@ -952,9 +952,32 @@ footer a { color: var(--blue); }
 .ad-chip.is-warn { color: var(--orange-flag); background: #FFF4F0; border-color: #F3D9CF; }
 .ad-chip.is-cash { color: #8A5A12; background: #FBF3E4; border-color: #EBDCBE; }
 
+.ad-row-actions {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 96px;
+}
+
+.ad-move {
+  border: 1px solid var(--line);
+  background: var(--white);
+  color: var(--grey);
+  border-radius: 4px;
+  font-family: var(--body);
+  font-size: 0.74rem;
+  letter-spacing: 0.04em;
+  padding: 7px 4px;
+  cursor: pointer;
+}
+.ad-move:hover { border-color: #C9942A; color: #8A5A12; background: #FBF3E4; }
+.ad-move:disabled { opacity: 0.5; }
+
 .ad-tick {
   flex: none;
-  width: 84px;
+  width: 100%;
+  min-height: 46px;
   border: 1px solid var(--blue);
   background: var(--white);
   color: var(--blue);
@@ -1060,3 +1083,153 @@ footer a { color: var(--blue); }
 }
 .ad-toast.is-good { background: #1F5C3D; }
 .ad-toast.is-bad { background: #8C3A1E; }
+
+/* ---------- Fixture list (date-led) ----------
+   People choose a night, not an opponent. The date is the anchor, so it gets
+   the weight; the fixture reads as the detail beside it. */
+.bk-fixtures {
+  display: grid;
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  margin-top: 16px;
+}
+.bk-fixtures:empty { display: none; border: 0; }
+.bk-fixtures .bk-empty { background: var(--white); padding: 22px; margin: 0; }
+
+.bk-fixture {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  width: 100%;
+  background: var(--white);
+  border: none;
+  border-radius: 0;
+  padding: 16px 20px 16px 46px;
+  text-align: left;
+  font-family: var(--body);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.bk-fixture:hover { background: var(--blue-tint); }
+.bk-fixture:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
+
+.bk-radio-fixture { top: 50%; margin-top: -9px; }
+
+/* Unsellable fixtures are buttons, not radios — nothing to select, so nothing
+   claims the space a radio would take. */
+.bk-fixture.is-unsellable { padding-left: 20px; }
+
+.bk-date {
+  flex: none;
+  width: 52px;
+  text-align: center;
+  line-height: 1.05;
+}
+.bk-date-dow {
+  display: block;
+  font-size: 0.66rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--grey);
+}
+.bk-date-day {
+  display: block;
+  font-family: var(--display);
+  font-size: 1.9rem;
+  color: var(--blue);
+  margin: 1px 0;
+}
+.bk-date-mon {
+  display: block;
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--grey);
+}
+
+.bk-fixture-body { flex: 1; min-width: 0; }
+.bk-fixture-tag {
+  display: inline-block;
+  margin-top: 7px;
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--blue);
+  background: var(--blue-tint);
+  border-radius: 2px;
+  padding: 4px 9px;
+}
+.bk-fixture.is-unsellable .bk-card-title { color: #4B4B46; }
+
+.bk-fixture:has(.bk-radio:checked) {
+  background: var(--blue-tint);
+  box-shadow: inset 3px 0 0 var(--blue);
+}
+
+/* ---------- Interest sheet ---------- */
+.bk-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: rgba(26, 26, 26, 0.45);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+@media (min-width: 640px) { .bk-sheet { align-items: center; } }
+
+.bk-sheet-card {
+  background: var(--white);
+  width: 100%;
+  max-width: 460px;
+  border-radius: 8px 8px 0 0;
+  padding: 24px 22px calc(26px + env(safe-area-inset-bottom));
+  max-height: 92vh;
+  overflow-y: auto;
+}
+@media (min-width: 640px) { .bk-sheet-card { border-radius: 6px; } }
+
+.bk-sheet-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+.bk-sheet-head h2 {
+  font-family: var(--display);
+  font-size: 1.5rem;
+  margin: 0 0 3px;
+}
+.bk-sheet-when {
+  font-size: 0.86rem;
+  color: var(--blue);
+  margin: 0;
+}
+.bk-sheet-close {
+  flex: none;
+  background: none;
+  border: none;
+  font-size: 1.9rem;
+  line-height: 1;
+  color: var(--grey);
+  cursor: pointer;
+  padding: 0 4px;
+}
+.bk-sheet-lead {
+  font-size: 0.94rem;
+  color: #3A3A36;
+  margin-bottom: 20px;
+}
+.bk-sheet-card .btn { width: 100%; margin-top: 6px; }
+.bk-sheet-done {
+  background: var(--blue-tint);
+  border-left: 3px solid var(--blue);
+  border-radius: 3px;
+  color: var(--blue-deep);
+  font-size: 0.95rem;
+  padding: 16px 18px;
+  max-width: none;
+}
