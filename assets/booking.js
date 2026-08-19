@@ -415,7 +415,9 @@
       body: JSON.stringify(payload),
     })
       .then(function (res) {
-        return res.json().then(function (data) { return { ok: res.ok, data: data }; });
+        return res.json().then(function (data) {
+          return { ok: res.ok, status: res.status, data: data };
+        });
       })
       .then(function (result) {
         if (result.ok && result.data.url) {
@@ -427,6 +429,17 @@
         if (result.data.code === 'CONSENT_REQUIRED') {
           el('bk-street-row').classList.add('is-flagged');
           form.accepts_street.focus();
+        }
+
+        // 503 means card payments are not switched on yet. That is our problem,
+        // not the customer's, and "payments are not configured on this project"
+        // is not something to say to someone trying to give us money. Point
+        // them at the way that does work.
+        if (result.data.code === 'NOT_CONFIGURED' || result.status === 503) {
+          fail('Card payment isn\u2019t switched on just yet. Email ' +
+               'talli.parking@gmail.com with your name, phone, plate and the ' +
+               'event, and we\u2019ll hold a spot for you.');
+          return;
         }
 
         fail(result.data.error || 'Something went wrong starting checkout.');
