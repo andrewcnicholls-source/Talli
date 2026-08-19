@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Book &amp; Extras — Talli Parking</title>
-<meta name="description" content="Book your Talli Parking spot for the next Eden Park event and see what's on offer on the night.">
+<meta name="description" content="Book and pay for your Talli Parking spot for the next Eden Park event, and see what's on offer on the night.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Poiret+One&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
@@ -27,63 +27,114 @@
   <div class="hero-rule"></div>
   <span class="eyebrow">Gate 02</span>
   <h1>Book &amp; Extras</h1>
-  <p>Get your spot sorted before you arrive.</p>
+  <p>Pick your event, pick your spot, pay online. Your bay is held the moment you start checkout.</p>
 </header>
 
 <main class="wrap tight">
 
-  <div class="box">
-    <h3>Book your spot</h3>
-    <p>Email us with your details and we'll confirm a spot for you. We reply as quickly as we can, especially in the lead-up to a big event.</p>
-    <div class="btn-row">
-      <a class="btn btn-primary" href="mailto:talli.parking@gmail.com?subject=Parking%20Booking%20Enquiry&body=Name%3A%0APhone%3A%0ALicense%20Plate%3A%0AEvent%3A%0ADate%3A%0A%0AExtras%20Required%20(optional)%3A">
-        Email talli.parking@gmail.com
-      </a>
-    </div>
-  </div>
+  <div class="bk-flow">
 
-  <div class="box" style="margin-top:16px;">
-    <h3>What to include in your email</h3>
-    <ul class="checklist">
-      <li>Your Name</li>
-      <li>Phone Number</li>
-      <li>License Plate Number</li>
-      <li>The Event</li>
-      <li>The Date</li>
-    </ul>
+    <!-- ------------------------------------------------ step 1: the event -->
+    <section class="bk-step" aria-labelledby="bk-h-event">
+      <div class="bk-step-head">
+        <span class="bk-step-num">01</span>
+        <h2 id="bk-h-event">Which night?</h2>
+      </div>
+      <p class="bk-step-note">Everything coming up at Eden Park. Tap a date.</p>
+      <div class="bk-fixtures" id="bk-events">
+        <p class="bk-empty">Loading fixtures…</p>
+      </div>
+    </section>
+
+    <!-- ------------------------------------------------- step 2: the spot -->
+    <section class="bk-step" id="bk-tiers-step" aria-labelledby="bk-h-tier" hidden>
+      <div class="bk-step-head">
+        <span class="bk-step-num">02</span>
+        <h2 id="bk-h-tier">Which spot?</h2>
+      </div>
+      <p class="bk-step-context" id="bk-tier-event"></p>
+      <p class="bk-step-note">The difference is how quickly you can get out afterwards.</p>
+
+      <div class="bk-cards" id="bk-tiers"></div>
+      <div class="bk-cards" id="bk-tiers-more" hidden></div>
+      <button type="button" class="bk-more" id="bk-more-toggle" aria-expanded="false" hidden>More options</button>
+    </section>
+
+    <!-- ---------------------------------------------- step 3: the details -->
+    <section class="bk-step" id="bk-details" aria-labelledby="bk-h-details" hidden>
+      <div class="bk-step-head">
+        <span class="bk-step-num">03</span>
+        <h2 id="bk-h-details">Your details</h2>
+      </div>
+
+      <div class="bk-summary">
+        <div class="bk-summary-line">
+          <span class="bk-summary-tier" id="bk-summary-tier"></span>
+          <span class="bk-summary-price" id="bk-summary-price"></span>
+        </div>
+        <div class="bk-summary-meta" id="bk-summary-event"></div>
+        <div class="bk-summary-meta" id="bk-summary-arrival" hidden></div>
+      </div>
+
+      <form id="bk-form">
+        <div class="bk-field">
+          <label for="bk-name">Name</label>
+          <input type="text" id="bk-name" name="name" autocomplete="name" required>
+        </div>
+
+        <div class="bk-field">
+          <label for="bk-email">Email</label>
+          <input type="email" id="bk-email" name="email" autocomplete="email" required>
+          <span class="bk-hint">Your receipt and arrival instructions go here.</span>
+        </div>
+
+        <div class="bk-field-row">
+          <div class="bk-field">
+            <label for="bk-phone">Phone <span class="bk-optional">optional</span></label>
+            <input type="tel" id="bk-phone" name="phone" autocomplete="tel">
+          </div>
+          <div class="bk-field">
+            <label for="bk-rego">License plate <span class="bk-optional">optional</span></label>
+            <input type="text" id="bk-rego" name="rego" autocapitalize="characters" spellcheck="false">
+            <span class="bk-hint">Helps us find you fast. Add it later if you don't know it yet.</span>
+          </div>
+        </div>
+
+        <label class="bk-check" id="bk-street-row">
+          <input type="checkbox" id="bk-street" name="accepts_street">
+          <span>I&rsquo;m happy to go in the overflow area &mdash; the grass verge by the road &mdash; if that&rsquo;s what&rsquo;s left.</span>
+        </label>
+
+        <p class="bk-error" id="bk-error" role="alert" hidden></p>
+
+        <button type="submit" class="btn btn-primary bk-submit" id="bk-submit">Continue to payment</button>
+
+        <p class="bk-fineprint">
+          You&rsquo;ll be taken to Stripe to pay by card. Your bay is held while you check out.
+          Your vehicle needs a current WOF and registration. By booking you agree to our
+          <a href="terms.html">terms &amp; conditions</a>.
+        </p>
+      </form>
+    </section>
+
   </div>
 
   <hr class="thin">
 
   <div class="callout">
     <h3>No booking? No problem</h3>
-    <p>We take arrivals on the night as well, subject to space. Booking ahead just means your spot is guaranteed.</p>
+    <p>We take arrivals on the night as well, subject to space. Booking ahead just means your spot is guaranteed — and on busy nights it's the only way to be sure.</p>
+  </div>
+
+  <div class="box" style="margin-top:16px;">
+    <h3>Rather not pay by card?</h3>
+    <p>Email <a href="mailto:talli.parking@gmail.com?subject=Parking%20Booking%20Enquiry&body=Name%3A%0APhone%3A%0ALicense%20Plate%3A%0AEvent%3A%0ADate%3A">talli.parking@gmail.com</a> with your name, phone, license plate and the event, and we'll sort a spot and send you bank transfer details. Please don't transfer anything until we've confirmed a spot for you.</p>
   </div>
 
   <div style="margin-top:40px;">
     <div class="section-label">On The Night</div>
-    <h2>Payment & Essentials</h2>
-    
-    <div class="box" style="margin-bottom: 24px; border-color: var(--blue);">
-      <h3>Pay by Bank Transfer</h3>
-      <p>To keep things moving when it's busy, you can pay via bank transfer and simply show us the confirmation screen on your phone.</p>
-      
-      <div style="background: var(--blue-tint); padding: 16px; border-radius: 4px; margin: 16px 0; text-align: center;">
-        <span style="display: block; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--blue); margin-bottom: 4px;">Account Name</span>
-        <strong style="font-size: 1.1rem; color: var(--blue-deep); display: block; margin-bottom: 12px;">talli</strong>
-        
-        <span style="display: block; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--blue); margin-bottom: 4px;">Account Number</span>
-        <strong style="font-size: 1.3rem; color: var(--blue-deep); letter-spacing: 0.05em;">02-0200-0346102-00</strong>
-      </div>
-      
-      <p><strong>Reference:</strong> Please use your <strong>License Plate Number</strong> or <strong>Phone Number</strong>.</p>
-      
-      <div style="background: #FFF4F0; border-left: 3px solid #B5502E; padding: 16px; margin-top: 16px; border-radius: 4px;">
-        <p style="margin: 0; color: #B5502E;"><strong>Important:</strong> Do not make a payment until a parking spot has been explicitly confirmed for you by our team.</p>
-      </div>
-    </div>
-
-    <p>We also have a few matchday essentials available for purchase on the night — pay on arrival, cash or bank transfer.</p>
+    <h2>Matchday essentials</h2>
+    <p>A few things we keep on hand, available for purchase when you arrive — cash or bank transfer.</p>
 
     <div class="merch-grid">
       <div class="merch-item">
@@ -118,7 +169,7 @@
           <img src="assets/lollies.jpg" alt="Pick and Mix Lollies" style="width: 100%; height: 100%; object-fit: cover;">
         </div>
         <div class="merch-body">
-          <h3>Pick & Mix Lolly Bags</h3>
+          <h3>Pick &amp; Mix Lolly Bags</h3>
           <p>$3 or 2 for $5</p>
         </div>
       </div>
@@ -129,10 +180,43 @@
 
 <footer>
   <div class="footer-inner">
-    <div><strong>Talli Parking</strong><br>86 Paice Ave, Sandringham, Auckland<br><a href="terms.html" style="font-size: 0.85em; text-decoration: underline;">Terms & Conditions</a></div>
+    <div><strong>Talli Parking</strong><br>86 Paice Ave, Sandringham, Auckland<br><a href="terms.html" style="font-size: 0.85em; text-decoration: underline;">Terms &amp; Conditions</a></div>
     <div>Book or ask a question:<br><a href="mailto:talli.parking@gmail.com">talli.parking@gmail.com</a></div>
   </div>
 </footer>
 
+<!-- ------------------------------------ interest in a fixture not yet on sale -->
+<div class="bk-sheet" id="bk-interest" hidden>
+  <div class="bk-sheet-card">
+    <div class="bk-sheet-head">
+      <div>
+        <h2 id="bk-interest-name"></h2>
+        <p class="bk-sheet-when" id="bk-interest-when"></p>
+      </div>
+      <button type="button" class="bk-sheet-close" id="bk-interest-close" aria-label="Close">&times;</button>
+    </div>
+
+    <p class="bk-sheet-lead" id="bk-interest-lead"></p>
+
+    <form id="bk-interest-form">
+      <div class="bk-field">
+        <label for="bk-interest-email">Email</label>
+        <input type="email" id="bk-interest-email" name="interestemail" autocomplete="email" required>
+      </div>
+      <div class="bk-field">
+        <label for="bk-interest-yourname">Name <span class="bk-optional">optional</span></label>
+        <input type="text" id="bk-interest-yourname" name="interestname" autocomplete="name">
+      </div>
+      <p class="bk-error" id="bk-interest-error" role="alert" hidden></p>
+      <button type="submit" class="btn btn-primary" id="bk-interest-submit">Tell me when it opens</button>
+      <p class="bk-fineprint">We&rsquo;ll only email you about this event. No newsletter, and we don&rsquo;t share your address.</p>
+    </form>
+
+    <p class="bk-sheet-done" id="bk-interest-done" role="status" hidden></p>
+  </div>
+</div>
+
+<script src="assets/talli-config.js"></script>
+<script src="assets/booking.js"></script>
 </body>
 </html>

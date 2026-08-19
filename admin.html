@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#1C3255">
+<title>Gate — Talli Parking</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Jost:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="ad-body">
+
+<!-- --------------------------------------------------------- passphrase -->
+<div class="ad-lock" id="ad-lock">
+  <form id="ad-unlock-form" class="ad-lock-card">
+    <h1>Talli Gate</h1>
+    <p>Enter the gate passphrase.</p>
+    <input type="password" id="ad-pass" autocomplete="current-password" placeholder="Passphrase" required>
+    <p class="ad-lock-error" id="ad-unlock-error" role="alert" hidden></p>
+    <button type="submit" class="btn btn-primary">Unlock</button>
+  </form>
+</div>
+
+<!-- ---------------------------------------------------------- the screen -->
+<div id="ad-app" hidden>
+
+  <header class="ad-head">
+    <div class="ad-head-top">
+      <span class="ad-brand">talli<span>.</span> gate</span>
+      <button type="button" class="ad-refresh" id="ad-refresh" aria-label="Refresh">↻</button>
+    </div>
+    <select id="ad-event" class="ad-select" aria-label="Event"></select>
+  </header>
+
+  <div class="ad-stats">
+    <div class="ad-stat">
+      <span class="ad-stat-num" id="ad-stat-arrived">—</span>
+      <span class="ad-stat-key">arrived</span>
+    </div>
+    <div class="ad-stat">
+      <span class="ad-stat-num" id="ad-stat-taken">—</span>
+      <span class="ad-stat-key">prepaid</span>
+    </div>
+    <div class="ad-stat">
+      <span class="ad-stat-num" id="ad-stat-due">—</span>
+      <span class="ad-stat-key">to collect</span>
+    </div>
+  </div>
+
+  <p class="ad-holds" id="ad-holds" hidden></p>
+
+  <div class="ad-tools">
+    <input type="search" id="ad-search" class="ad-search" placeholder="Plate, name or bay…"
+           autocomplete="off" autocapitalize="characters" spellcheck="false">
+    <button type="button" class="ad-sell-open" id="ad-sell-open">+ Walk-up</button>
+  </div>
+
+  <div class="ad-list" id="ad-list"></div>
+
+  <p class="ad-foot">Refreshes on its own every 30 seconds.</p>
+</div>
+
+<!-- ------------------------------------------------------- walk-up sale -->
+<div class="ad-sheet" id="ad-sell" hidden>
+  <form class="ad-sheet-card" id="ad-sell-form">
+    <div class="ad-sheet-head">
+      <h2>Sell at the gate</h2>
+      <button type="button" class="ad-sheet-close" id="ad-sell-close" aria-label="Close">×</button>
+    </div>
+
+    <label class="ad-label" for="ad-sell-tier">Spot</label>
+    <select id="ad-sell-tier" name="tier" class="ad-select" required></select>
+
+    <label class="ad-label" for="ad-sell-rego">License plate <span>optional</span></label>
+    <input type="text" id="ad-sell-rego" name="rego" class="ad-input"
+           autocapitalize="characters" spellcheck="false">
+
+    <label class="ad-label" for="ad-sell-payment">Paid by</label>
+    <select id="ad-sell-payment" name="payment" class="ad-select">
+      <option value="tap_to_pay">Card (tap to pay)</option>
+      <option value="cash">Cash</option>
+      <option value="bank_transfer">Bank transfer</option>
+    </select>
+
+    <div class="ad-sheet-row">
+      <div>
+        <label class="ad-label" for="ad-sell-name">Name <span>optional</span></label>
+        <input type="text" id="ad-sell-name" name="sellname" class="ad-input">
+      </div>
+      <div>
+        <label class="ad-label" for="ad-sell-phone">Phone <span>optional</span></label>
+        <input type="tel" id="ad-sell-phone" name="sellphone" class="ad-input">
+      </div>
+    </div>
+
+    <p class="ad-sheet-error" id="ad-sell-error" role="alert" hidden></p>
+
+    <button type="submit" class="btn btn-primary" id="ad-sell-submit">Take the money</button>
+  </form>
+</div>
+
+<div class="ad-toast" id="ad-toast" role="status" hidden></div>
+
+<script src="assets/talli-config.js"></script>
+<script src="assets/admin.js"></script>
+</body>
+</html>
