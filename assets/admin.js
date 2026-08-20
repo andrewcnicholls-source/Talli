@@ -211,8 +211,11 @@
     if (r.arrival_from && r.arrival_until) {
       meta.appendChild(make('span', 'ad-chip', asTime(r.arrival_from) + '–' + asTime(r.arrival_until)));
     }
+    // This car is blocking someone in. The chip is a reminder to chase them if
+    // they are not back, not a curfew on the customer.
     if (r.must_depart_by) {
-      meta.appendChild(make('span', 'ad-chip is-warn', 'out by ' + asTime(r.must_depart_by)));
+      meta.appendChild(make('span', 'ad-chip is-warn',
+        'back by ' + asTime(r.must_depart_by)));
     }
     if (r.payment_method && r.payment_method !== 'stripe') {
       meta.appendChild(make('span', 'ad-chip is-cash', r.payment_method + ' ' + money(r.amount_cents)));

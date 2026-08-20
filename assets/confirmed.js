@@ -95,7 +95,7 @@
           ? 'between ' + asTime(b.arrival_from) + ' and ' + asTime(b.arrival_until)
           : null
       ),
-      row('Away by', b.must_depart_by ? asTime(b.must_depart_by) : null),
+      row('Back by', b.must_depart_by ? asTime(b.must_depart_by) : null),
       row('Vehicle', b.vehicle_rego),
       row('Paid', b.amount_cents != null ? money(b.amount_cents) : null),
     ].forEach(function (r) { if (r) details.appendChild(r); });
