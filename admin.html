@@ -59,7 +59,10 @@
 
   <div class="ad-list" id="ad-list"></div>
 
-  <p class="ad-foot">Refreshes on its own every 30 seconds.</p>
+  <p class="ad-foot">
+    Refreshes on its own every 30 seconds.<br>
+    <button type="button" class="ad-link" id="ad-check-open">Check payment setup</button>
+  </p>
 </div>
 
 <!-- ------------------------------------------------------- walk-up sale -->
@@ -99,6 +102,20 @@
 
     <button type="submit" class="btn btn-primary" id="ad-sell-submit">Take the money</button>
   </form>
+</div>
+
+<!-- --------------------------------------------- configuration check -->
+<div class="ad-sheet" id="ad-check" hidden>
+  <div class="ad-sheet-card">
+    <div class="ad-sheet-head">
+      <h2>Payment setup</h2>
+      <button type="button" class="ad-sheet-close" id="ad-check-close" aria-label="Close">&times;</button>
+    </div>
+    <p class="ad-check-summary" id="ad-check-summary">Checking&hellip;</p>
+    <div id="ad-check-list"></div>
+    <p class="ad-check-note">Nothing secret is shown here &mdash; only whether each
+      value is present and whether Stripe accepts it.</p>
+  </div>
 </div>
 
 <div class="ad-toast" id="ad-toast" role="status" hidden></div>
