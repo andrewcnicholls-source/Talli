@@ -1239,3 +1239,49 @@ footer a { color: var(--blue); }
   padding: 16px 18px;
   max-width: none;
 }
+
+/* ---------- Configuration check ---------- */
+.ad-link {
+  background: none; border: none; padding: 0;
+  font-family: var(--body); font-size: 0.78rem;
+  letter-spacing: 0.06em; color: var(--blue);
+  border-bottom: 1px solid var(--blue);
+  cursor: pointer; margin-top: 6px;
+}
+
+.ad-check-summary {
+  font-size: 0.98rem; font-weight: 400;
+  padding: 13px 15px; border-radius: 4px;
+  background: var(--offwhite); border-left: 3px solid var(--line);
+  max-width: none; margin-bottom: 6px;
+}
+.ad-check-summary.is-good { background: #EAF3EE; border-left-color: #2F6B4F; color: #23503B; }
+.ad-check-summary.is-bad  { background: #FFF4F0; border-left-color: var(--orange-flag); color: var(--orange-flag); }
+
+.ad-check-row {
+  display: flex; gap: 12px; align-items: flex-start;
+  padding: 13px 2px; border-bottom: 1px solid var(--line);
+}
+.ad-check-row:last-child { border-bottom: none; }
+
+.ad-check-mark {
+  flex: none; width: 22px; height: 22px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.76rem; margin-top: 1px;
+}
+.ad-check-mark.is-good    { background: #2F6B4F; color: #fff; }
+.ad-check-mark.is-bad     { background: var(--orange-flag); color: #fff; }
+.ad-check-mark.is-unknown { background: var(--line); color: var(--grey); }
+
+.ad-check-body { flex: 1; min-width: 0; }
+.ad-check-name {
+  display: block; font-size: 0.92rem; font-weight: 500; color: var(--ink);
+}
+.ad-check-detail {
+  display: block; font-size: 0.86rem; font-weight: 300;
+  color: var(--grey); margin-top: 2px;
+}
+.ad-check-note {
+  font-size: 0.8rem; color: var(--grey);
+  margin-top: 16px; max-width: none;
+}

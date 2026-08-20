@@ -31,6 +31,7 @@
   function el(id) { return document.getElementById(id); }
   function show(n) { if (n) n.hidden = false; }
   function hide(n) { if (n) n.hidden = true; }
+  function text(n, v) { if (n) n.textContent = v; return n; }
 
   function money(cents) {
     var d = (cents || 0) / 100;
@@ -375,6 +376,58 @@
       .finally(function () { btn.disabled = false; });
   }
 
+  /* ------------------------------------------------- configuration check */
+
+  // Answers "did I set the keys up right" without anyone spending money to
+  // find out. The function does the real work; this just renders the verdict.
+  function openCheck() {
+    var sheet = el('ad-check');
+    var list = el('ad-check-list');
+    list.innerHTML = '';
+    text(el('ad-check-summary'), 'Checking\u2026');
+    el('ad-check-summary').className = 'ad-check-summary';
+    sheet.hidden = false;
+
+    fetch(CFG.supabaseUrl + '/functions/v1/check-setup', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: CFG.anonKey,
+        Authorization: 'Bearer ' + CFG.anonKey,
+      },
+      body: JSON.stringify({ passphrase: state.pass }),
+    })
+      .then(function (res) {
+        return res.json().then(function (d) { return { ok: res.ok, data: d }; });
+      })
+      .then(function (r) {
+        if (!r.ok) throw new Error(r.data.error || 'Could not run the check.');
+        var d = r.data;
+
+        var sum = el('ad-check-summary');
+        text(sum, d.summary);
+        sum.className = 'ad-check-summary ' + (d.ready ? 'is-good' : 'is-bad');
+
+        (d.checks || []).forEach(function (c) {
+          var row = make('div', 'ad-check-row');
+          var mark = make('span', 'ad-check-mark ' +
+            (c.ok === true ? 'is-good' : c.ok === false ? 'is-bad' : 'is-unknown'),
+            c.ok === true ? '\u2713' : c.ok === false ? '\u2715' : '?');
+          var body = make('span', 'ad-check-body');
+          body.appendChild(make('span', 'ad-check-name', c.name));
+          body.appendChild(make('span', 'ad-check-detail', c.detail));
+          row.appendChild(mark);
+          row.appendChild(body);
+          list.appendChild(row);
+        });
+      })
+      .catch(function (err) {
+        var sum = el('ad-check-summary');
+        text(sum, err.message);
+        sum.className = 'ad-check-summary is-bad';
+      });
+  }
+
   /* ------------------------------------------------------------------ init */
 
   function init() {
@@ -393,6 +446,10 @@
     el('ad-refresh').addEventListener('click', function () { loadList(); });
 
     el('ad-sell-open').addEventListener('click', openSell);
+    el('ad-check-open').addEventListener('click', openCheck);
+    el('ad-check-close').addEventListener('click', function () {
+      el('ad-check').hidden = true;
+    });
     el('ad-sell-close').addEventListener('click', function () { hide(el('ad-sell')); });
     el('ad-sell-form').addEventListener('submit', submitSell);
 
