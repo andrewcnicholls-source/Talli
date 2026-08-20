@@ -20,7 +20,13 @@
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
-html { scroll-behavior: smooth; }
+html {
+  scroll-behavior: smooth;
+  /* The top bar is sticky, so anything scrolled to the top of the viewport
+     lands underneath it. Keep a header's height clear so revealed booking
+     steps arrive with their heading actually visible. */
+  scroll-padding-top: 96px;
+}
 
 body {
   font-family: var(--body);
