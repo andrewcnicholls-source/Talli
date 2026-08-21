@@ -254,6 +254,11 @@ behaviour completely.
 ## What I could not do
 
 - **Link the Netlify project to the repo** — no API for it. See the top.
+- **Deploy the test site directly instead** — tried that as a way around the
+  above, uploading the folder rather than linking the repo. Netlify answered
+  `403 Forbidden`: the token this tooling holds can read projects but not
+  push deploys. So the six steps at the top really are the unlock, and the
+  test site stays dark until you do them.
 - **Set Supabase secrets** — the tooling has no secrets API. Handled with
   test-project-only fallbacks in the functions, keyed on the project ref, so
   they are unreachable on production. Setting a real secret always wins.
