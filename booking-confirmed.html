@@ -9,6 +9,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Poiret+One&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
+<!-- Decides production vs test and marks the page. Must load in <head>,
+     before anything paints, so the test styling is never a flash. -->
+<script src="assets/talli-config.js"></script>
+<script src="assets/talli-testgate.js"></script>
 </head>
 <body>
 
@@ -74,7 +78,6 @@
   </div>
 </footer>
 
-<script src="assets/talli-config.js"></script>
 <script src="assets/confirmed.js"></script>
 </body>
 </html>
