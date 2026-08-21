@@ -8,7 +8,7 @@ There are now two of everything. This file is the map.
 | Netlify project| `talliconz`                         | `talli-test`                             |
 | Git branch     | `main`                              | `staging`                                |
 | Supabase       | `oxzwfemyavznykqixhvk`              | `uhdoverwvlxvyyctskle`                   |
-| Stripe         | live keys                           | none yet — payments are faked            |
+| Stripe         | live keys                           | test-mode keys — real Stripe, fake money |
 | Fixtures       | real                                | five, all named `TEST — …`               |
 | Customer data  | real people                         | none, ever                               |
 
@@ -122,19 +122,38 @@ function, used only because the test project has no secrets set. Set
 `GATE_PASSPHRASE` in the test project's Edge Function secrets and it wins
 immediately.
 
+### If the gate screen rejects a passphrase you know is right
+
+This happened on the first attempt, and it will happen again on a matchday if
+you do not know the trick. The field is an ordinary password input, so the
+browser will autofill a saved password into it — and every value looks like
+dots, so a wrong one looks exactly like the right one. You get
+`Wrong passphrase.` with nothing to suggest what went in.
+
+Open a private window and type it by hand. That clears autofill, a cached
+`admin.js`, and any stale `sessionStorage` in one go. If it works there, the
+passphrase was never wrong — delete the saved password for the site and it
+will stop.
+
+Worth knowing before you are standing on the driveway with cars queuing.
+The same trap exists on the live gate screen.
+
 ---
 
 ## Payments on the test site
 
-Right now the test site **fakes the payment**. Book a bay and you go straight
-to the confirmation page with a real booking, a real bay allocation and a
-reference — no card, no Stripe. Fake sessions are recognisable: they start
-`cs_test_stub_`.
+**Stripe test mode is connected and working.** A booking on the test site
+goes through the real Stripe checkout, Stripe calls the webhook back, and the
+booking confirms — verified end to end on 21 Aug. Card `4242 4242 4242 4242`,
+any future expiry, any CVC. No real money moves.
 
-That means the whole booking flow is testable tonight, without you doing
-anything.
+If `STRIPE_SECRET_KEY` is ever removed from the test project, the code falls
+back to **faking** the payment rather than breaking: you go straight to the
+confirmation page with a real booking and a real bay allocation, no card
+involved. Fake sessions are recognisable — they start `cs_test_stub_`, where
+real test ones are just `cs_test_`.
 
-### When you want to rehearse the real Stripe checkout
+### How the Stripe keys got there, if it ever needs redoing
 
 1. Stripe Dashboard → toggle **Test mode** → *Developers → API keys*
 2. Copy the **Secret key** (`sk_test_…`)
