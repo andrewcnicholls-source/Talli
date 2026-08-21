@@ -6,8 +6,9 @@
    function, which holds a real bay before it ever talks to Stripe, and
    hands back a Checkout URL to redirect to.
 
-   No price is ever sent from here. The browser names a tier; the database
-   decides what that costs.
+   No price is ever sent from here. The browser names a tier and, if they
+   want them, a few extras; the database decides what all of that costs.
+   The totals shown on this page are a preview, not the invoice.
    ===================================================================== */
 (function () {
   'use strict';
@@ -22,6 +23,8 @@
     event: null,
     tiers: [],
     tier: null,
+    extras: [],      // the catalogue, as the database has it
+    picked: {},      // code -> quantity
     interestEvent: null,
     submitting: false,
   };
@@ -52,6 +55,41 @@
   };
 
   function text(node, value) { node.textContent = value; return node; }
+
+  // Mirrors addon_price_cents() in the database so the page can show a running
+  // total. The database still does the sum that gets charged — this one only
+  // has to be right enough to be honest on screen.
+  function extraTotal(item, qty) {
+    if (qty <= 0) return 0;
+    if (!item.bundle_qty || !item.bundle_price_cents) return item.price_cents * qty;
+    return Math.min(
+      item.price_cents * qty,
+      Math.floor(qty / item.bundle_qty) * item.bundle_price_cents +
+        (qty % item.bundle_qty) * item.price_cents
+    );
+  }
+
+  // "$3 each, or 2 for $5" — the same sentence as the sign in the driveway.
+  function extraPriceLine(item) {
+    var each = money(item.price_cents) + ' each';
+    return item.bundle_qty
+      ? each + ', or ' + item.bundle_qty + ' for ' + money(item.bundle_price_cents)
+      : each;
+  }
+
+  function pickedList() {
+    return state.extras
+      .map(function (item) {
+        return { item: item, qty: state.picked[item.code] || 0 };
+      })
+      .filter(function (line) { return line.qty > 0; });
+  }
+
+  function extrasTotal() {
+    return pickedList().reduce(function (sum, line) {
+      return sum + extraTotal(line.item, line.qty);
+    }, 0);
+  }
 
   function make(tag, className, content) {
     var n = document.createElement(tag);
@@ -238,6 +276,7 @@
     state.event = ev;
     state.tier = null;
     el('bk-details').hidden = true;
+    el('bk-extras-step').hidden = true;
     clearError();
 
     text(el('bk-tier-event'), ev.name + ' · ' + asDate(ev.starts_at));
@@ -359,6 +398,151 @@
     return label;
   }
 
+  /* -------------------------------------------------------- step 3: extras */
+
+  // One catalogue, drawn twice: as steppers inside the booking flow, and as
+  // the shop window further down the page. Both read the same rows, so a
+  // price can never be right in one place and stale in the other.
+  function loadExtras() {
+    read('/addon?active=is.true&order=sort_order.asc' +
+         '&select=code,name,blurb,image_path,price_cents,bundle_qty,bundle_price_cents,max_qty')
+      .then(function (items) {
+        state.extras = items || [];
+        renderExtras();
+        renderMerch();
+      })
+      .catch(function () {
+        // Extras are a nicety. If the catalogue will not load, the booking
+        // still has to work, so the step simply stays empty.
+        state.extras = [];
+      });
+  }
+
+  function renderExtras() {
+    var wrap = el('bk-extras');
+    wrap.innerHTML = '';
+    if (!state.extras.length) return;
+    state.extras.forEach(function (item) { wrap.appendChild(extraCard(item)); });
+    // Every card starts at zero, so every minus starts dead. Without this the
+    // buttons only settle into a correct state after the first tap.
+    paintExtras();
+  }
+
+  function extraCard(item) {
+    var card = make('div', 'bk-extra');
+    card.dataset.code = item.code;
+
+    if (item.image_path) {
+      var shot = make('div', 'bk-extra-shot');
+      var img = document.createElement('img');
+      img.src = item.image_path;
+      img.alt = '';
+      img.loading = 'lazy';
+      shot.appendChild(img);
+      card.appendChild(shot);
+    }
+
+    var body = make('div', 'bk-extra-body');
+    body.appendChild(make('span', 'bk-extra-name', item.name));
+    if (item.blurb) body.appendChild(make('span', 'bk-extra-blurb', item.blurb));
+    body.appendChild(make('span', 'bk-extra-price', extraPriceLine(item)));
+    card.appendChild(body);
+
+    var step = make('div', 'bk-step-count');
+
+    var less = make('button', 'bk-count-btn', '\u2212');
+    less.type = 'button';
+    less.setAttribute('aria-label', 'One fewer ' + item.name);
+    less.addEventListener('click', function () { bump(item, -1); });
+
+    var count = make('span', 'bk-count', '0');
+
+    var more = make('button', 'bk-count-btn', '+');
+    more.type = 'button';
+    more.setAttribute('aria-label', 'One more ' + item.name);
+    more.addEventListener('click', function () { bump(item, 1); });
+
+    step.appendChild(less);
+    step.appendChild(count);
+    step.appendChild(more);
+    card.appendChild(step);
+
+    return card;
+  }
+
+  function bump(item, by) {
+    var max = item.max_qty || 10;
+    var next = Math.min(Math.max((state.picked[item.code] || 0) + by, 0), max);
+    if (next === 0) delete state.picked[item.code];
+    else state.picked[item.code] = next;
+    paintExtras();
+    paintSummary();
+  }
+
+  function paintExtras() {
+    var cards = el('bk-extras').querySelectorAll('.bk-extra');
+    Array.prototype.forEach.call(cards, function (card) {
+      var qty = state.picked[card.dataset.code] || 0;
+      card.classList.toggle('is-picked', qty > 0);
+      text(card.querySelector('.bk-count'), String(qty));
+      var buttons = card.querySelectorAll('.bk-count-btn');
+      buttons[0].disabled = qty === 0;
+    });
+  }
+
+  // The same items again at the foot of the page, for anyone reading rather
+  // than booking.
+  function renderMerch() {
+    var grid = el('bk-merch');
+    if (!grid) return;
+    grid.innerHTML = '';
+    state.extras.forEach(function (item) {
+      var cell = make('div', 'merch-item');
+      if (item.image_path) {
+        var photo = make('div', 'merch-photo');
+        var img = document.createElement('img');
+        img.src = item.image_path;
+        img.alt = item.name;
+        img.loading = 'lazy';
+        photo.appendChild(img);
+        cell.appendChild(photo);
+      }
+      var body = make('div', 'merch-body');
+      body.appendChild(make('h3', null, item.name));
+      body.appendChild(make('p', null, extraPriceLine(item)));
+      cell.appendChild(body);
+      grid.appendChild(cell);
+    });
+  }
+
+  /* ------------------------------------------------------- the money so far */
+
+  function paintSummary() {
+    if (!state.tier) return;
+
+    var lines = pickedList();
+    var box = el('bk-summary-extras');
+    box.innerHTML = '';
+
+    lines.forEach(function (line) {
+      var row = make('div', 'bk-summary-line bk-summary-extra');
+      row.appendChild(make('span', null,
+        line.item.name + (line.qty > 1 ? ' \u00d7 ' + line.qty : '')));
+      row.appendChild(make('span', null, money(extraTotal(line.item, line.qty))));
+      box.appendChild(row);
+    });
+    box.hidden = lines.length === 0;
+
+    var total = el('bk-summary-total');
+    if (lines.length) {
+      text(el('bk-summary-total-price'),
+        money(state.tier.price_cents + extrasTotal()));
+      total.hidden = false;
+    } else {
+      total.hidden = true;
+    }
+  }
+
   function chooseTier(tier) {
     state.tier = tier;
     clearError();
@@ -382,7 +566,14 @@
       arrival.hidden = true;
     }
 
-    reveal(el('bk-details'));
+    paintSummary();
+
+    // Both remaining steps open together, and the scroll lands on the extras.
+    // Nothing here has to be answered, so making it a gate would only be a
+    // toll booth in front of the form.
+    show(el('bk-details'));
+    if (state.extras.length) reveal(el('bk-extras-step'));
+    else reveal(el('bk-details'));
   }
 
   /* ------------------------------------------------------- step 3: details */
@@ -401,7 +592,9 @@
       email: form.email.value.trim(),
       phone: form.phone.value.trim() || null,
       vehicle_rego: form.rego.value.trim().toUpperCase(),
-      accepts_street_parking: form.accepts_street.checked,
+      addons: pickedList().map(function (line) {
+        return { code: line.item.code, qty: line.qty };
+      }),
     };
 
     state.submitting = true;
@@ -428,12 +621,6 @@
         if (result.ok && result.data.url) {
           window.location.href = result.data.url;
           return;
-        }
-
-        // CONSENT_REQUIRED is recoverable in place: tick the box and retry.
-        if (result.data.code === 'CONSENT_REQUIRED') {
-          el('bk-street-row').classList.add('is-flagged');
-          form.accepts_street.focus();
         }
 
         // 503 means card payments are not switched on yet. That is our problem,
@@ -481,6 +668,7 @@
     });
 
     loadEvents();
+    loadExtras();
   }
 
   if (document.readyState === 'loading') {

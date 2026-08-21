@@ -1,31 +1,43 @@
 /* =====================================================================
    Talli Parking — gate screen
 
-   Built for one hand, outdoors, at night. The list is the page: search by
-   the first few characters of a plate, tap the row, the car is ticked off.
-   Everything else is secondary.
+   Built for one hand, outdoors, at night. Two screens: Arrivals, which is
+   the list — search a plate, tap the row, the car is ticked off — and
+   Tonight, which is everything that moves during an event: how many spaces
+   are really left, what the sign says, and what is still owed.
 
    All reads and writes go through the gate-ops edge function, which holds
    the passphrase check and the service-role credentials. Nothing here can
-   reach the database on its own.
+   reach the database on its own — except the extras catalogue, which is
+   public and read straight from PostgREST.
    ===================================================================== */
 (function () {
   'use strict';
 
   var CFG = window.TALLI || {};
   var FN = CFG.supabaseUrl + '/functions/v1/gate-ops';
+  var REST = CFG.supabaseUrl + '/rest/v1';
   var TZ = 'Pacific/Auckland';
   var KEY = 'talli.gate.pass';
   var REFRESH_MS = 30000;
+  var GATE_ORDER = CFG.gateTierOrder || [];
 
   var state = {
     pass: sessionStorage.getItem(KEY) || '',
     events: [],
     eventId: null,
+    tab: 'gate',
     rows: [],
+    zones: [],
     tiers: [],
+    extras: [],       // what has been pre-purchased and still needs handing over
+    catalogue: [],    // what we sell
+    summary: null,
     filter: '',
     busy: {},
+    sellTier: null,
+    sellExtras: {},
+    priceTier: null,
   };
 
   function el(id) { return document.getElementById(id); }
@@ -56,6 +68,19 @@
     if (cls) n.className = cls;
     if (txt != null) n.textContent = txt;
     return n;
+  }
+
+  function button(cls, label, onClick) {
+    var b = make('button', cls, label);
+    b.type = 'button';
+    b.addEventListener('click', onClick);
+    return b;
+  }
+
+  // "Standard — best value, expect to wait" is a sentence for the website.
+  // On the gate screen there is room for the first two words.
+  function shortName(tier) {
+    return String(tier.label || tier.code).split(/\s+—\s+/)[0];
   }
 
   /* ---------------------------------------------------------- transport */
@@ -105,6 +130,7 @@
       state.events = data.events || [];
       hide(el('ad-lock'));
       show(el('ad-app'));
+      loadCatalogue();
       renderEvents();
     }).catch(function (err) {
       state.pass = '';
@@ -113,6 +139,17 @@
       box.textContent = err.message;
       show(box);
     });
+  }
+
+  // The extras catalogue is public — the same rows the booking page reads.
+  function loadCatalogue() {
+    fetch(REST + '/addon?active=is.true&order=sort_order.asc' +
+          '&select=code,name,price_cents,bundle_qty,bundle_price_cents,max_qty', {
+      headers: { apikey: CFG.anonKey, Authorization: 'Bearer ' + CFG.anonKey },
+    })
+      .then(function (res) { return res.ok ? res.json() : []; })
+      .then(function (items) { state.catalogue = items || []; })
+      .catch(function () { state.catalogue = []; });
   }
 
   /* ------------------------------------------------------------- events */
@@ -139,7 +176,7 @@
     loadList();
   }
 
-  /* --------------------------------------------------------- the list */
+  /* ---------------------------------------------------- the whole night */
 
   function loadList(quiet) {
     if (!state.eventId) return;
@@ -148,28 +185,53 @@
     return call('list', { event_id: state.eventId })
       .then(function (data) {
         state.rows = data.rows || [];
-        renderSummary(data.summary);
-        renderList();
+        state.zones = data.zones || [];
+        state.tiers = data.tiers || [];
+        state.extras = data.extras || [];
+        state.summary = data.summary || null;
+        renderAll();
       })
       .catch(function (err) { toast(err.message, 'bad'); })
       .finally(function () { el('ad-list').removeAttribute('aria-busy'); });
   }
 
-  function renderSummary(s) {
+  function renderAll() {
+    renderStats();
+    renderList();
+    renderBoard();
+    renderZones();
+    renderPrices();
+    renderExtras();
+    renderMoney();
+    measureHead();
+  }
+
+  function renderStats() {
+    var s = state.summary;
     if (!s) return;
-    el('ad-stat-arrived').textContent = s.arrived + '/' + s.total;
-    el('ad-stat-taken').textContent = money(s.taken_cents);
-    el('ad-stat-due').textContent = money(s.cash_due_cents);
+    text(el('ad-stat-arrived'), s.arrived + '/' + s.total);
+    text(el('ad-stat-free'), String(s.free));
+    text(el('ad-stat-taken'), money(s.taken_cents));
 
     var holds = el('ad-holds');
+    var notes = [];
     if (s.unpaid_holds > 0) {
-      holds.textContent = s.unpaid_holds + ' unpaid hold' + (s.unpaid_holds === 1 ? '' : 's') +
-        ' — these are people mid-checkout, not confirmed bookings.';
+      notes.push(s.unpaid_holds + ' unpaid hold' + (s.unpaid_holds === 1 ? '' : 's') +
+        ' — people mid-checkout, not confirmed bookings.');
+    }
+    if (s.extras_pending > 0) {
+      notes.push(s.extras_pending + ' pre-paid item' + (s.extras_pending === 1 ? '' : 's') +
+        ' still to hand over.');
+    }
+    if (notes.length) {
+      text(holds, notes.join(' '));
       show(holds);
     } else {
       hide(holds);
     }
   }
+
+  /* --------------------------------------------------------- the list */
 
   function matches(row) {
     if (!state.filter) return true;
@@ -194,8 +256,11 @@
   }
 
   function rowCard(r) {
+    var addons = r.addons || [];
+    var owing = (r.addons_pending || 0) > 0;
+
     var card = make('div', 'ad-row' + (r.arrived ? ' is-arrived' : '') +
-      (r.status === 'held' ? ' is-held' : ''));
+      (r.status === 'held' ? ' is-held' : '') + (owing ? ' has-extras' : ''));
 
     var main = make('div', 'ad-row-main');
 
@@ -219,34 +284,50 @@
         'back by ' + asTime(r.must_depart_by)));
     }
     if (r.payment_method && r.payment_method !== 'stripe') {
-      meta.appendChild(make('span', 'ad-chip is-cash', r.payment_method + ' ' + money(r.amount_cents)));
+      meta.appendChild(make('span', 'ad-chip is-cash',
+        r.payment_method.replace(/_/g, ' ') + ' ' +
+        money((r.amount_cents || 0) + (r.addons_cents || 0))));
     }
     if (r.status === 'held') meta.appendChild(make('span', 'ad-chip is-warn', 'unpaid hold'));
-    if (r.accepts_street_parking && r.channel === 'online') {
-      meta.appendChild(make('span', 'ad-chip', 'overflow ok'));
+    if (meta.childNodes.length) main.appendChild(meta);
+
+    // Paid for a fortnight ago and easy to forget. Loud enough to catch the
+    // eye while the car is still in front of you.
+    if (addons.length) {
+      var bag = make('div', 'ad-bag' + (owing ? '' : ' is-done'));
+      addons.forEach(function (line) {
+        bag.appendChild(make('span', 'ad-bag-item' + (line.handed ? ' is-done' : ''),
+          (line.qty > 1 ? line.qty + '× ' : '') + line.name));
+      });
+      main.appendChild(bag);
     }
-    main.appendChild(meta);
 
     card.appendChild(main);
 
     var actions = make('div', 'ad-row-actions');
 
-    var btn = make('button', 'ad-tick' + (r.arrived ? ' is-on' : ''),
+    var tick = make('button', 'ad-tick' + (r.arrived ? ' is-on' : ''),
       r.arrived ? 'Here' : 'Tick in');
-    btn.type = 'button';
-    btn.disabled = !!state.busy[r.booking_id];
-    btn.addEventListener('click', function () { toggleArrived(r, btn); });
-    actions.appendChild(btn);
+    tick.type = 'button';
+    tick.disabled = !!state.busy[r.booking_id];
+    tick.addEventListener('click', function () { toggleArrived(r, tick); });
+    actions.appendChild(tick);
+
+    if (addons.length) {
+      actions.appendChild(button('ad-hand' + (owing ? '' : ' is-on'),
+        owing ? 'Hand over' : 'Handed',
+        function () { toggleHandedOver(r); }));
+    }
 
     // Valet holds keys, so those cars are already movable by hand and do not
     // need this. Anything already out on the verge has nowhere further to go.
     var inOverflow = /overflow/i.test(String(r.zone_label || ''));
     if (!inOverflow && r.tier_code !== 'valet') {
-      var move = make('button', 'ad-move', '\u2192 Overflow');
-      move.type = 'button';
+      var move = button('ad-move', '→ Overflow', function () {
+        moveToOverflow(r, move);
+      });
       move.title = 'Move this car to overflow and free its bay';
       move.disabled = !!state.busy[r.booking_id];
-      move.addEventListener('click', function () { moveToOverflow(r, move); });
       actions.appendChild(move);
     }
 
@@ -258,40 +339,24 @@
   // Moving a prepaid car out to the verge puts its bay back on sale. That is
   // the point: when there is a queue at the gate, a Standard sitting in the
   // back yard is worth more to you parked on the overflow.
+  //
+  // Nobody agreed to this in advance any more — that box is gone from the
+  // booking page — so nothing is confirmed here either. You are standing next
+  // to the car; the conversation has already happened.
   function moveToOverflow(r, btn) {
     var who = r.vehicle_rego || r.customer_name || 'this car';
-
-    function go(confirmedConsent) {
-      state.busy[r.booking_id] = true;
-      btn.disabled = true;
-      call('move_to_overflow', {
-        booking_id: r.booking_id,
-        confirmed_consent: confirmedConsent === true,
+    state.busy[r.booking_id] = true;
+    btn.disabled = true;
+    call('move_to_overflow', { booking_id: r.booking_id })
+      .then(function (data) {
+        toast(who + ' moved to ' + (data.moved_to || 'overflow'), 'good');
+        return loadList(true);
       })
-        .then(function (data) {
-          toast(who + ' moved to ' + (data.moved_to || 'overflow'), 'good');
-          return loadList(true);
-        })
-        .catch(function (err) {
-          if (err.code === 'NEEDS_CONSENT' || /did not agree/.test(err.message)) {
-            if (window.confirm(
-              who + ' did not tick the overflow box when booking.\n\n' +
-              'Have they agreed to it just now?'
-            )) {
-              go(true);
-              return;
-            }
-            return;
-          }
-          toast(err.message, 'bad');
-        })
-        .finally(function () {
-          delete state.busy[r.booking_id];
-          btn.disabled = false;
-        });
-    }
-
-    go(false);
+      .catch(function (err) { toast(err.message, 'bad'); })
+      .finally(function () {
+        delete state.busy[r.booking_id];
+        btn.disabled = false;
+      });
   }
 
   function toggleArrived(r, btn) {
@@ -302,7 +367,7 @@
     call(action, { booking_id: r.booking_id })
       .then(function () {
         r.arrived = !r.arrived;
-        toast(r.vehicle_rego + (r.arrived ? ' ticked in' : ' un-ticked'), 'good');
+        toast((r.vehicle_rego || 'Booking') + (r.arrived ? ' ticked in' : ' un-ticked'), 'good');
         return loadList(true);
       })
       .catch(function (err) { toast(err.message, 'bad'); })
@@ -312,40 +377,328 @@
       });
   }
 
+  function toggleHandedOver(r) {
+    var handed = (r.addons_pending || 0) > 0;
+    call('hand_over', { booking_id: r.booking_id, handed: handed })
+      .then(function () {
+        toast(handed ? 'Extras handed over' : 'Marked as not handed over', 'good');
+        return loadList(true);
+      })
+      .catch(function (err) { toast(err.message, 'bad'); });
+  }
+
+  /* ------------------------------------------------------ tonight's board */
+
+  function renderBoard() {
+    var s = state.summary;
+    if (!s) return;
+    text(el('ad-board-filled'), String(s.filled));
+    text(el('ad-board-capacity'), String(s.capacity));
+
+    var pct = s.capacity ? Math.round((s.filled / s.capacity) * 100) : 0;
+    el('ad-board-bar').style.width = Math.min(pct, 100) + '%';
+
+    var notes = [s.free + ' free'];
+    if (s.lost) notes.push(s.lost + ' written off tonight');
+    if (s.opened) notes.push(s.opened + ' squeezed in');
+    text(el('ad-board-note'), notes.join(' · '));
+  }
+
+  function renderZones() {
+    var wrap = el('ad-zones');
+    wrap.innerHTML = '';
+    if (!state.zones.length) {
+      wrap.appendChild(make('p', 'ad-empty', 'No spaces set up for this event.'));
+      return;
+    }
+
+    state.zones.forEach(function (z) {
+      var card = make('div', 'ad-zone');
+
+      var head = make('div', 'ad-zone-head');
+      head.appendChild(make('span', 'ad-zone-name', z.zone_label));
+      head.appendChild(make('span', 'ad-zone-count', z.filled + '/' + z.capacity));
+      card.appendChild(head);
+
+      var notes = [];
+      if (z.lost) notes.push(z.lost + ' lost');
+      if (z.opened) notes.push(z.opened + ' extra');
+      if (z.gate_reserve) notes.push(z.gate_reserve + ' held for walk-ups');
+      if (!z.reservable_in_advance) notes.push('gate only');
+      notes.push(z.spare_left + ' spare' + (z.spare_left === 1 ? '' : 's') + ' in reserve');
+      card.appendChild(make('div', 'ad-zone-note', notes.join(' · ')));
+
+      var row = make('div', 'ad-zone-actions');
+      row.appendChild(button('ad-count-btn', '−', function () { adjust(z, -1); }));
+      row.appendChild(button('ad-count-btn', '+', function () { adjust(z, 1); }));
+      card.appendChild(row);
+
+      wrap.appendChild(card);
+    });
+  }
+
+  function adjust(zone, delta) {
+    call('adjust_capacity', {
+      event_id: state.eventId,
+      zone_id: zone.zone_id,
+      delta: delta,
+    })
+      .then(function (data) {
+        toast(zone.zone_label + ' now ' + data.capacity + ' spaces', 'good');
+        return loadList(true);
+      })
+      .catch(function (err) { toast(err.message, 'bad'); });
+  }
+
+  /* ------------------------------------------------------------- prices */
+
+  // Standard first, then Priority, then Valet — the order you actually sell
+  // in, not the order the database sorts by. Anything else the fixture offers
+  // falls in behind.
+  function inGateOrder(tiers) {
+    var ranked = [];
+    GATE_ORDER.forEach(function (code) {
+      tiers.forEach(function (t) { if (t.code === code) ranked.push(t); });
+    });
+    tiers.forEach(function (t) { if (ranked.indexOf(t) === -1) ranked.push(t); });
+    return ranked;
+  }
+
+  function renderPrices() {
+    var wrap = el('ad-prices');
+    wrap.innerHTML = '';
+    var tiers = inGateOrder(state.tiers);
+    if (!tiers.length) {
+      wrap.appendChild(make('p', 'ad-empty', 'No spots on sale for this event.'));
+      return;
+    }
+
+    tiers.forEach(function (t) {
+      var gone = t.manually_sold_out || t.spots_left_gate <= 0;
+      var card = make('div', 'ad-price' + (gone ? ' is-gone' : ''));
+
+      var head = make('div', 'ad-price-head');
+      head.appendChild(make('span', 'ad-price-name', shortName(t)));
+      head.appendChild(button('ad-price-tag', money(t.price_cents), function () {
+        openPrice(t);
+      }));
+      card.appendChild(head);
+
+      card.appendChild(make('div', 'ad-price-left',
+        t.manually_sold_out
+          ? 'Marked sold out'
+          : t.spots_left_gate + ' left at the gate · ' + t.spots_left + ' online'));
+
+      var row = make('div', 'ad-price-actions');
+      row.appendChild(button('ad-nudge', '−$5', function () {
+        setPrice(t, t.price_cents - 500);
+      }));
+      row.appendChild(button('ad-nudge', '+$5', function () {
+        setPrice(t, t.price_cents + 500);
+      }));
+      row.appendChild(button('ad-soldout' + (t.manually_sold_out ? ' is-on' : ''),
+        t.manually_sold_out ? 'Back on sale' : 'Sold out',
+        function () { toggleSoldOut(t); }));
+      card.appendChild(row);
+
+      wrap.appendChild(card);
+    });
+  }
+
+  function setPrice(tier, cents) {
+    call('set_price', {
+      event_id: state.eventId,
+      property_id: tier.property_id,
+      tier_code: tier.code,
+      price_cents: Math.round(cents),
+    })
+      .then(function (data) {
+        toast(shortName(tier) + ' now ' + money(data.price_cents), 'good');
+        return loadList(true);
+      })
+      .catch(function (err) { toast(err.message, 'bad'); });
+  }
+
+  function openPrice(tier) {
+    state.priceTier = tier;
+    text(el('ad-price-title'), shortName(tier));
+    el('ad-price-input').value = String(Math.round(tier.price_cents / 100));
+    el('ad-price-error').hidden = true;
+    show(el('ad-price'));
+    el('ad-price-input').focus();
+  }
+
+  function submitPrice(e) {
+    e.preventDefault();
+    var tier = state.priceTier;
+    if (!tier) return;
+    var dollars = Number(el('ad-price-input').value);
+    if (!isFinite(dollars) || dollars < 1 || dollars > 500) {
+      var box = el('ad-price-error');
+      text(box, 'A price between $1 and $500, please.');
+      show(box);
+      return;
+    }
+    hide(el('ad-price'));
+    setPrice(tier, dollars * 100);
+  }
+
+  function toggleSoldOut(tier) {
+    call('set_sold_out', {
+      event_id: state.eventId,
+      property_id: tier.property_id,
+      tier_code: tier.code,
+      sold_out: !tier.manually_sold_out,
+    })
+      .then(function (data) {
+        toast(shortName(tier) + (data.sold_out ? ' marked sold out' : ' back on sale'), 'good');
+        return loadList(true);
+      })
+      .catch(function (err) { toast(err.message, 'bad'); });
+  }
+
+  /* ------------------------------------------------------------- extras */
+
+  function renderExtras() {
+    var wrap = el('ad-extras');
+    wrap.innerHTML = '';
+    if (!state.extras.length) {
+      wrap.appendChild(make('p', 'ad-empty', 'Nothing pre-purchased for this event.'));
+      return;
+    }
+    state.extras.forEach(function (item) {
+      var row = make('div', 'ad-extra' + (item.pending ? '' : ' is-done'));
+      row.appendChild(make('span', 'ad-extra-name', item.name));
+      row.appendChild(make('span', 'ad-extra-count',
+        item.pending
+          ? item.pending + ' to hand over, of ' + item.total
+          : 'all ' + item.total + ' handed over'));
+      wrap.appendChild(row);
+    });
+  }
+
+  /* -------------------------------------------------------------- money */
+
+  function renderMoney() {
+    var s = state.summary;
+    var wrap = el('ad-money');
+    wrap.innerHTML = '';
+    if (!s) return;
+
+    [
+      ['Taken tonight', money(s.taken_cents), true],
+      ['Prepaid online', money(s.online_cents), false],
+      ['Sold at the gate', money(s.gate_cents), false],
+      ['Of that, extras', money(s.addons_cents), false],
+      ['Still to collect', money(s.cash_due_cents), s.cash_due_cents > 0],
+    ].forEach(function (line) {
+      var row = make('div', 'ad-money-row' + (line[2] ? ' is-lead' : ''));
+      row.appendChild(make('span', null, line[0]));
+      row.appendChild(make('strong', null, line[1]));
+      wrap.appendChild(row);
+    });
+  }
+
   /* -------------------------------------------------------- walk-up sale */
 
   function openSell() {
     el('ad-sell-error').hidden = true;
     el('ad-sell-form').reset();
+    state.sellTier = null;
+    state.sellExtras = {};
+    renderSellTiers();
+    renderSellExtras();
     show(el('ad-sell'));
+  }
 
-    call('tiers', { event_id: state.eventId })
-      .then(function (data) {
-        state.tiers = data.tiers || [];
-        var sel = el('ad-sell-tier');
-        sel.innerHTML = '';
-        state.tiers.forEach(function (t) {
-          var name = String(t.label || t.code).split(/\s+—\s+/)[0];
-          var opt = new Option(
-            name + ' — ' + money(t.price_cents) + ' (' + t.spots_left_gate + ' left)',
-            t.code
-          );
-          opt.disabled = t.spots_left_gate <= 0;
-          sel.appendChild(opt);
-        });
-      })
-      .catch(function (err) { toast(err.message, 'bad'); });
+  function renderSellTiers() {
+    var wrap = el('ad-sell-tiers');
+    wrap.innerHTML = '';
+    var tiers = inGateOrder(state.tiers);
+
+    // Default to the first thing still sellable, which after a "sold out" tap
+    // is the next spot up. That is the whole point of the ordering.
+    if (!state.sellTier) {
+      var first = tiers.filter(function (t) {
+        return !t.manually_sold_out && t.spots_left_gate > 0;
+      })[0];
+      state.sellTier = first ? first.code : null;
+    }
+
+    tiers.forEach(function (t) {
+      var gone = t.manually_sold_out || t.spots_left_gate <= 0;
+      var opt = make('button', 'ad-pick-opt' +
+        (state.sellTier === t.code ? ' is-on' : '') + (gone ? ' is-gone' : ''));
+      opt.type = 'button';
+      opt.disabled = gone;
+
+      var line = make('span', 'ad-pick-line');
+      line.appendChild(make('span', 'ad-pick-name', shortName(t)));
+      line.appendChild(make('span', 'ad-pick-price', money(t.price_cents)));
+      opt.appendChild(line);
+      opt.appendChild(make('span', 'ad-pick-left',
+        t.manually_sold_out ? 'marked sold out'
+          : t.spots_left_gate > 0 ? t.spots_left_gate + ' left'
+          : 'none left'));
+
+      opt.addEventListener('click', function () {
+        state.sellTier = t.code;
+        renderSellTiers();
+      });
+      wrap.appendChild(opt);
+    });
+  }
+
+  function renderSellExtras() {
+    var wrap = el('ad-sell-extras');
+    wrap.innerHTML = '';
+    if (!state.catalogue.length) {
+      wrap.appendChild(make('p', 'ad-empty', 'Catalogue unavailable.'));
+      return;
+    }
+    state.catalogue.forEach(function (item) {
+      var qty = state.sellExtras[item.code] || 0;
+      var row = make('div', 'ad-sell-extra' + (qty ? ' is-picked' : ''));
+      row.appendChild(make('span', 'ad-sell-extra-name', item.name));
+
+      var step = make('span', 'ad-step');
+      var less = button('ad-count-btn', '−', function () { bumpExtra(item, -1); });
+      less.disabled = qty === 0;
+      step.appendChild(less);
+      step.appendChild(make('span', 'ad-count', String(qty)));
+      step.appendChild(button('ad-count-btn', '+', function () { bumpExtra(item, 1); }));
+      row.appendChild(step);
+
+      wrap.appendChild(row);
+    });
+  }
+
+  function bumpExtra(item, by) {
+    var max = item.max_qty || 10;
+    var next = Math.min(Math.max((state.sellExtras[item.code] || 0) + by, 0), max);
+    if (next === 0) delete state.sellExtras[item.code];
+    else state.sellExtras[item.code] = next;
+    renderSellExtras();
   }
 
   function submitSell(e) {
     e.preventDefault();
     var form = el('ad-sell-form');
-    var tier = state.tiers.filter(function (t) { return t.code === form.tier.value; })[0];
-    if (!tier) return;
+    var tier = state.tiers.filter(function (t) { return t.code === state.sellTier; })[0];
+    if (!tier) {
+      var pick = el('ad-sell-error');
+      text(pick, 'Pick a spot first.');
+      show(pick);
+      return;
+    }
 
     var btn = el('ad-sell-submit');
     btn.disabled = true;
     el('ad-sell-error').hidden = true;
+
+    var addons = Object.keys(state.sellExtras).map(function (code) {
+      return { code: code, qty: state.sellExtras[code] };
+    });
 
     call('sell', {
       event_id: state.eventId,
@@ -355,17 +708,16 @@
       vehicle_rego: form.rego.value.trim() || null,
       name: form.sellname.value.trim() || null,
       phone: form.sellphone.value.trim() || null,
-      // Always true at the gate. This flag is what lets sell_at_gate reach the
-      // berm zones at all, and standing in the driveway telling someone where
-      // to put their car IS the consent conversation — there is no second
-      // party to ask. Leaving it as a checkbox would mean an unticked box
-      // silently made the berm unsellable on the busiest night of the year.
-      accepts_street: true,
+      addons: addons,
     })
-      .then(function () {
+      .then(function (data) {
         hide(el('ad-sell'));
         var plate = form.rego.value.trim().toUpperCase();
-        toast(plate ? 'Sold — ' + plate : 'Sold', 'good');
+        if (data.addons_failed) {
+          toast('Space sold, but the extras did not save — take that cash', 'bad');
+        } else {
+          toast(plate ? 'Sold — ' + plate : 'Sold', 'good');
+        }
         return loadList(true);
       })
       .catch(function (err) {
@@ -384,7 +736,7 @@
     var sheet = el('ad-check');
     var list = el('ad-check-list');
     list.innerHTML = '';
-    text(el('ad-check-summary'), 'Checking\u2026');
+    text(el('ad-check-summary'), 'Checking…');
     el('ad-check-summary').className = 'ad-check-summary';
     sheet.hidden = false;
 
@@ -412,7 +764,7 @@
           var row = make('div', 'ad-check-row');
           var mark = make('span', 'ad-check-mark ' +
             (c.ok === true ? 'is-good' : c.ok === false ? 'is-bad' : 'is-unknown'),
-            c.ok === true ? '\u2713' : c.ok === false ? '\u2715' : '?');
+            c.ok === true ? '✓' : c.ok === false ? '✕' : '?');
           var body = make('span', 'ad-check-body');
           body.appendChild(make('span', 'ad-check-name', c.name));
           body.appendChild(make('span', 'ad-check-detail', c.detail));
@@ -426,6 +778,30 @@
         text(sum, err.message);
         sum.className = 'ad-check-summary is-bad';
       });
+  }
+
+  // The sticky search bar has to sit directly under the header, whose height
+  // depends on the safe-area inset and the length of the event name. Measure
+  // it rather than hard-coding a number that is wrong on half the phones.
+  function measureHead() {
+    var head = el('ad-head') || document.querySelector('.ad-head');
+    if (!head) return;
+    document.documentElement.style.setProperty(
+      '--ad-head-h', head.offsetHeight + 'px');
+  }
+
+  /* ---------------------------------------------------------------- tabs */
+
+  function showTab(which) {
+    state.tab = which;
+    var gate = which === 'gate';
+    el('ad-pane-gate').hidden = !gate;
+    el('ad-pane-night').hidden = gate;
+    el('ad-tab-gate').classList.toggle('is-on', gate);
+    el('ad-tab-night').classList.toggle('is-on', !gate);
+    el('ad-tab-gate').setAttribute('aria-selected', String(gate));
+    el('ad-tab-night').setAttribute('aria-selected', String(!gate));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   /* ------------------------------------------------------------------ init */
@@ -445,13 +821,22 @@
 
     el('ad-refresh').addEventListener('click', function () { loadList(); });
 
+    window.addEventListener('resize', measureHead);
+
+    el('ad-tab-gate').addEventListener('click', function () { showTab('gate'); });
+    el('ad-tab-night').addEventListener('click', function () { showTab('night'); });
+
     el('ad-sell-open').addEventListener('click', openSell);
+    el('ad-sell-close').addEventListener('click', function () { hide(el('ad-sell')); });
+    el('ad-sell-form').addEventListener('submit', submitSell);
+
+    el('ad-price-close').addEventListener('click', function () { hide(el('ad-price')); });
+    el('ad-price-form').addEventListener('submit', submitPrice);
+
     el('ad-check-open').addEventListener('click', openCheck);
     el('ad-check-close').addEventListener('click', function () {
       el('ad-check').hidden = true;
     });
-    el('ad-sell-close').addEventListener('click', function () { hide(el('ad-sell')); });
-    el('ad-sell-form').addEventListener('submit', submitSell);
 
     // Someone else may be selling at the gate while this phone is open.
     setInterval(function () {
