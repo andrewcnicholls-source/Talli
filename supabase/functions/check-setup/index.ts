@@ -190,13 +190,21 @@ Deno.serve(async (req) => {
   }
 
   // ------------------------------------------------------------ site url
+  // Unset is a genuine problem on production, where the return address should
+  // never be left to a default. On the test project it is the intended state:
+  // the fallback sits beside every other test fallback and is correct. Failing
+  // it there leaves this screen permanently showing one red line, which is the
+  // quickest way to teach someone to stop reading red lines — and the one
+  // thing this screen must catch is a live key on the test site.
   const siteUrl = Deno.env.get('SITE_URL') ?? ''
   checks.push({
     name: 'Return address after payment',
-    ok: !!siteUrl && siteUrl.startsWith('https://') && !siteUrl.endsWith('/'),
+    ok: siteUrl
+      ? siteUrl.startsWith('https://') && !siteUrl.endsWith('/')
+      : IS_TEST,
     detail: !siteUrl
       ? (IS_TEST
-        ? 'Not set. On the test project this defaults to https://talli-test.netlify.app.'
+        ? 'Not set, which is correct here — the test project falls back to https://talli-test.netlify.app.'
         : 'Not set. Defaults to https://talli.co.nz, which happens to be right — but set it explicitly.')
       : siteUrl.endsWith('/')
       ? `Set to ${siteUrl} — remove the trailing slash.`
