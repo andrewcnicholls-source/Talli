@@ -20,7 +20,11 @@
   var TZ = 'Pacific/Auckland';
   var KEY = 'talli.gate.pass';
   var REFRESH_MS = 30000;
-  var GATE_ORDER = CFG.gateTierOrder || [];
+  // The running order at the gate. Config can override it, but the default
+  // lives here too: this branch and the test-environment branch each rewrote
+  // talli-config.js, and whichever way that merge is resolved, the walk-up
+  // form still has to come up on Standard.
+  var GATE_ORDER = CFG.gateTierOrder || ['standard', 'priority', 'valet'];
 
   var state = {
     pass: sessionStorage.getItem(KEY) || '',

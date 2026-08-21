@@ -35,5 +35,20 @@ alter view <name> set (security_invoker = true);
 change, so their sources are not in the repo yet. They are still live in the
 Supabase project. Worth exporting next time one of them needs an edit.
 
-There is a second Supabase project, `talli-test`, carrying a copy of the
-original schema. None of these migrations have been applied to it.
+## Both Supabase projects are in step
+
+Every migration and all three functions have been applied to **both**
+`oxzwfemyavznykqixhvk` (production) and `uhdoverwvlxvyyctskle` (test). The
+deployed function bundles hash identically across the two.
+
+What is **not** in step is the front end. `talli-test.netlify.app` is meant to
+build the `staging` branch, which does not exist yet — see `TESTING.md` on
+`claude/test-environment-setup-kaaudq`, where that setup lives unmerged. Until
+those branches come together, the test site is serving the old pages against
+an updated test database.
+
+That branch also rewrites `assets/talli-config.js` into a hostname-based
+environment switch. This branch changed the same file. Whoever merges them
+must keep the environment switch and carry `gateTierOrder` across — though
+`admin.js` now defaults that list internally, so a bad merge degrades into
+nothing worse than a stale comment.
