@@ -201,3 +201,105 @@ answered; the rest can wait.
     diagram, a data model, a working prototype, a one-pager you can show people?
 75. What's made you stall on this before? Knowing that shapes how we structure
     the work more than any answer above.
+
+---
+
+# Round 2 — questions the thesis raises
+
+Sections B (thesis) and parts of C/E are now partly answered — see
+`01-thesis.md`. These are the questions that model opens up. Same rules:
+answer inline, rewrite the question if it's the wrong one.
+
+## N. The instrument
+
+76. **[unblocks]** When someone "invests where they spend", what do they actually
+    hold? Equity in the business, a revenue share, a loan, a bond, prepaid
+    credit, or a Talli-native claim that isn't any of those?
+77. What's the return — cash distributions, capital appreciation on resale,
+    discounts and perks at the business, or the business simply continuing to
+    exist near you?
+78. Who issues it: the business itself, Talli on the business's behalf, or a
+    vehicle that holds a pool of businesses?
+79. Can it be sold? To whom — anyone, other members, only locals, back to the
+    business? An open secondary market is an exchange, with everything that
+    brings.
+80. What does the business get that it can't get from a bank loan, Prospa-style
+    lender, or crowdfunding platform? Be specific — cheaper capital, patient
+    capital, customers who are now owners, or something structural.
+81. What does the business give up? If it's control, most small owners will say
+    no. If it's nothing, why would anyone fund it?
+82. Minimum ticket size — is this $20 from 200 people, or $2,000 from 20?
+
+## O. The information layer
+
+83. **[unblocks]** "You turn up and you see if it's busy." How does that become a
+    signal the system can use? Self-reported, inferred from members' spending,
+    inferred from foot traffic, or never digitised at all — it just informs the
+    individual's own decision?
+84. Does Talli need to see where people actually spend? If yes, how — open
+    banking (Akahu), card linking, receipts, manual logging? That's the single
+    heaviest data dependency in the design.
+85. Is spend history *proof of standing* — i.e. you can only invest where you've
+    demonstrably been? Or is "where you spend" just the pitch, not a rule?
+86. Does spending automatically accrue a claim (round-ups, a share of every
+    dollar), or is investing a separate deliberate act?
+87. What stops the information layer becoming a rating system that publicly
+    grades local businesses — and destroys the ones it grades badly?
+88. How much of the signal is private (only you see your own read) vs. shared
+    (the network sees aggregate)? The whole copying layer depends on the answer.
+
+## P. The network / copying layer
+
+89. **[unblocks]** What exactly does copying mean — I see what my neighbours
+    hold and choose to mirror it, or I delegate and it happens automatically?
+90. Whose strategies can I see? Everyone's, my vouched circle's, aggregates
+    only? Portfolio visibility is financially revealing in a way people
+    underestimate.
+91. Do the copied get anything? If good judgement is a public good here, does
+    the system reward it — and does that create influencers, and then bad
+    incentives?
+92. Is copying weighted by anything — track record, proximity, how much of their
+    own money they have in?
+93. If everyone copies, the information the system runs on stops being produced.
+    What keeps original local judgement in the mix?
+
+## Q. Concentration — the honest question
+
+94. **[unblocks]** Your job, your house, your amenities and now your savings all
+    load onto the same suburb. A local downturn takes all four. Is that a bug you
+    want mitigated, or a feature you accept — skin in the game, deliberately?
+95. If it's a bug: what's the mitigation — position caps, a cross-locality layer,
+    a stabilisation pool, or just disclosure and let people choose?
+96. Is there a hard cap on how much of one person's capital can sit in Talli at
+    all? A system that makes it easy to over-commit to your neighbourhood is
+    dangerous in a way a share app isn't.
+97. What happens when a funded local business fails and its investors are its
+    customers and its neighbours? That's not a support ticket, it's a street with
+    a grievance. What does the system owe them?
+
+## R. Rewrites to Round 1
+
+98. **[unblocks]** Given all this — is there still a Talli *currency* at all
+    (Q12–19), or was that my misread and it's capital allocation over ordinary
+    NZD end to end?
+99. Which fairness reading is it — distributional (locals own what they sustain)
+    or terms-of-trade (trust compresses the risk premium)? Or is the second the
+    theory and the first the product? See `01-thesis.md` §5.
+100. Trust (Q20–26): is trust here primarily about *counterparty risk* (will they
+     honour the trade) or *information quality* (is their read of the café worth
+     copying)? These need different mechanics and I've been conflating them.
+101. If this is investment in real businesses with real returns, the NZ
+     regulatory questions (Q45–50) get much heavier — Financial Markets Conduct
+     Act, disclosure, licensed intermediary, the crowdfunding exemption. Is that
+     a wall you've already looked at, or one we map next?
+
+## S. How you'd know it worked
+
+102. The thesis says low trust makes people under-specialise and over-insure.
+     Is there anything observable that would show that reversing — locally, at
+     small scale, within a year?
+103. What's the measurement that isn't just "transaction volume went up"? Volume
+     is the easy metric and the one least connected to your actual claim.
+104. Would you rather prove the *investment* mechanic (money flows to good local
+     businesses via local information) or the *trust* mechanic (better terms
+     between people who know each other)? You probably can't test both first.

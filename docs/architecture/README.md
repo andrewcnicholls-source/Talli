@@ -19,7 +19,7 @@ speculatively — a doc only exists when there are real answers to put in it.
 | Doc | Covers | Status |
 |---|---|---|
 | `00-discovery-questions.md` | The open questions, by layer | in progress |
-| `01-thesis.md` | What's broken, what fairness means here, who it's for | not started |
+| `01-thesis.md` | Information, specialisation, and "invest where you spend" | first draft |
 | `02-money-model.md` | Unit of account, issuance, settlement, the ledger | not started |
 | `03-trust-model.md` | Identity, vouching, credit limits, reputation | not started |
 | `04-fairness-mechanics.md` | How "relative fairness" is actually computed | not started |
