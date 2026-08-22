@@ -210,3 +210,83 @@ work, indefinitely, because it's more enjoyable than regulatory questions and
 never quite finished.
 
 Concretely: the instrument question (Q76) gates the build. Curvature does not.
+
+---
+
+## 10. Variance is the missing index
+
+The triple is **price, quantity, variance** — and adding the third fixes the
+formalism rather than decorating it.
+
+- **Quantity** — a vector. What you hold or produce.
+- **Price** — a covector. Contracts with quantity to give value.
+- **Variance** — a **rank-2 object**. Not a scalar: the covariance matrix
+  `Σ_ij` of outcomes across goods and counterparties.
+
+Variance is where the whole insurance story lives. Uncertainty about the
+counterparty isn't a single number attached to a person — it's a covariance
+structure across everything you might have specialised in. That's why the model
+"can't be flat": a flat model has no room for the second moment.
+
+It also settles the tensor question from §5. Value `p·q` is a rank-0 invariant.
+The metric `g_ij` is rank-2. Covariance `Σ_ij` is rank-2 and transforms
+correctly under change of basis in goods space. The formalism has genuine
+rank-2 content, so tensor language is doing work rather than dressing.
+
+## 11. The transformation is the object
+
+The relativity intuition, stated precisely: what's wanted is not curvature or
+field equations but the **transformation between observer frames** — the map
+that takes `(p, q, Σ)` as *I* see it to `(p, q, Σ)` as *you* see it. Lorentz's
+role, not Einstein's.
+
+That's a well-posed mathematical request. What it needs, in order:
+
+1. **What is a frame?** Presumably a position in the network — who you can
+   reach, at what informational cost. Frame ≈ your row in the trust metric.
+2. **What is the group?** Lorentz transformations form a group preserving the
+   spacetime interval. What is the corresponding structure here — what
+   composition law holds when you go from my frame to yours to a third party's?
+   A transformation set that doesn't compose is a lookup table, not a geometry.
+3. **What is preserved?** In relativity the interval is invariant. Here: value?
+   Total obligation? Something involving `Σ`? **This is the crux.** A "relative
+   fairness" that holds nothing invariant is just variability. The invariant is
+   what makes it fairness.
+
+Question 3 is the highest-value unsolved problem in the formalism, and it's the
+one worth thinking about in the shower. It also has a direct product
+consequence: whatever is invariant is what the ledger should record, because it's
+the only thing all parties will agree on.
+
+## 12. Feynman diagrams — the picture is right, and there's a rigorous version
+
+The intuition: two point particles approach, exchange something, and each leaves
+with a changed production vector. Trade as a scattering event; goods as momentum.
+
+As a *picture* this is good, and worth drawing — it captures that trade changes
+both parties' trajectories rather than just moving stock between them.
+
+As *machinery*, be careful: Feynman diagrams are a bookkeeping device for a
+perturbative sum over interaction histories, and their content is that
+amplitudes **interfere**. That returns to the open question in §6 — without
+cancellation, the diagrams are a notation rather than a method.
+
+But there is a rigorous economic object with exactly the shape being reached
+for. Trust propagating through a network is a **sum over all paths**, discounted
+by length:
+
+```
+T = I + αA + α²A² + α³A³ + … = (I − αA)⁻¹        (α‖A‖ < 1)
+```
+
+Each term is "influence reaching you via paths of length k" — the network
+analogue of summing diagrams by order. This is standard (Katz centrality, and
+the Bonacich family), it converges under a stated condition, and it's the honest
+version of the diagram intuition: **trust is a resolvent**. It's also precisely
+the mechanism behind the copying layer in `01-thesis.md` §4 — copying your
+neighbours is the second-order term.
+
+If the edge weights carry direction as complex phase (§6a), this path sum runs
+over a Hermitian operator and stays spectrally well-behaved. The direction
+intuition, the Feynman intuition and the complex-number hunch converge on one
+object.

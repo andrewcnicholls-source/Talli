@@ -21,7 +21,7 @@ speculatively — a doc only exists when there are real answers to put in it.
 | `00-discovery-questions.md` | The open questions, by layer | in progress |
 | `01-thesis.md` | Information, specialisation, and "invest where you spend" | first draft |
 | `01a-formalism.md` | Interaction-primitive maths: metric, curvature, tensors, phase (research track) | first draft |
-| `02-money-model.md` | Unit of account, issuance, settlement, the ledger | not started |
+| `02-money-model.md` | Unit of account, issuance, settlement, the ledger | stub, one principle decided |
 | `03-trust-model.md` | Identity, vouching, credit limits, reputation | not started |
 | `04-fairness-mechanics.md` | How "relative fairness" is actually computed | not started |
 | `05-locality-membership.md` | Boundaries, joining, leaving, inter-community | not started |

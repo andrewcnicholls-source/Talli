@@ -351,3 +351,61 @@ See `01a-formalism.md` for the assessment behind these.
 
 115. The instrument (Q76) — equity, revenue share, loan, prepaid credit, or
      Talli-native. Nothing on the build path can be decided until this is.
+
+---
+
+# Round 4
+
+Decisions recorded this round: the formalism runs **concurrently** with the
+product, not before it (Q111 closed). The economics underpins the structure and
+the products are derived from it, so the maths is load-bearing for the build and
+not only for conviction (Q113 closed).
+
+## W. Consequences of trust-as-unsettled-balance
+
+116. **[unblocks]** Does formalising the gift kill it? Writing down what a
+     neighbour owes you converts a gift into a debt, and the gift-economy
+     literature says that transformation destroys the thing being measured.
+     Talli's whole mechanism is making the open position legible. Is there a
+     version that records the balance without collapsing it into a debt — soft
+     units, no due date, no enforceability, deliberately un-callable?
+117. A large open position is "trust" from one side and "unhedged credit
+     exposure" from the other — same number. Which does the interface show, and
+     to whom?
+118. If holding claims is the asset, the biggest holder has the most power, which
+     is the ordinary shape of a creditor economy — the thing this project exists
+     to escape. What structurally prevents that? Decay, caps, non-transferability,
+     something else?
+119. Should the system ever offer multilateral netting (A→B→C→A)? It's the
+     obvious efficiency and it destroys trust by construction. Offered but never
+     automatic?
+120. Does an open position have a due date? "It won't be resolved until later" is
+     doing a lot of work — is *later* unspecified on purpose?
+
+## X. The frame transformation
+
+121. **[unblocks]** What is preserved when you transform from my frame to yours?
+     (`01a-formalism.md` §11.) Relativity has the interval; this needs its
+     invariant, and a fairness rule that holds nothing invariant isn't fairness.
+     This is the one worth thinking about away from a screen.
+122. What *is* a frame, concretely — your row in the trust metric, your reachable
+     set, your information horizon?
+123. Do the transformations compose? My frame → yours → a third party's should
+     equal my frame → theirs. Without that it's a lookup table, not a geometry.
+
+## Y. Not transcribed — please re-send
+
+The following didn't survive the voice transcription and I don't want to guess
+at them, because each sounds substantive:
+
+124. Something about the **data** and it "inadvertently proving me wrong" — an
+     existing dataset you think could test the thesis?
+125. Something about **testimonials** and not needing to start from unknown —
+     bootstrapping trust from existing review/reputation data?
+126. **"Why did people get so interested in the development of the vets"** — the
+     noun didn't come through. What were you pointing at?
+127. **"You're gonna find psychopathic behavior"** — in the data, in the network,
+     or in what the system would incentivise? This sounds like an adversarial
+     point worth having.
+128. A reference to something with "deep experience that gives them significant
+     lives" — lost entirely.

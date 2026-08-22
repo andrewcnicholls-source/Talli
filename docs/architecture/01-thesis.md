@@ -112,3 +112,86 @@ These are compatible but imply very different mechanics. Needs resolving before
    good information gives the business owner social leverage over you. Being the
    neighbour who pulled their money out is costly in a way selling a share of a
    listed company is not.
+
+---
+
+## 7. Trust is the unsettled balance
+
+This is the load-bearing addition, and it makes the thesis measurable.
+
+Start with the repeated game. A single-round prisoner's dilemma has a defection
+equilibrium. Repeat it with the same counterparty and behaviour changes — not
+because anyone became virtuous, but because the shadow of the future changes the
+payoff. Interaction frequency manufactures trust.
+
+What trust then *looks like* in behaviour is **giving**. People do things for
+each other without settling up. A favour, a hand, a discount, a shift covered.
+Each of those is a real transaction, transferred now, unresolved. It is debt —
+just debt nobody wrote down and nobody intends to call.
+
+Which yields the definition:
+
+> **Trust is the outstanding stock of unsettled obligation in the network.**
+
+Not a proxy for it. Not correlated with it. It *is* it.
+
+### Why this matters
+
+The standard picture treats market clearing as the goal and non-clearing as
+friction. Invert it. A market that fully clears — every transaction closed,
+nobody owes anybody anything — has **zero trust in it by construction**. Two
+strangers settling in cash and walking away is a perfectly cleared market and a
+perfectly trustless one.
+
+So the imbalance isn't the inefficiency. **The imbalance is the asset.** It's the
+accumulated open position that lets people commit to pure specialisation —
+because you can only stop making your own Y if you're carrying a credible claim
+on someone else's. Unsettled obligation is what buys the right to specialise.
+
+This closes the loop with `01a-formalism.md` §7 exactly: the outstanding gift is
+the option, held rather than exercised. Under-specialisation and unsettled
+obligation are the same quantity seen from opposite sides — one is the premium
+you pay for *not* having trust, the other is the asset you hold *because* you do.
+
+### What it implies for the build
+
+If trust is unsettled obligation, then it is a **ledger quantity**, not a score.
+Consequences, and they're sharp:
+
+- The core object in the data model is the **open bilateral position**, not the
+  completed transaction. Completed transactions are the exhaust; open ones are
+  the product.
+- The health metric is the **volume, age and distribution of unsettled
+  obligation** — not throughput. Throughput would measure exactly the wrong
+  thing. A system optimising for settlement would be burning its own asset.
+- There is no need to invent a trust score. It's already in the books, if the
+  books are kept in a way that records what's open rather than netting it away.
+- It answers Round 1 Q17: bilateral balances that *deliberately* don't clear.
+  Which is close to mutual credit — but with the sign flipped on the intent.
+  Mutual-credit systems tolerate imbalance; this one is *trying to accumulate*
+  it.
+
+### Open, and important
+
+- **Does formalising the gift kill it?** Writing down what your neighbour owes
+  you converts a gift into a debt, and the anthropology of gift economies says
+  that transformation destroys the thing. Talli's entire mechanism is making the
+  unsettled balance legible. That may be the deepest risk in the design — not
+  regulatory, not technical, social.
+- **Where's the line between trust and exposure?** A large open position is
+  trust from one angle and unhedged credit risk from the other. Same number.
+- **What stops accumulation becoming extraction?** If holding claims is the
+  asset, the person with the most claims has the most power, and that is the
+  ordinary shape of creditor economies — the one this project exists to escape.
+
+## 8. Investment as durable gift
+
+The through-line to "invest where you spend": an investment is a formalised,
+durable, transferable version of the unsettled gift. It's the same object —
+value transferred now, claim resolved later, sustained by information about the
+counterparty — made explicit enough to survive beyond the relationship that
+generated it.
+
+That's a cleaner statement of what Talli builds than "a local investment
+platform": **infrastructure for holding open positions with people and places you
+have information about.**
