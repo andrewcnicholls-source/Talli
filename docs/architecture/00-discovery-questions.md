@@ -409,3 +409,41 @@ at them, because each sounds substantive:
      point worth having.
 128. A reference to something with "deep experience that gives them significant
      lives" — lost entirely.
+
+---
+
+# Round 5
+
+Closed this round: the name (tally — `01-thesis.md` §9); why trust needs scaling
+at all (Dunbar, §10); stake rather than proof of work (§11); cooperation as the
+design constraint (§12); overlapping membership as the answer to in/out-groups
+(§13); and the scaling ladder as the resolvent (§14). Q76, the instrument, now
+has a **proposed** answer in `10-build-v1.md` §2.
+
+## Z. On the build proposal
+
+129. **[unblocks]** Does the tally — non-transferable prepaid credit, redeemable
+     in goods, no yield — feel like the thing, or like a compromise you'd resent?
+     It satisfies every line of the thesis on paper. If it feels thin, the reason
+     matters more than the objection.
+130. Are you willing to run the lawyer conversation before schema? It's one
+     meeting and a "no" would change the data model.
+131. Talli Parking as first merchant and a season tally as the first instrument —
+     agreed?
+132. Who are businesses two and three? Named. That's the step that decides
+     whether this is a network or a booking system, and it's a conversation on a
+     street, not a build task.
+133. Discovery-only for the graph view (never automatic allocation) — accepted as
+     a permanent boundary, or a V1 concession you'd want lifted later?
+
+## AA. Still open and now more pressing
+
+134. The gift problem (Q116) is unresolved and V1 walks straight into it: a
+     prepaid tally is written down, dated and enforceable. Does that make it a
+     debt rather than a gift, and does that matter at this stage — or is the
+     softness meant to live in a *later* instrument, with V1 deliberately hard?
+135. What stops the largest tally-holder becoming the creditor class (Q118)? A
+     cap per business, per member, or nothing yet?
+136. The invariant (Q121) is still the open formal problem, and it now has a
+     product hook: whatever all parties agree on is what the ledger should
+     record. Worth carrying around.

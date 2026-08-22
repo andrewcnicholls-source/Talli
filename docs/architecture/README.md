@@ -29,7 +29,7 @@ speculatively — a doc only exists when there are real answers to put in it.
 | `07-compliance-nz.md` | AML/CFT, FSP registration, tax/GST, stored value | not started |
 | `08-technical.md` | Ledger implementation, rails, data model, privacy | not started |
 | `09-adversarial.md` | Failure modes, collusion, default, exit, runs | not started |
-| `10-sequencing.md` | What ships first, what the wedge is, cadence | not started |
+| `10-build-v1.md` | What to build: the tally as V1 instrument, minimum system, order of work | proposal |
 
 ## How to use this
 

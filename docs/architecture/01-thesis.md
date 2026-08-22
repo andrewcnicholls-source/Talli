@@ -195,3 +195,130 @@ generated it.
 That's a cleaner statement of what Talli builds than "a local investment
 platform": **infrastructure for holding open positions with people and places you
 have information about.**
+
+---
+
+## 9. The name is the thesis
+
+**Talli — tally.** The tally stick was the first technology for recording what
+one person had done for another: a stick notched with the amount, split
+lengthways, one half to each party. Neither half can be altered without the
+other showing it. Medieval England ran on them for centuries; they circulated as
+money.
+
+That is the whole product in one object. A tally is not a coin. It's a **record
+of an unsettled obligation, held by both sides**, which is exactly the primary
+ledger object in `02-money-model.md`.
+
+## 10. Why trust needs scaling at all: Dunbar
+
+Trust works with your neighbours for a mundane reason: **you can remember.** You
+know what you've done for them and what they've done for you. No system needed —
+the ledger is in your head.
+
+Human memory for relationships runs out somewhere around 150 people. Past that
+it goes foggy: you don't know who you're dealing with, you can't recall who took
+without giving, and the informal ledger fails. Every market cost above that
+threshold — collateral, contracts, credit checks, escrow, insurance — is a
+prosthetic for the memory you don't have. **That's the premium of uncertainty
+from §2, and now it has a cause.**
+
+So the history of money is the history of scaling trust past Dunbar's number.
+Tally sticks, coin, bills of exchange, debt paper, banks, credit scores — each
+one another layer of abstraction over the same problem: *I have this thing, I
+think someone out there wants it, how do I reach them without knowing them?*
+
+Talli's claim: the current layer has scaled so far it has gone loose. It reaches
+everyone and remembers no one. The abstraction that let trust scale also
+stripped out the information that made it trust. Talli is an attempt at a layer
+that scales past 150 **while keeping the memory attached**.
+
+## 11. Stake, not proof of work
+
+Bitcoin solved a real problem — trustless consensus — with the wrong primitive
+for this one. Proof of work burns energy to prove nobody is cheating. It buys
+trustlessness, and trustlessness is precisely what we don't want here: the whole
+asset is the trust.
+
+The right primitive is **what you put at stake**, but in a stronger sense than
+crypto's proof-of-stake. There, you stake the native token to secure the ledger.
+Here you stake into **a real business you actually use and have information
+about**:
+
+> I put a stake in my pizza place, my coffee shop, the shop down the road —
+> because I've used them, I've seen how they work, and I can judge whether
+> they're good.
+
+Which makes the stake a **costly signal**. This is rigorous ground: signalling
+theory says a claim is credible when it's expensive to fake. A vouch that costs
+nothing is noise; a vouch with your own capital behind it is information. The
+consequences are large and mostly good:
+
+- **Sybil resistance for free.** Fake accounts can't fake staked capital.
+- **The trust score is the stake graph.** Nothing to invent, nothing to game with
+  activity.
+- **Vouching becomes economically meaningful.** "I believe in you, and I'll put
+  my money where my mouth is."
+- And explicitly: **losing the stake is acceptable.** "If you fail, I'm happy to
+  wear it — you were worth the chance." That's patronage inside the instrument,
+  and it's a design feature, not slippage.
+
+## 12. The design constraint: cooperation must be the dominant strategy
+
+Stated as a hard constraint on every mechanism in the system.
+
+One honest correction on the terminology, because it changes what's achievable.
+A genuinely *dominant* strategy — best regardless of what anyone else does — is
+very rare in mechanism design, and generally unavailable in a repeated multi-
+party setting. What repetition gives you is the folk theorem: cooperation is
+**sustainable as an equilibrium** when players are patient enough and defection
+is observed. Not dominant. Sustained.
+
+Which turns the design goal into something concrete and buildable:
+
+1. **Make defection visible.** The folk theorem needs observation. This is what
+   network propagation does — the "reverberation".
+2. **Make relationships long.** Patience is the discount factor. Anything that
+   makes an interaction feel one-shot is an attack on the mechanism.
+3. **Make the stake real.** Costly signals raise the price of defecting.
+
+And the resilience point stands: it is fine — good, even — for people to act
+selfishly, provided the structure makes selfish play produce collective benefit.
+That's the target. It is also the honest reframe of the "psychopathic behaviour"
+question: the system shouldn't assume goodwill. It should assume self-interest
+and be built so that self-interest cooperates.
+
+## 13. In-groups, borders, and the thing to be careful about
+
+Boundaries make trust cheap. Historically religion did this at scale — an
+in-group you could extend credit to without knowing the person. It worked, and
+that is why it recurs.
+
+It is also the machinery of exclusion, and this needs a real answer rather than
+a caveat. The proposed one:
+
+> **Overlapping, nested membership rather than a single boundary.**
+> Neighbourhood inside city inside country, plus memberships that aren't
+> geographic at all. If every person is in-group with *someone*, and no two
+> people's memberships are identical, then "out-group" is never a fixed class of
+> people — it's a relation that differs per observer.
+
+That is also the frame-relativity of `01a-formalism.md` §11 showing up as a
+social design principle rather than a metaphor. Nobody is outside; people are
+differently positioned.
+
+## 14. The scaling ladder — and it's the resolvent
+
+Stated plainly: *I don't want to pick every store I use. I want exposure to the
+places the people around me use, and the places they use.*
+
+That is exactly the path sum from `01a-formalism.md` §12:
+
+```
+exposure  =  my own stakes          (order 1)
+          +  α · my circle's stakes  (order 2)
+          +  α² · theirs             (order 3)  →  (I − αA)⁻¹
+```
+
+Neighbourhood, city, country are the orders of that expansion. The formalism
+isn't describing the product from outside — **it is the allocation mechanism.**
