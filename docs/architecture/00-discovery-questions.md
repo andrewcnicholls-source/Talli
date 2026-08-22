@@ -303,3 +303,51 @@ answer inline, rewrite the question if it's the wrong one.
 104. Would you rather prove the *investment* mechanic (money flows to good local
      businesses via local information) or the *trust* mechanic (better terms
      between people who know each other)? You probably can't test both first.
+
+---
+
+# Round 3 — the formalism, and the fork it creates
+
+See `01a-formalism.md` for the assessment behind these.
+
+## T. Which formal claim is the real one
+
+105. **[unblocks]** Of the four candidate claims in `01a-formalism.md` §8, which
+     one do you believe hardest? That's the one worth trying to break first.
+106. The real-options statement in §7 — "the premium people pay to under-
+     specialise *is* the deadweight loss Talli eliminates" — is the tightest
+     version of your thesis I can construct. Is it your thesis, or has it lost
+     something in the compression?
+107. Do two routes to the same market outcome ever *cancel*, or only add with
+     weights? This is the single test for whether complex numbers are structural
+     or ornamental. Take your time on it — your hunch may be pointing at
+     something I haven't found.
+108. Does *timing* matter as much as quantity — is "everyone shows up to market"
+     a coordination problem in its own right, or shorthand for liquidity?
+109. Direction of obligation vs. volume of interaction: are those two quantities
+     you'd want to carry on a single edge? If yes, the Hermitian/magnetic
+     encoding is the natural home and the complex-number hunch is vindicated on
+     unglamorous grounds.
+110. Relativity gave you the intuition — but is the invariant identified? What is
+     the quantity every observer agrees on, whatever their position in the
+     network? A fairness rule that holds nothing invariant isn't fair, it's just
+     variable.
+
+## U. Research track vs. build track
+
+111. **[unblocks]** Do you want the formalism *resolved* before the product is
+     designed, or running alongside it? There's no wrong answer, but an unstated
+     answer defaults to "resolved first", which can absorb years.
+112. Would a small empirical test — Ricci curvature on an existing trade or
+     social dataset, no product involved — be motivating or a distraction right
+     now?
+113. Is the maths load-bearing for the *product*, or for *conviction* — yours,
+     and eventually investors' and members'? Both are legitimate; they justify
+     very different amounts of it.
+114. Has the formalism been where this stalled before? (Round 1, Q75 — still the
+     question I most want answered.)
+
+## V. Still outstanding from Round 2
+
+115. The instrument (Q76) — equity, revenue share, loan, prepaid credit, or
+     Talli-native. Nothing on the build path can be decided until this is.
