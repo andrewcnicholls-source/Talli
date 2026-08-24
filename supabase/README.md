@@ -7,6 +7,7 @@ directory is the record of both.
 ```
 migrations/   SQL, applied in filename order
 functions/    edge function sources, one directory per function
+test-only/    fixtures and resets that must never run on production
 ```
 
 Everything here has already been applied to the live project
@@ -29,26 +30,38 @@ re-assert the setting immediately afterwards:
 alter view <name> set (security_invoker = true);
 ```
 
-## Only partly covered here
+## All six functions are here now
 
-`stripe-webhook`, `register-interest` and `check-setup` were not touched by this
-change, so their sources are not in the repo yet. They are still live in the
-Supabase project. Worth exporting next time one of them needs an edit.
+`stripe-webhook`, `register-interest` and `check-setup` came across with the
+test-environment work, so `functions/` is the whole set rather than the three
+this change touched.
 
-## Both Supabase projects are in step
+Three of them carry a TEST-PROJECT FALLBACKS block: `create-checkout` (a
+`SITE_URL` default and a stubbed Stripe round-trip), `gate-ops` (a known
+`GATE_PASSPHRASE`) and `check-setup`. Each one keys off `IS_TEST`, which
+compares the project's own injected `SUPABASE_URL` against the test project's
+ref — so on production every fallback is unreachable, and a real secret always
+wins over one.
 
-Every migration and all three functions have been applied to **both**
-`oxzwfemyavznykqixhvk` (production) and `uhdoverwvlxvyyctskle` (test). The
-deployed function bundles hash identically across the two.
+## The two projects are NOT in step
 
-What is **not** in step is the front end. `talli-test.netlify.app` is meant to
-build the `staging` branch, which does not exist yet — see `TESTING.md` on
-`claude/test-environment-setup-kaaudq`, where that setup lives unmerged. Until
-those branches come together, the test site is serving the old pages against
-an updated test database.
+Production has every migration in this directory. Test does not: as of the
+merge it stops after `20260821093000_addons_at_the_gate`, so it is missing
 
-That branch also rewrites `assets/talli-config.js` into a hostname-based
-environment switch. This branch changed the same file. Whoever merges them
-must keep the environment switch and carry `gateTierOrder` across — though
-`admin.js` now defaults that list internally, so a bad merge degrades into
-nothing worse than a stale comment.
+```
+20260821094000_name_the_spares
+20260821095000_fold_duplicate_addon_lines
+20260821096000_restore_security_invoker
+20260821097000_event_interest_view_security_invoker
+```
+
+The third of those matters most. `v_gate_list` on test still has no
+`security_invoker`, which is exactly the SECURITY DEFINER defect this change
+fixed on production — a test-project anon key can read draft tiers and prices.
+It is the test database, so nothing real is exposed, but do not read a green
+run there as proof the fix works.
+
+Test also carries schema production has never seen — `overflow_site`,
+`booking_transfer` and friends, from work that is not in this repo. Whoever
+brings the two back into step has to reconcile that first, not just replay the
+four migrations above.
