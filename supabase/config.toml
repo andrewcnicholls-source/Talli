@@ -1,0 +1,21 @@
+project_id = "talli"
+
+# Stripe cannot present a Supabase JWT, so this one authenticates itself with
+# the webhook signature instead. Every other function stays behind the anon key.
+[functions.stripe-webhook]
+verify_jwt = false
+
+[functions.create-checkout]
+verify_jwt = true
+
+[functions.get-booking]
+verify_jwt = true
+
+[functions.register-interest]
+verify_jwt = true
+
+[functions.gate-ops]
+verify_jwt = true
+
+[functions.check-setup]
+verify_jwt = true
