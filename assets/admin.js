@@ -97,7 +97,10 @@
   function unlock(e) {
     e.preventDefault();
     var input = el('ad-pass');
-    state.pass = input.value;
+    // Trimmed, because the server compares byte-for-byte in constant time
+    // and a passphrase pasted with a trailing space is indistinguishable
+    // from a wrong one. Every other field on this page already trims.
+    state.pass = input.value.trim();
     el('ad-unlock-error').hidden = true;
 
     call('events').then(function (data) {
