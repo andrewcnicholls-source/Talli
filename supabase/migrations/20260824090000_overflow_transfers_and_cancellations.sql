@@ -166,6 +166,11 @@ create or replace view public.v_overflow_site_status as
   ) t on true
   where s.active;
 
+-- Every view in this schema runs as the caller, so row level security still
+-- applies underneath it. A view that runs as its owner walks straight past
+-- RLS, which is not what any of these are for.
+alter view public.v_overflow_site_status set (security_invoker = on);
+
 -- The arrivals list, now carrying where a car went if it went anywhere, and
 -- saying plainly whether its bay is in a consent zone rather than leaving the
 -- screen to guess from the label.
@@ -223,10 +228,14 @@ create view public.v_gate_list as
   ) tr on true
   where b.status = any (array['paid','held','transferred']);
 
+-- Rebuilding the view drops this, and dropping it would put the night's
+-- names, phones and emails behind the public anon key.
+alter view public.v_gate_list set (security_invoker = on);
+
 -- Nothing here is public. The gate function reads it under the service role.
 revoke all on public.overflow_site, public.event_overflow_limit,
               public.booking_transfer, public.booking_cancellation,
-              public.v_overflow_site_status
+              public.v_overflow_site_status, public.v_gate_list
   from anon, authenticated;
 
 -- ------------------------------------------------------------------ rpcs
