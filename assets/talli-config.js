@@ -7,12 +7,22 @@
    are written solely by the create-checkout edge function under the
    service role.
 
-   Two projects sit behind the same pages. Live is the default and always
-   wins unless somebody asks for the other one out loud, either by opening
-   a page with ?env=test or by using a test.* hostname. The choice sticks
-   for the tab so it survives a checkout round-trip, and the gate screen
-   says so on its header — a night run against the wrong database would be
-   a very quiet kind of disaster.
+   Two projects sit behind the same pages, and which one a page talks to is
+   decided by where it is being served from:
+
+     talli.co.nz            live. The real customers, the real money.
+     anything else          test. Netlify previews, branch deploys, the
+                            talli-test site, a file opened off the desktop.
+
+   The real business has a real domain, so that is the one thing treated as
+   real. Everything else is a rehearsal and defaults to the test project —
+   getting that backwards means a rehearsal writing into the real database,
+   which is the kind of mistake nobody notices until it matters.
+
+   ?env=live or ?env=test overrides either way and sticks for the tab, so it
+   survives a checkout round-trip. The gate screen says which one it is on
+   in its header: a night run against the wrong database would be a very
+   quiet kind of disaster.
    ===================================================================== */
 (function () {
   'use strict';
@@ -51,8 +61,9 @@
     try { stuck = sessionStorage.getItem(KEY); } catch (e) { /* private mode */ }
     if (stuck && ENVS[stuck]) return stuck;
 
-    if (/^test\./i.test(window.location.hostname)) return 'test';
-    return 'live';
+    // The custom domain, and only the custom domain, is the live business.
+    var host = String(window.location.hostname || '').toLowerCase();
+    return (host === 'talli.co.nz' || host === 'www.talli.co.nz') ? 'live' : 'test';
   }
 
   var env = chosen();
