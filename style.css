@@ -1710,3 +1710,107 @@ footer a { color: var(--blue); }
   color: var(--ink);
   min-width: 0;
 }
+
+/* =====================================================================
+   TEST ENVIRONMENT MARKING
+
+   Everything here hangs off data-talli-env="test", which talli-config.js
+   sets on <html> only when the page is pointed at the test backend. On
+   talli.co.nz the attribute is never set and none of these rules match,
+   so production renders exactly as it did before.
+
+   The gate screen gets the strongest treatment on purpose: it is used one-
+   handed, outdoors, at night, and taking a real payment on the test site
+   (or a test payment on the real one) is the mistake worth designing out.
+   Blue chrome means live. Red chrome means test.
+   ===================================================================== */
+:root {
+  --test-red: #8E1B14;
+  --test-red-deep: #5E110C;
+  --test-red-tint: #FBEDEC;
+}
+
+.talli-env-banner {
+  background: var(--test-red);
+  color: var(--white);
+  font-family: var(--body);
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-align: center;
+  padding: 7px 16px;
+  /* Above the sticky header's shadow, but in normal flow so it scrolls away
+     and never covers the nav. */
+  position: relative;
+  z-index: 60;
+}
+
+/* ---------- Gate screen: repaint the chrome red ---------- */
+[data-talli-env="test"] .ad-body { background: var(--test-red-tint); }
+[data-talli-env="test"] .ad-head { background: var(--test-red); }
+[data-talli-env="test"] .ad-lock { background: var(--test-red-deep); }
+
+/* The banner sits above a sticky header that carries its own safe-area
+   inset. Once the banner takes the top of the screen, the header no longer
+   needs to. */
+[data-talli-env="test"] .ad-head { padding-top: 12px; }
+[data-talli-env="test"] .talli-env-banner { padding-top: calc(7px + env(safe-area-inset-top)); }
+
+/* The lock card gets a matching accent so the passphrase screen is just as
+   obvious as the list behind it. */
+[data-talli-env="test"] .ad-lock-card h1 { color: var(--test-red); }
+
+/* ---------- Test-site passphrase screen ---------- */
+.talli-gate {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--test-red-deep);
+}
+.talli-gate-card {
+  background: var(--white);
+  border-radius: 6px;
+  padding: 32px 28px;
+  width: 100%;
+  max-width: 380px;
+  text-align: center;
+  font-family: var(--body);
+}
+.talli-gate-card h1 {
+  font-family: var(--display);
+  font-size: 1.9rem;
+  color: var(--test-red);
+  margin: 0 0 10px;
+}
+.talli-gate-card p {
+  font-size: 0.9rem;
+  color: var(--grey);
+  line-height: 1.5;
+  margin: 0 0 18px;
+}
+.talli-gate-card input {
+  width: 100%;
+  font-family: var(--body);
+  font-size: 16px; /* never let iOS zoom on focus */
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  margin-bottom: 14px;
+}
+.talli-gate-card input:focus {
+  outline: none;
+  border-color: var(--test-red);
+}
+.talli-gate-card .btn { width: 100%; }
+.talli-gate-error {
+  color: var(--test-red);
+  font-size: 0.85rem;
+  margin: 0 0 12px !important;
+}
+.talli-gate-foot { margin: 16px 0 0 !important; font-size: 0.8rem; }
+.talli-gate-foot a { color: var(--grey); }

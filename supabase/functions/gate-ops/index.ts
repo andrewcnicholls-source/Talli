@@ -26,6 +26,19 @@ const db = createClient(
 
 const ALLOWED_ORIGIN = Deno.env.get('ALLOWED_ORIGIN') ?? '*'
 
+// ---------------------------------------------------------------------
+//  TEST-PROJECT FALLBACKS
+//
+//  The test Supabase project has no secrets of its own, so this block
+//  supplies workable defaults there and ONLY there. IS_TEST compares the
+//  project's own SUPABASE_URL — injected by Supabase, not settable by a
+//  caller — against the test project's ref. On production it is false and
+//  every fallback below is unreachable. A real secret always wins: these
+//  are fallbacks, never overrides.
+// ---------------------------------------------------------------------
+const TEST_PROJECT_REF = 'uhdoverwvlxvyyctskle'
+const IS_TEST = (Deno.env.get('SUPABASE_URL') ?? '').includes(TEST_PROJECT_REF)
+
 const cors = {
   'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -135,7 +148,11 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
   if (req.method !== 'POST') return json({ error: 'Use POST' }, 405)
 
-  const expected = Deno.env.get('GATE_PASSPHRASE')
+  // Production refuses outright with no passphrase set, so there is never a
+  // quiet default-open state on the live site. The test project gets a known
+  // one instead, so the gate screen is usable without any secret setup.
+  const expected = Deno.env.get('GATE_PASSPHRASE') ??
+    (IS_TEST ? 'talli-test' : null)
   if (!expected) {
     console.error('GATE_PASSPHRASE is not set')
     return json({ error: 'The gate screen is not configured yet.' }, 503)

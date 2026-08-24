@@ -38,7 +38,21 @@ const db = createClient(
   { auth: { persistSession: false } },
 )
 
-const SITE_URL = Deno.env.get('SITE_URL') ?? 'https://talli.co.nz'
+// ---------------------------------------------------------------------
+//  TEST-PROJECT FALLBACKS
+//
+//  The test Supabase project has no secrets of its own, so this block
+//  supplies workable defaults there and ONLY there. IS_TEST compares the
+//  project's own SUPABASE_URL — injected by Supabase, not settable by a
+//  caller — against the test project's ref. On production it is false and
+//  every fallback below is unreachable. A real secret always wins: these
+//  are fallbacks, never overrides.
+// ---------------------------------------------------------------------
+const TEST_PROJECT_REF = 'uhdoverwvlxvyyctskle'
+const IS_TEST = (Deno.env.get('SUPABASE_URL') ?? '').includes(TEST_PROJECT_REF)
+
+const SITE_URL = Deno.env.get('SITE_URL') ??
+  (IS_TEST ? 'https://talli-test.netlify.app' : 'https://talli.co.nz')
 const ALLOWED_ORIGIN = Deno.env.get('ALLOWED_ORIGIN') ?? '*'
 
 // Holds run slightly longer than the Stripe session so the sweeper can never
@@ -91,13 +105,19 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
   if (req.method !== 'POST') return json({ error: 'Use POST' }, 405)
 
-  let stripe: Stripe
+  // With no key at all, production must refuse. The test project instead
+  // falls through to the stub below, so the booking flow stays testable
+  // before anyone has pasted a Stripe test key in.
+  let stripe: Stripe | null = null
   try {
     stripe = getStripe()
   } catch (err) {
-    console.error(err)
-    return json({ error: 'Payments are not configured on this project yet' }, 503)
+    if (!IS_TEST) {
+      console.error(err)
+      return json({ error: 'Payments are not configured on this project yet' }, 503)
+    }
   }
+  const stubPayments = stripe === null
 
   let body: Record<string, unknown>
   try {
@@ -236,6 +256,28 @@ Deno.serve(async (req) => {
     departure,
   ].filter(Boolean).join(' · ')
 
+  // ---- 4a. TEST ONLY: stand in for the entire Stripe round-trip.
+  // Writes a recognisable fake session id, confirms the booking exactly as
+  // the webhook would, and hands back the same confirmation URL the real
+  // flow uses — so every screen after this point is still exercised for
+  // real. Unreachable on production: see IS_TEST above.
+  if (stubPayments) {
+    const fakeSession = `cs_test_stub_${crypto.randomUUID().replace(/-/g, '')}`
+    await db.from('booking')
+      .update({ stripe_checkout_session_id: fakeSession })
+      .eq('id', bookingId)
+    await db.rpc('confirm_booking', {
+      p_booking_id: bookingId,
+      p_payment_intent_id: `pi_test_stub_${fakeSession.slice(-12)}`,
+    })
+    console.log('stubbed payment for booking', bookingId)
+    return json({
+      url: `${SITE_URL}/booking-confirmed.html?session_id=${fakeSession}`,
+      booking_id: bookingId,
+      stubbed_payment: true,
+    })
+  }
+
   const currency = booking.currency ?? 'nzd'
 
   // One line per item at quantity 1, carrying the count in the name. Bundle
@@ -271,7 +313,7 @@ Deno.serve(async (req) => {
   const expiresAt = Math.floor(Date.now() / 1000) + SESSION_MINUTES * 60
 
   try {
-    const session = await stripe.checkout.sessions.create({
+    const session = await stripe!.checkout.sessions.create({
       mode: 'payment',
       customer_email: email,
       expires_at: expiresAt,
