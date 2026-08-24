@@ -35,6 +35,16 @@
     <select id="ad-event" class="ad-select" aria-label="Event"></select>
   </header>
 
+  <!-- Two jobs, two screens. The night's list is one thing; setting what a
+       space costs is another, and doing the second by accident while doing
+       the first would be expensive. -->
+  <nav class="ad-tabs" role="tablist">
+    <button type="button" class="ad-tab is-on" id="ad-tab-gate" role="tab" aria-selected="true">Gate</button>
+    <button type="button" class="ad-tab" id="ad-tab-prices" role="tab" aria-selected="false">Prices</button>
+  </nav>
+
+  <div id="ad-panel-gate">
+
   <div class="ad-stats">
     <div class="ad-stat">
       <span class="ad-stat-num" id="ad-stat-arrived">—</span>
@@ -83,6 +93,36 @@
     Refreshes on its own every 30 seconds.<br>
     <button type="button" class="ad-link" id="ad-check-open">Check payment setup</button>
   </p>
+  </div><!-- /gate panel -->
+
+  <!-- ------------------------------------------------------- prices -->
+  <div id="ad-panel-prices" hidden>
+    <div class="ad-price-head">
+      <p class="ad-price-when" id="ad-price-when">—</p>
+      <p class="ad-price-live" id="ad-price-live"></p>
+    </div>
+
+    <!-- Most nights are last night with a different fixture on it. -->
+    <div class="ad-copy">
+      <label class="ad-label" for="ad-copy-from">Start from another night</label>
+      <div class="ad-copy-row">
+        <select id="ad-copy-from" class="ad-select" aria-label="Copy prices from"></select>
+        <button type="button" class="ad-copy-go" id="ad-copy-go">Copy</button>
+      </div>
+    </div>
+
+    <div class="ad-prices" id="ad-prices"></div>
+
+    <div class="ad-price-save" id="ad-price-save" hidden>
+      <button type="button" class="btn btn-primary" id="ad-price-apply">Save prices</button>
+      <button type="button" class="ad-link ad-back" id="ad-price-reset">Put them back</button>
+    </div>
+
+    <p class="ad-over-note ad-price-note">
+      Saved prices are on the website straight away. Bookings already taken
+      keep the price they were sold at.
+    </p>
+  </div>
 </div>
 
 <!-- ------------------------------------------------------- walk-up sale -->

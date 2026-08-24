@@ -1406,3 +1406,102 @@ footer a { color: var(--blue); }
 .btn-danger { background: var(--orange-flag); color: var(--white); border-color: var(--orange-flag); }
 .btn-danger:hover { background: #93401F; border-color: #93401F; }
 .ad-back { display: block; margin: 12px auto 0; }
+
+/* ---------- Gate: the two screens ---------- */
+.ad-tabs {
+  display: flex;
+  gap: 0;
+  background: var(--blue-deep);
+  padding: 0 16px;
+}
+.ad-tab {
+  flex: 1;
+  font-family: var(--body);
+  font-size: 0.82rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 11px 8px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+}
+.ad-tab.is-on { color: var(--white); border-bottom-color: #8FB3E0; }
+
+/* ---------- Gate: prices ---------- */
+.ad-price-head { padding: 16px 16px 0; }
+.ad-price-when { font-size: 1rem; font-weight: 500; }
+.ad-price-live { font-size: 0.8rem; color: var(--grey); margin-top: 4px; }
+.ad-price-live.is-warn { color: var(--orange-flag); }
+
+.ad-copy { padding: 14px 16px 0; }
+.ad-copy .ad-label { margin-top: 0; }
+.ad-copy-row { display: flex; gap: 10px; }
+.ad-copy-row .ad-select { flex: 1; min-width: 0; }
+.ad-copy-go {
+  flex: none;
+  font-family: var(--body);
+  font-size: 0.82rem;
+  padding: 0 16px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--white);
+  color: var(--ink);
+  cursor: pointer;
+}
+.ad-copy-go:hover { border-color: var(--blue); color: var(--blue); }
+.ad-copy-go:disabled { opacity: 0.5; }
+
+.ad-prices { padding: 14px 16px 0; }
+.ad-price {
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 12px 13px;
+  margin-bottom: 10px;
+}
+/* A number typed but not yet saved is not the price anybody is paying. */
+.ad-price.is-dirty { border-color: #C9942A; background: #FDFAF3; }
+.ad-price-main { min-width: 0; }
+.ad-price-name { font-weight: 500; font-size: 0.98rem; }
+.ad-price-edit {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 11px;
+  padding-top: 11px;
+  border-top: 1px solid var(--line);
+}
+.ad-price-sign { font-size: 1.15rem; color: var(--grey); }
+.ad-price-input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--body);
+  font-size: 1.25rem;
+  font-variant-numeric: tabular-nums;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--white);
+  color: var(--ink);
+}
+.ad-price-input:focus { outline: none; border-color: var(--blue); }
+.ad-price-out {
+  flex: none;
+  font-family: var(--body);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--white);
+  color: var(--grey);
+  cursor: pointer;
+}
+.ad-price-out.is-on { border-color: var(--orange-flag); color: var(--orange-flag); background: #FFF4F0; }
+.ad-price-out:disabled { opacity: 0.5; }
+
+.ad-price-save { padding: 4px 16px 0; }
+.ad-price-save .btn { width: 100%; }
+.ad-price-note { padding: 0 16px 24px; }

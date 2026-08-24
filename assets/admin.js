@@ -37,6 +37,9 @@
     // been asked once already.
     picked: null,
     cancelArmed: false,
+    // Which screen is showing, and prices typed but not yet saved.
+    tab: 'gate',
+    priceDrafts: {},
   };
 
   function el(id) { return document.getElementById(id); }
@@ -163,9 +166,11 @@
       .then(function (data) {
         state.rows = data.rows || [];
         state.sites = data.sites || [];
+        state.tiers = data.tiers || [];
         renderSummary(data.summary);
         renderOverflow();
         renderList();
+        renderPrices();
         // The sheet is showing a booking that has just been re-read; keep it
         // honest rather than leaving a stale card open.
         if (state.picked) {
@@ -777,6 +782,271 @@
     hide(el('ad-cancel'));
   }
 
+  /* -------------------------------------------------------------- prices */
+
+  // What a space costs, per tier, for the event in the header. The website
+  // reads these straight out of the database, so saving here is publishing.
+  //
+  // Typed prices are held as drafts until Save, for two reasons: a price is
+  // worth reading back before it goes live, and the list behind this screen
+  // reloads itself every 30 seconds — which would otherwise wipe a number
+  // half-entered in the rain.
+
+  function dollars(cents) {
+    var d = (cents || 0) / 100;
+    return cents % 100 === 0 ? String(d) : d.toFixed(2);
+  }
+
+  function draftFor(t) {
+    return Object.prototype.hasOwnProperty.call(state.priceDrafts, t.code)
+      ? state.priceDrafts[t.code]
+      : dollars(t.price_cents);
+  }
+
+  function dirtyTiers() {
+    return state.tiers.filter(function (t) {
+      return Object.prototype.hasOwnProperty.call(state.priceDrafts, t.code) &&
+        state.priceDrafts[t.code] !== dollars(t.price_cents);
+    });
+  }
+
+  function currentEvent() {
+    return state.events.filter(function (e) { return e.id === state.eventId; })[0];
+  }
+
+  function renderPrices() {
+    var box = el('ad-prices');
+    if (!box) return;
+
+    var ev = currentEvent();
+    text(el('ad-price-when'), ev
+      ? asDate(ev.starts_at) + ' — ' + ev.name
+      : 'No event chosen');
+
+    var live = el('ad-price-live');
+    if (!ev || ev.status === 'on_sale') {
+      text(live, 'On the website now. A saved price is live the moment it lands.');
+      live.className = 'ad-price-live';
+    } else {
+      text(live, 'This event is ' + ev.status.replace(/_/g, ' ') +
+        ', so nothing here is on the website yet.');
+      live.className = 'ad-price-live is-warn';
+    }
+
+    renderCopyFrom();
+
+    // Never rebuild over the top of someone typing.
+    if (dirtyTiers().length) { renderPriceFooter(); return; }
+
+    box.innerHTML = '';
+    if (!state.tiers.length) {
+      box.appendChild(make('p', 'ad-empty', 'No tiers set up for this event.'));
+      renderPriceFooter();
+      return;
+    }
+    state.tiers.forEach(function (t) { box.appendChild(priceRow(t)); });
+    renderPriceFooter();
+  }
+
+  function priceRow(t) {
+    var row = make('div', 'ad-price');
+
+    var main = make('div', 'ad-price-main');
+    // Labels read as "Standard — best value, expect to wait". The first half
+    // is the name; the rest is sales copy nobody needs at 6pm.
+    main.appendChild(make('span', 'ad-price-name',
+      String(t.label || t.code).split(/\s+—\s+/)[0]));
+
+    var meta = make('div', 'ad-meta');
+    meta.appendChild(make('span', 'ad-chip', t.spots_left + ' online'));
+    meta.appendChild(make('span', 'ad-chip', t.spots_left_gate + ' at the gate'));
+    if (t.price_updated_at) {
+      meta.appendChild(make('span', 'ad-chip', 'changed ' + asTime(t.price_updated_at)));
+    }
+    main.appendChild(meta);
+    row.appendChild(main);
+
+    var edit = make('div', 'ad-price-edit');
+    edit.appendChild(make('span', 'ad-price-sign', '$'));
+
+    var input = make('input', 'ad-price-input');
+    input.type = 'text';
+    input.inputMode = 'decimal';
+    input.value = draftFor(t);
+    input.setAttribute('aria-label', 'Price for ' + t.code);
+    input.addEventListener('input', function () {
+      state.priceDrafts[t.code] = this.value.trim();
+      row.classList.toggle('is-dirty', this.value.trim() !== dollars(t.price_cents));
+      renderPriceFooter();
+    });
+    edit.appendChild(input);
+
+    // Called by eye, ahead of the bay maths, and reversible in one tap.
+    var out = make('button', 'ad-price-out' + (t.manually_sold_out ? ' is-on' : ''),
+      t.manually_sold_out ? 'Sold out' : 'On sale');
+    out.type = 'button';
+    out.addEventListener('click', function () { toggleSoldOut(t, out); });
+    edit.appendChild(out);
+
+    row.appendChild(edit);
+    if (draftFor(t) !== dollars(t.price_cents)) row.classList.add('is-dirty');
+
+    return row;
+  }
+
+  function renderPriceFooter() {
+    var n = dirtyTiers().length;
+    var foot = el('ad-price-save');
+    if (!n) { hide(foot); return; }
+    text(el('ad-price-apply'), n === 1 ? 'Save 1 price' : 'Save ' + n + ' prices');
+    show(foot);
+  }
+
+  function renderCopyFrom() {
+    var sel = el('ad-copy-from');
+    var had = sel.value;
+    sel.innerHTML = '';
+    var others = state.events.filter(function (e) { return e.id !== state.eventId; });
+    if (!others.length) {
+      sel.appendChild(new Option('No other events', ''));
+      return;
+    }
+    // Most recent first: last night's prices are the ones worth copying.
+    others.slice().reverse().forEach(function (e) {
+      sel.appendChild(new Option(asDate(e.starts_at) + ' — ' + e.name, e.id));
+    });
+    if (had) sel.value = had;
+  }
+
+  function copyPrices() {
+    var from = el('ad-copy-from').value;
+    if (!from) return;
+    var btn = el('ad-copy-go');
+    btn.disabled = true;
+
+    call('tiers', { event_id: from })
+      .then(function (data) {
+        var byCode = {};
+        (data.tiers || []).forEach(function (t) { byCode[t.code] = t.price_cents; });
+
+        var moved = 0, missing = 0;
+        state.tiers.forEach(function (t) {
+          if (byCode[t.code] == null) { missing++; return; }
+          if (byCode[t.code] === t.price_cents) return;
+          state.priceDrafts[t.code] = dollars(byCode[t.code]);
+          moved++;
+        });
+
+        // Filled in, not saved. Read them back first.
+        renderPricesForce();
+        toast(moved
+          ? moved + ' price' + (moved === 1 ? '' : 's') + ' filled in — check them, then save'
+          : 'Those prices are the same as these', moved ? 'good' : null);
+        if (missing) {
+          toast(missing + ' tier' + (missing === 1 ? ' has' : 's have') + ' no match on that night', 'bad');
+        }
+      })
+      .catch(function (err) { toast(err.message, 'bad'); })
+      .finally(function () { btn.disabled = false; });
+  }
+
+  // Rebuild even with drafts pending — used right after something has
+  // deliberately changed them.
+  function renderPricesForce() {
+    var box = el('ad-prices');
+    box.innerHTML = '';
+    state.tiers.forEach(function (t) { box.appendChild(priceRow(t)); });
+    renderPriceFooter();
+  }
+
+  function resetPrices() {
+    state.priceDrafts = {};
+    renderPricesForce();
+  }
+
+  function toggleSoldOut(t, btn) {
+    btn.disabled = true;
+    call('set_sold_out', {
+      event_id: state.eventId,
+      property_id: t.property_id,
+      tier_code: t.code,
+      sold_out: !t.manually_sold_out,
+    })
+      .then(function (data) {
+        toast(String(t.label || t.code).split(/\s+—\s+/)[0] +
+          (data.sold_out ? ' called sold out' : ' back on sale'), 'good');
+        return loadList(true);
+      })
+      .catch(function (err) { toast(err.message, 'bad'); })
+      .finally(function () { btn.disabled = false; });
+  }
+
+  function applyPrices() {
+    var changed = dirtyTiers();
+    if (!changed.length) return;
+
+    // Check the lot before sending any of it. Half a price list is worse
+    // than none, and a typo is the likeliest thing to happen here.
+    var jobs = [];
+    for (var i = 0; i < changed.length; i++) {
+      var t = changed[i];
+      var raw = String(state.priceDrafts[t.code]).replace(/^\$/, '').trim();
+      var n = Number(raw);
+      var name = String(t.label || t.code).split(/\s+—\s+/)[0];
+      if (!raw || isNaN(n)) {
+        toast(name + ': "' + raw + '" is not a price', 'bad');
+        return;
+      }
+      var cents = Math.round(n * 100);
+      if (cents < 100 || cents > 50000) {
+        toast(name + ': a price has to be between $1 and $500', 'bad');
+        return;
+      }
+      jobs.push({ tier: t, cents: cents, name: name });
+    }
+
+    var btn = el('ad-price-apply');
+    btn.disabled = true;
+
+    var done = 0;
+    var failed = [];
+
+    var chain = jobs.reduce(function (p, job) {
+      return p.then(function () {
+        return call('set_price', {
+          event_id: state.eventId,
+          property_id: job.tier.property_id,
+          tier_code: job.tier.code,
+          price_cents: job.cents,
+        }).then(function () { done++; })
+          .catch(function (err) { failed.push(job.name + ': ' + err.message); });
+      });
+    }, Promise.resolve());
+
+    chain.then(function () {
+      state.priceDrafts = {};
+      return loadList(true);
+    }).then(function () {
+      if (failed.length) {
+        toast(failed[0], 'bad');
+      } else {
+        toast(done === 1 ? 'Price updated — it is live' : done + ' prices updated — they are live', 'good');
+      }
+    }).finally(function () { btn.disabled = false; });
+  }
+
+  function showTab(which) {
+    state.tab = which;
+    var gate = which === 'gate';
+    el('ad-panel-gate').hidden = !gate;
+    el('ad-panel-prices').hidden = gate;
+    el('ad-tab-gate').classList.toggle('is-on', gate);
+    el('ad-tab-prices').classList.toggle('is-on', !gate);
+    el('ad-tab-gate').setAttribute('aria-selected', String(gate));
+    el('ad-tab-prices').setAttribute('aria-selected', String(!gate));
+    if (!gate) renderPrices();
+  }
+
   /* -------------------------------------------------------- walk-up sale */
 
   function openSell() {
@@ -903,6 +1173,9 @@
     el('ad-unlock-form').addEventListener('submit', unlock);
 
     el('ad-event').addEventListener('change', function () {
+      // Prices typed for one night must never be saved against another.
+      if (dirtyTiers().length) toast('Unsaved prices dropped', 'bad');
+      state.priceDrafts = {};
       state.eventId = this.value;
       loadList();
     });
@@ -913,6 +1186,12 @@
     });
 
     el('ad-refresh').addEventListener('click', function () { loadList(); });
+
+    el('ad-tab-gate').addEventListener('click', function () { showTab('gate'); });
+    el('ad-tab-prices').addEventListener('click', function () { showTab('prices'); });
+    el('ad-copy-go').addEventListener('click', copyPrices);
+    el('ad-price-apply').addEventListener('click', applyPrices);
+    el('ad-price-reset').addEventListener('click', resetPrices);
 
     el('ad-over-toggle').addEventListener('click', function () {
       var body = el('ad-over-body');
