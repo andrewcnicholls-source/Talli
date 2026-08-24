@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/supabase-permissions.py\"",
+            "command": "python3 \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/supabase-permissions.py\"",
             "timeout": 10,
             "statusMessage": "Checking Supabase permission policy..."
           }
