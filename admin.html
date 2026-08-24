@@ -99,8 +99,22 @@
   <div id="ad-panel-prices" hidden>
     <div class="ad-price-head">
       <p class="ad-price-when" id="ad-price-when">—</p>
-      <p class="ad-price-live" id="ad-price-live"></p>
     </div>
+
+    <!-- What the public can see and do. Each rung is a different thing for
+         somebody looking at talli.co.nz, so the screen says which. -->
+    <section class="ad-pub">
+      <h3 class="ad-pub-title">On the website</h3>
+      <div class="ad-pub-ladder" id="ad-pub-ladder"></div>
+      <p class="ad-price-live" id="ad-price-live"></p>
+      <p class="ad-confirm" id="ad-pub-confirm" hidden></p>
+
+      <div class="ad-pub-cut">
+        <span class="ad-label">Online sales stop</span>
+        <p class="ad-pub-cut-now" id="ad-pub-cut-now">—</p>
+        <div class="ad-pub-cuts" id="ad-pub-cuts"></div>
+      </div>
+    </section>
 
     <!-- Most nights are last night with a different fixture on it. -->
     <div class="ad-copy">

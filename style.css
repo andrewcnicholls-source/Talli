@@ -1505,3 +1505,64 @@ footer a { color: var(--blue); }
 .ad-price-save { padding: 4px 16px 0; }
 .ad-price-save .btn { width: 100%; }
 .ad-price-note { padding: 0 16px 24px; }
+
+/* ---------- Gate: putting a fixture on the website ---------- */
+.ad-pub {
+  margin: 14px 16px 0;
+  padding: 13px 14px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--offwhite);
+}
+.ad-pub-title {
+  font-size: 0.74rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--grey);
+  font-weight: 500;
+  margin-bottom: 10px;
+}
+/* Four rungs, in the order they are climbed. */
+.ad-pub-ladder { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.ad-pub-rung {
+  font-family: var(--body);
+  font-size: 0.74rem;
+  padding: 9px 4px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--white);
+  color: var(--grey);
+  cursor: pointer;
+}
+.ad-pub-rung.is-on {
+  background: var(--blue);
+  border-color: var(--blue);
+  color: var(--white);
+  font-weight: 500;
+}
+/* Tapped once. The second tap is the one that does it. */
+.ad-pub-rung.is-armed {
+  border-color: var(--orange-flag);
+  color: var(--orange-flag);
+  background: #FFF4F0;
+  font-weight: 500;
+}
+.ad-pub .ad-price-live { margin-top: 10px; }
+.ad-pub .ad-confirm { text-align: left; margin-top: 8px; font-size: 0.86rem; }
+
+.ad-pub-cut { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.ad-pub-cut .ad-label { margin: 0 0 4px; }
+.ad-pub-cut-now { font-size: 0.86rem; margin-bottom: 9px; }
+.ad-pub-cuts { display: flex; flex-wrap: wrap; gap: 6px; }
+.ad-pub-cut-btn {
+  font-family: var(--body);
+  font-size: 0.74rem;
+  padding: 7px 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--white);
+  color: var(--ink);
+  cursor: pointer;
+}
+.ad-pub-cut-btn:hover { border-color: var(--blue); color: var(--blue); }
+.ad-pub-cut-btn:disabled { opacity: 0.5; }

@@ -228,7 +228,7 @@ Deno.serve(async (req) => {
       case 'events': {
         const { data, error } = await db
           .from('event')
-          .select('id, name, venue, starts_at, status')
+          .select('id, name, venue, starts_at, status, gates_open_at, online_sales_close_at')
           .order('starts_at', { ascending: true })
         if (error) throw error
         return json({ events: data })
@@ -601,6 +601,42 @@ Deno.serve(async (req) => {
           refund_by_hand: refundCents > 0 && !refundId,
           refund_id: refundId,
         })
+      }
+
+      // ------------------------------------------- putting it on the website
+
+      // draft → announced → on_sale → closed. Each state is a different
+      // thing for whoever is looking at the site, so the screen says which
+      // in plain words and this only carries it out.
+      //
+      // 'cancelled' is not settable here on purpose: calling a fixture off
+      // strands everyone who has paid, and that is a conversation with
+      // customers before it is a button on a phone.
+      case 'set_event_status': {
+        if (!eventId) return json({ error: 'event_id is required' }, 400)
+        const { data, error } = await db.rpc('set_event_status', {
+          p_event_id: eventId,
+          p_status: String(body.status ?? ''),
+        })
+        if (error) return json(named(error), 409)
+        return json({ ok: true, status: data })
+      }
+
+      // When online sales stop. Null reopens it until sold out. On the night
+      // this is the "we are gate-only now" lever, and it bites immediately —
+      // every tier reads zero spots the moment it passes.
+      case 'set_sales_close': {
+        if (!eventId) return json({ error: 'event_id is required' }, 400)
+        const at = body.at == null || body.at === '' ? null : String(body.at)
+        if (at !== null && isNaN(Date.parse(at))) {
+          return json({ error: 'at must be a timestamp, or null' }, 400)
+        }
+        const { data, error } = await db.rpc('set_event_sales_close', {
+          p_event_id: eventId,
+          p_at: at,
+        })
+        if (error) return json(named(error), 409)
+        return json({ ok: true, online_sales_close_at: data })
       }
 
       // ------------------------------------------------ the night's levers

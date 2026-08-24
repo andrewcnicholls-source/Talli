@@ -40,6 +40,9 @@
     // Which screen is showing, and prices typed but not yet saved.
     tab: 'gate',
     priceDrafts: {},
+    // The rung the publish ladder is waiting for a second tap on.
+    pubArmed: null,
+    summary: null,
   };
 
   function el(id) { return document.getElementById(id); }
@@ -134,18 +137,35 @@
 
   /* ------------------------------------------------------------- events */
 
-  function renderEvents() {
+  function fillEventSelect() {
     var sel = el('ad-event');
     sel.innerHTML = '';
     if (!state.events.length) {
       sel.appendChild(new Option('No events yet', ''));
-      return;
+      return false;
     }
     state.events.forEach(function (ev) {
       var label = asDate(ev.starts_at) + ' — ' + ev.name +
         (ev.status !== 'on_sale' ? ' (' + ev.status + ')' : '');
       sel.appendChild(new Option(label, ev.id));
     });
+    return true;
+  }
+
+  // After publishing, the fixture's own label changes. Redraw the list
+  // without moving off the event being worked on.
+  function refreshEvents() {
+    return call('events').then(function (data) {
+      state.events = data.events || [];
+      fillEventSelect();
+      el('ad-event').value = state.eventId;
+      renderPrices();
+    });
+  }
+
+  function renderEvents() {
+    if (!fillEventSelect()) return;
+    var sel = el('ad-event');
 
     // Default to the next event that has not finished yet; that is almost
     // always the one being worked.
@@ -167,6 +187,7 @@
         state.rows = data.rows || [];
         state.sites = data.sites || [];
         state.tiers = data.tiers || [];
+        state.summary = data.summary || null;
         renderSummary(data.summary);
         renderOverflow();
         renderList();
@@ -814,6 +835,141 @@
     return state.events.filter(function (e) { return e.id === state.eventId; })[0];
   }
 
+  // The four rungs, in the order they are climbed, each described by what it
+  // does to the page a customer is looking at rather than by its name in the
+  // database. 'cancelled' is not here on purpose — calling a fixture off
+  // strands everyone who has paid, and that is a phone call, not a button.
+  var LADDER = [
+    { status: 'draft', label: 'Hidden',
+      says: 'Nobody outside can see this fixture at all.' },
+    { status: 'announced', label: 'Taking names',
+      says: 'Listed but not bookable. People can leave an email to be told when it opens.' },
+    { status: 'on_sale', label: 'On sale',
+      says: 'Anyone can book it on the website, right now.' },
+    { status: 'closed', label: 'Closed',
+      says: 'Off the list. No new bookings online. Bookings already taken stand.' },
+  ];
+
+  function rung(status) {
+    return LADDER.filter(function (r) { return r.status === status; })[0];
+  }
+
+  function renderPublish() {
+    var ev = currentEvent();
+    var ladder = el('ad-pub-ladder');
+    ladder.innerHTML = '';
+
+    var live = el('ad-price-live');
+    if (!ev) {
+      text(live, 'No event chosen.');
+      live.className = 'ad-price-live';
+      hide(el('ad-pub-confirm'));
+      return;
+    }
+
+    LADDER.forEach(function (r) {
+      var on = ev.status === r.status;
+      var btn = make('button', 'ad-pub-rung' +
+        (on ? ' is-on' : '') + (state.pubArmed === r.status ? ' is-armed' : ''), r.label);
+      btn.type = 'button';
+      btn.addEventListener('click', function () { climbTo(r, ev); });
+      ladder.appendChild(btn);
+    });
+
+    var here = rung(ev.status);
+    text(live, here
+      ? here.says
+      : 'This fixture is ' + ev.status.replace(/_/g, ' ') + '.');
+    live.className = 'ad-price-live' + (ev.status === 'on_sale' ? '' : ' is-warn');
+
+    // Armed state does not survive a redraw of a different event.
+    if (state.pubArmed && state.pubArmed === ev.status) state.pubArmed = null;
+    if (!state.pubArmed) hide(el('ad-pub-confirm'));
+
+    renderCutOff(ev);
+  }
+
+  function climbTo(r, ev) {
+    if (ev.status === r.status) {           // already there
+      state.pubArmed = null;
+      renderPublish();
+      return;
+    }
+
+    if (state.pubArmed !== r.status) {      // first tap only arms it
+      state.pubArmed = r.status;
+      var warn = '';
+      // Taking a fixture off the website does not take anybody's space away,
+      // and saying so stops that being a worry at the wrong moment.
+      if ((r.status === 'draft' || r.status === 'closed') &&
+          state.summary && state.summary.total > 0) {
+        warn = ' ' + plural(state.summary.total, 'car') + ' already booked — they keep their spaces.';
+      }
+      text(el('ad-pub-confirm'), r.says + warn + ' Tap ' + r.label + ' again.');
+      show(el('ad-pub-confirm'));
+      renderPublish();
+      return;
+    }
+
+    state.pubArmed = null;
+    call('set_event_status', { event_id: state.eventId, status: r.status })
+      .then(function () {
+        toast(r.status === 'on_sale' ? 'On sale — it is bookable now' : 'Now ' + r.label.toLowerCase(), 'good');
+        return refreshEvents();
+      })
+      .catch(function (err) {
+        toast(err.code === 'NOTHING_TO_SELL'
+          ? 'No spots are set up for this fixture yet'
+          : err.message, 'bad');
+        renderPublish();
+      });
+  }
+
+  // The other half of the same question, and the one that gets used at 5pm:
+  // stop selling online, we are gate-only from here.
+  function renderCutOff(ev) {
+    var at = ev.online_sales_close_at ? new Date(ev.online_sales_close_at) : null;
+    var now = Date.now();
+
+    text(el('ad-pub-cut-now'), !at
+      ? 'No cut-off — open until sold out.'
+      : (at.getTime() <= now
+          ? 'Stopped ' + asTime(ev.online_sales_close_at) + ' — online booking is closed.'
+          : 'Stops ' + asTime(ev.online_sales_close_at) + ' on ' + asDate(ev.online_sales_close_at) + '.'));
+
+    var start = new Date(ev.starts_at).getTime();
+    var options = [
+      { label: 'Stop now', at: new Date().toISOString(),
+        said: 'Online sales stopped — gate only from here' },
+      { label: '2h before', at: new Date(start - 2 * 3600 * 1000).toISOString(),
+        said: 'Online sales stop two hours before kick-off' },
+      { label: 'At kick-off', at: new Date(start).toISOString(),
+        said: 'Online sales stop at kick-off' },
+      { label: 'No cut-off', at: null,
+        said: 'Online sales open again' },
+    ];
+
+    var box = el('ad-pub-cuts');
+    box.innerHTML = '';
+    options.forEach(function (o) {
+      var btn = make('button', 'ad-pub-cut-btn', o.label);
+      btn.type = 'button';
+      btn.addEventListener('click', function () { setCutOff(o, btn); });
+      box.appendChild(btn);
+    });
+  }
+
+  function setCutOff(o, btn) {
+    btn.disabled = true;
+    call('set_sales_close', { event_id: state.eventId, at: o.at })
+      .then(function () {
+        toast(o.said, 'good');
+        return refreshEvents();
+      })
+      .catch(function (err) { toast(err.message, 'bad'); })
+      .finally(function () { btn.disabled = false; });
+  }
+
   function renderPrices() {
     var box = el('ad-prices');
     if (!box) return;
@@ -823,16 +979,7 @@
       ? asDate(ev.starts_at) + ' — ' + ev.name
       : 'No event chosen');
 
-    var live = el('ad-price-live');
-    if (!ev || ev.status === 'on_sale') {
-      text(live, 'On the website now. A saved price is live the moment it lands.');
-      live.className = 'ad-price-live';
-    } else {
-      text(live, 'This event is ' + ev.status.replace(/_/g, ' ') +
-        ', so nothing here is on the website yet.');
-      live.className = 'ad-price-live is-warn';
-    }
-
+    renderPublish();
     renderCopyFrom();
 
     // Never rebuild over the top of someone typing.
@@ -1176,6 +1323,7 @@
       // Prices typed for one night must never be saved against another.
       if (dirtyTiers().length) toast('Unsaved prices dropped', 'bad');
       state.priceDrafts = {};
+      state.pubArmed = null;
       state.eventId = this.value;
       loadList();
     });
