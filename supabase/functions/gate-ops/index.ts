@@ -4,7 +4,8 @@
 //  Everything the person on the driveway needs: the arrivals list, ticking
 //  cars off as they turn in, handing over pre-purchased extras, selling a
 //  space to someone who just rolled up, moving a booked car out to overflow,
-//  and — new — keeping the night's capacity and prices honest as they move.
+//  keeping the night's capacity and prices honest as they move, sending a
+//  car to another address altogether, and calling a booking off.
 //
 //  All of it writes, so all of it runs under the service role here rather
 //  than being exposed through RLS.
@@ -14,6 +15,12 @@
 //  no login flow, no email round-trip. It is checked in constant time, and
 //  the function refuses to run at all if the secret is unset, so there is no
 //  quiet default-open state.
+//
+//  Two things are held to a higher bar than the rest, because they are the
+//  only ones that cannot be undone by tapping again: cancelling a booking,
+//  and sending money back. Both demand the passphrase a SECOND time, typed
+//  right then, on top of an explicit confirmation. An unlocked phone in
+//  somebody else's hand is not enough to lose a customer their space.
 // =====================================================================
 
 import { createClient } from 'jsr:@supabase/supabase-js@2'
@@ -57,20 +64,55 @@ const named = (err: { message?: string }) => ({
 
 type Row = Record<string, any>
 
+// Money leaving the account, one call, once. The idempotency key is built
+// from the booking and what is being done to it, so a double tap in a bad
+// signal spot cannot pay somebody twice.
+async function refundOnCard(
+  paymentIntentId: string,
+  amountCents: number,
+  idempotencyKey: string,
+): Promise<string> {
+  const key = Deno.env.get('STRIPE_SECRET_KEY')
+  if (!key) throw new Error('NO_STRIPE_KEY: card refunds are not configured')
+
+  const form = new URLSearchParams({
+    payment_intent: paymentIntentId,
+    amount: String(amountCents),
+  })
+
+  const res = await fetch('https://api.stripe.com/v1/refunds', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${key}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Idempotency-Key': idempotencyKey,
+    },
+    body: form,
+  })
+  const data = await res.json()
+  if (!res.ok) {
+    throw new Error('STRIPE_REFUSED: ' + (data?.error?.message ?? 'the refund did not go through'))
+  }
+  return String(data.id)
+}
+
 // Everything the gate screen draws, from one round trip. On a phone at the
 // end of a driveway, one request that sometimes carries a little too much
 // beats four that each might not arrive.
 async function nightState(eventId: string) {
-  const [listRes, capRes, tierRes] = await Promise.all([
+  const [listRes, capRes, tierRes, siteRes] = await Promise.all([
     db.from('v_gate_list').select('*').eq('event_id', eventId),
     db.from('v_night_capacity').select('*').eq('event_id', eventId)
       .order('exit_rank', { ascending: true }),
     db.from('v_tier_availability').select('*').eq('event_id', eventId)
       .order('sort_order', { ascending: true }),
+    db.from('v_overflow_site_status').select('*').eq('event_id', eventId)
+      .order('sort_order', { ascending: true }),
   ])
   if (listRes.error) throw listRes.error
   if (capRes.error) throw capRes.error
   if (tierRes.error) throw tierRes.error
+  if (siteRes.error) throw siteRes.error
 
   // Not yet arrived first — that is the working list. Within each group,
   // earliest arrival window first.
@@ -80,8 +122,16 @@ async function nightState(eventId: string) {
   })
 
   const zones = capRes.data ?? []
-  const paid = rows.filter((r: Row) => r.status === 'paid')
-  const value = (r: Row) => (r.amount_cents ?? 0) + (r.addons_cents ?? 0)
+  const sites = siteRes.data ?? []
+
+  // A car sent to somebody else's driveway is off the working list — it is
+  // not going to turn in, and its bay is back on sale — but the money is
+  // still ours unless it was handed back.
+  const here = rows.filter((r: Row) => r.status !== 'transferred')
+  const sent = rows.filter((r: Row) => r.status === 'transferred')
+  const paid = rows.filter((r: Row) => r.status === 'paid' || r.status === 'transferred')
+  const value = (r: Row) => (r.amount_cents ?? 0) + (r.addons_cents ?? 0) -
+    (r.transfer_refund_cents ?? 0)
 
   // What is still in the box. Counted across the whole event, because the
   // question at 5pm is "have I got enough ponchos", not "who bought them".
@@ -104,18 +154,26 @@ async function nightState(eventId: string) {
     rows,
     zones,
     tiers: tierRes.data ?? [],
+    sites,
     extras: [...extras.values()].sort((a, b) => a.name.localeCompare(b.name)),
     summary: {
-      total: rows.length,
-      arrived: rows.filter((r: Row) => r.arrived).length,
-      unpaid_holds: rows.filter((r: Row) => r.status === 'held').length,
+      total: here.length,
+      arrived: here.filter((r: Row) => r.arrived).length,
+      unpaid_holds: here.filter((r: Row) => r.status === 'held').length,
       // Spaces, not bookings. A valet car and a berm car both take one.
       capacity,
       filled,
       free: capacity - filled,
       lost: zones.reduce((n: number, z: Row) => n + z.lost, 0),
       opened: zones.reduce((n: number, z: Row) => n + z.opened, 0),
-      cash_due_cents: rows
+      // Sent elsewhere, and what the introductions are worth.
+      transferred: sent.length,
+      overflow_spots_left: sites
+        .filter((s: Row) => s.open)
+        .reduce((n: number, s: Row) => n + s.spots_left, 0),
+      referral_cents: sites.reduce((n: number, s: Row) => n + (s.referral_cents ?? 0), 0),
+      refunded_cents: sites.reduce((n: number, s: Row) => n + (s.refunded_cents ?? 0), 0),
+      cash_due_cents: here
         .filter((r: Row) => r.payment_method !== 'stripe' && !r.arrived)
         .reduce((sum: number, r: Row) => sum + value(r), 0),
       taken_cents: paid.reduce((sum: number, r: Row) => sum + value(r), 0),
@@ -154,6 +212,14 @@ Deno.serve(async (req) => {
 
   const action = String(body.action ?? '')
   const eventId = String(body.event_id ?? '')
+
+  // The second gate, for the two things that cannot be tapped back: losing
+  // somebody their space, and sending money out. The passphrase has to be
+  // typed again on the confirmation screen, and the screen has to say out
+  // loud that it means it.
+  const reauthorised = () =>
+    body.confirm === true &&
+    sameSecret(String(body.confirm_passphrase ?? ''), expected)
 
   try {
     switch (action) {
@@ -226,6 +292,9 @@ Deno.serve(async (req) => {
       // Nobody is asked to agree to this in advance any more, so nobody is
       // asked to confirm it here either. Standing in the driveway telling
       // someone where to put their car IS the conversation.
+      //
+      // Note this is OUR grass. Handing the car to another address is a
+      // transfer, below, and that is a different promise entirely.
       case 'move_to_overflow': {
         const id = String(body.booking_id ?? '')
         if (!id) return json({ error: 'booking_id is required' }, 400)
@@ -310,6 +379,228 @@ Deno.serve(async (req) => {
         }
 
         return json({ ok: true, booking_id: data })
+      }
+
+      // -------------------------------------------------- overflow areas
+
+      // The destinations and what each will take tonight.
+      case 'overflow_sites': {
+        if (!eventId) return json({ error: 'event_id is required' }, 400)
+        const { data, error } = await db
+          .from('v_overflow_site_status')
+          .select('*')
+          .eq('event_id', eventId)
+          .order('sort_order', { ascending: true })
+        if (error) throw error
+        return json({ sites: data })
+      }
+
+      // Tonight's limit for one destination, and whether it is taking cars
+      // at all. Separate from the standing arrangement, which does not move
+      // because somebody had people over on a Saturday.
+      case 'set_overflow_limit': {
+        const siteId = String(body.site_id ?? '')
+        if (!eventId || !siteId) {
+          return json({ error: 'event_id and site_id are required' }, 400)
+        }
+        const spots = body.spots == null ? null : Number(body.spots)
+        if (spots != null && (!Number.isInteger(spots) || spots < 0 || spots > 200)) {
+          return json({ error: 'spots must be a whole number between 0 and 200' }, 400)
+        }
+        const { data, error } = await db.rpc('set_event_overflow_limit', {
+          p_event_id: eventId,
+          p_site_id: siteId,
+          p_spots: spots,
+          p_open: body.open == null ? null : body.open === true,
+          p_note: body.note ? String(body.note) : null,
+        })
+        if (error) return json(named(error), 409)
+        return json({ ok: true, spots: data })
+      }
+
+      // Hand the car to another address. The bay here goes back on sale, the
+      // introduction is booked, and — where the destination takes the money
+      // at their own gate — what was paid here goes back.
+      //
+      // The customer has to have said yes to THIS, just now. Whatever they
+      // ticked when booking was about our overflow, not somebody else's
+      // driveway, so consent is asked for again and recorded separately.
+      case 'transfer': {
+        const id = String(body.booking_id ?? '')
+        const siteId = String(body.site_id ?? '')
+        if (!id || !siteId) {
+          return json({ error: 'booking_id and site_id are required' }, 400)
+        }
+        if (body.confirmed_consent !== true) {
+          return json({
+            error: 'Nobody has agreed to this move yet.',
+            code: 'CONSENT_REQUIRED',
+          }, 400)
+        }
+
+        const { data: booking, error: bErr } = await db
+          .from('booking')
+          .select('id, status, amount_cents, addons_cents, payment_method, stripe_payment_intent_id')
+          .eq('id', id)
+          .maybeSingle()
+        if (bErr) throw bErr
+        if (!booking) return json({ error: 'No such booking' }, 404)
+
+        const paidCents = (booking.amount_cents ?? 0) + (booking.addons_cents ?? 0)
+        const wantsRefund = body.refund === true
+        const refundCents = wantsRefund
+          ? Math.min(Number(body.refund_cents ?? paidCents), paidCents)
+          : 0
+
+        // Money going out is held to the same bar as a cancellation.
+        if (refundCents > 0 && !reauthorised()) {
+          return json({
+            error: 'Refunding needs the passphrase again.',
+            code: 'REAUTH_REQUIRED',
+          }, 401)
+        }
+
+        let refundId: string | null = null
+        if (refundCents > 0) {
+          if (booking.payment_method === 'stripe' && booking.stripe_payment_intent_id) {
+            try {
+              refundId = await refundOnCard(
+                booking.stripe_payment_intent_id,
+                refundCents,
+                `transfer:${id}:${refundCents}`,
+              )
+            } catch (err) {
+              return json(named(err as Error), 409)
+            }
+          }
+          // Anything paid in cash or by transfer is handed back by hand. The
+          // row records that it is owed; nothing here can move that money.
+        }
+
+        const { error: tErr } = await db.rpc('transfer_booking_to_site', {
+          p_booking_id: id,
+          p_site_id: siteId,
+          p_reason: body.reason ? String(body.reason) : null,
+          p_refund_cents: refundCents,
+          p_consent_confirmed: true,
+          p_stripe_refund_id: refundId,
+        })
+        if (tErr) {
+          // A refund that went through against a transfer that did not is
+          // worth shouting about — the money is gone and the booking still
+          // stands. Retrying is safe; the idempotency key holds.
+          if (refundId) console.error('refund landed but transfer failed', id, refundId)
+          return json({ ...named(tErr), refund_id: refundId }, 409)
+        }
+
+        const { data: site } = await db
+          .from('v_overflow_site_status')
+          .select('name, spots_left, referral_fee_cents')
+          .eq('event_id', eventId)
+          .eq('site_id', siteId)
+          .maybeSingle()
+
+        return json({
+          ok: true,
+          site: site?.name ?? 'overflow',
+          spots_left: site?.spots_left ?? null,
+          refunded_cents: refundCents,
+          refund_by_hand: refundCents > 0 && !refundId,
+          refund_id: refundId,
+        })
+      }
+
+      // They came back, or the neighbour waved them off. Puts the car back
+      // in the yard if there is anywhere left to put it. Money already
+      // handed back stays handed back — that is a separate conversation.
+      case 'undo_transfer': {
+        const id = String(body.booking_id ?? '')
+        if (!id) return json({ error: 'booking_id is required' }, 400)
+
+        const { data, error } = await db.rpc('undo_booking_transfer', { p_booking_id: id })
+        if (error) return json(named(error), 409)
+
+        let bayLabel: string | null = null
+        if (data) {
+          const { data: bay } = await db
+            .from('bay').select('label').eq('id', data).maybeSingle()
+          bayLabel = bay?.label ?? null
+        }
+        return json({ ok: true, bay_label: bayLabel, unplaced: !data })
+      }
+
+      // ------------------------------------------------------- cancelling
+
+      // The one action that takes a space away from somebody who paid for
+      // it. Passphrase again, an explicit confirm, and a row in
+      // booking_cancellation for every single one.
+      case 'cancel_booking': {
+        const id = String(body.booking_id ?? '')
+        if (!id) return json({ error: 'booking_id is required' }, 400)
+
+        if (!reauthorised()) {
+          return json({
+            error: 'Cancelling needs the passphrase again.',
+            code: 'REAUTH_REQUIRED',
+          }, 401)
+        }
+
+        const { data: booking, error: bErr } = await db
+          .from('booking')
+          .select('id, status, amount_cents, addons_cents, payment_method, stripe_payment_intent_id, vehicle_rego')
+          .eq('id', id)
+          .maybeSingle()
+        if (bErr) throw bErr
+        if (!booking) return json({ error: 'No such booking' }, 404)
+
+        const paidCents = (booking.amount_cents ?? 0) + (booking.addons_cents ?? 0)
+        const wantsRefund = body.refund === true
+        const refundCents = wantsRefund
+          ? Math.min(Number(body.refund_cents ?? paidCents), paidCents)
+          : 0
+
+        let refundId: string | null = null
+        let refundMethod = 'none'
+
+        if (refundCents > 0) {
+          if (booking.payment_method === 'stripe' && booking.stripe_payment_intent_id) {
+            try {
+              refundId = await refundOnCard(
+                booking.stripe_payment_intent_id,
+                refundCents,
+                `cancel:${id}:${refundCents}`,
+              )
+              refundMethod = 'stripe'
+            } catch (err) {
+              return json(named(err as Error), 409)
+            }
+          } else {
+            // Cash and bank transfers are handed back by hand. Recording it
+            // is the whole of what this can do.
+            refundMethod = booking.payment_method === 'bank_transfer' ? 'bank_transfer' : 'cash'
+          }
+        }
+
+        const { data, error } = await db.rpc('cancel_booking_admin', {
+          p_booking_id: id,
+          p_reason: body.reason ? String(body.reason) : null,
+          p_refund_cents: refundCents,
+          p_refund_method: refundMethod,
+          p_stripe_refund_id: refundId,
+          p_note: body.note ? String(body.note) : null,
+        })
+        if (error) {
+          if (refundId) console.error('refund landed but cancel failed', id, refundId)
+          return json({ ...named(error), refund_id: refundId }, 409)
+        }
+
+        return json({
+          ok: true,
+          status: data,
+          refunded_cents: refundCents,
+          refund_by_hand: refundCents > 0 && !refundId,
+          refund_id: refundId,
+        })
       }
 
       // ------------------------------------------------ the night's levers
