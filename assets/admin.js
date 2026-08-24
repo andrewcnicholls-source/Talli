@@ -5,6 +5,12 @@
    the first few characters of a plate, tap the row, the car is ticked off.
    Everything else is secondary.
 
+   Three things sit behind a second tap rather than on the row itself,
+   because none of them can be undone by tapping again: sending a car to
+   somebody else's address, giving money back, and cancelling a booking.
+   Those live in the ⋯ sheet, and the last two ask for the passphrase a
+   second time, typed there and then.
+
    All reads and writes go through the gate-ops edge function, which holds
    the passphrase check and the service-role credentials. Nothing here can
    reach the database on its own.
@@ -23,9 +29,14 @@
     events: [],
     eventId: null,
     rows: [],
+    sites: [],
     tiers: [],
     filter: '',
     busy: {},
+    // The booking the ⋯ sheet is about, and whether the cancel screen has
+    // been asked once already.
+    picked: null,
+    cancelArmed: false,
   };
 
   function el(id) { return document.getElementById(id); }
@@ -50,6 +61,9 @@
     if (isNaN(d)) return null;
     return d.toLocaleString('en-NZ', { timeZone: TZ, weekday: 'short', day: 'numeric', month: 'short' });
   }
+  function plural(n, word) { return n + ' ' + word + (n === 1 ? '' : 's'); }
+  function who(r) { return r.vehicle_rego || r.customer_name || 'this car'; }
+  function paidCents(r) { return (r.amount_cents || 0) + (r.addons_cents || 0); }
 
   function make(tag, cls, txt) {
     var n = document.createElement(tag);
@@ -148,8 +162,18 @@
     return call('list', { event_id: state.eventId })
       .then(function (data) {
         state.rows = data.rows || [];
+        state.sites = data.sites || [];
         renderSummary(data.summary);
+        renderOverflow();
         renderList();
+        // The sheet is showing a booking that has just been re-read; keep it
+        // honest rather than leaving a stale card open.
+        if (state.picked) {
+          var fresh = state.rows.filter(function (r) {
+            return r.booking_id === state.picked.booking_id;
+          })[0];
+          if (fresh && el('ad-actions').hidden === false) openActions(fresh);
+        }
       })
       .catch(function (err) { toast(err.message, 'bad'); })
       .finally(function () { el('ad-list').removeAttribute('aria-busy'); });
@@ -182,7 +206,11 @@
     var list = el('ad-list');
     list.innerHTML = '';
 
-    var rows = state.rows.filter(matches);
+    // Cars already sent elsewhere are not going to turn in here. They live in
+    // the overflow section instead, where they can be brought back.
+    var rows = state.rows.filter(function (r) {
+      return r.status !== 'transferred' && matches(r);
+    });
 
     if (!rows.length) {
       list.appendChild(make('p', 'ad-empty',
@@ -204,8 +232,8 @@
     if (r.bay_label) top.appendChild(make('span', 'ad-bay', r.bay_label));
     main.appendChild(top);
 
-    var who = [r.customer_name, r.customer_phone].filter(Boolean).join(' · ');
-    if (who) main.appendChild(make('div', 'ad-who', who));
+    var line = [r.customer_name, r.customer_phone].filter(Boolean).join(' · ');
+    if (line) main.appendChild(make('div', 'ad-who', line));
 
     var meta = make('div', 'ad-meta');
     if (r.tier_code) meta.appendChild(make('span', 'ad-chip', r.tier_code.replace(/_/g, ' ')));
@@ -222,7 +250,11 @@
       meta.appendChild(make('span', 'ad-chip is-cash', r.payment_method + ' ' + money(r.amount_cents)));
     }
     if (r.status === 'held') meta.appendChild(make('span', 'ad-chip is-warn', 'unpaid hold'));
-    if (r.accepts_street_parking && r.channel === 'online') {
+    // Two different facts, and they are worth keeping apart. One says the car
+    // is on the grass right now; the other only says they would not mind.
+    if (r.in_consent_zone) {
+      meta.appendChild(make('span', 'ad-chip is-over', 'in overflow'));
+    } else if (r.accepts_street_parking && r.channel === 'online') {
       meta.appendChild(make('span', 'ad-chip', 'overflow ok'));
     }
     main.appendChild(meta);
@@ -238,17 +270,13 @@
     btn.addEventListener('click', function () { toggleArrived(r, btn); });
     actions.appendChild(btn);
 
-    // Valet holds keys, so those cars are already movable by hand and do not
-    // need this. Anything already out on the verge has nowhere further to go.
-    var inOverflow = /overflow/i.test(String(r.zone_label || ''));
-    if (!inOverflow && r.tier_code !== 'valet') {
-      var move = make('button', 'ad-move', '\u2192 Overflow');
-      move.type = 'button';
-      move.title = 'Move this car to overflow and free its bay';
-      move.disabled = !!state.busy[r.booking_id];
-      move.addEventListener('click', function () { moveToOverflow(r, move); });
-      actions.appendChild(move);
-    }
+    // Everything that is not "wave them in" is one tap further away.
+    var more = make('button', 'ad-more', '⋯');
+    more.type = 'button';
+    more.title = 'Move, send elsewhere, or cancel';
+    more.setAttribute('aria-label', 'More for ' + who(r));
+    more.addEventListener('click', function () { openActions(r); });
+    actions.appendChild(more);
 
     card.appendChild(actions);
 
@@ -258,24 +286,28 @@
   // Moving a prepaid car out to the verge puts its bay back on sale. That is
   // the point: when there is a queue at the gate, a Standard sitting in the
   // back yard is worth more to you parked on the overflow.
+  //
+  // This is our own grass. Handing the car to another address is a transfer,
+  // further down, and that is a different conversation.
   function moveToOverflow(r, btn) {
-    var who = r.vehicle_rego || r.customer_name || 'this car';
+    var name = who(r);
 
     function go(confirmedConsent) {
       state.busy[r.booking_id] = true;
-      btn.disabled = true;
+      if (btn) btn.disabled = true;
       call('move_to_overflow', {
         booking_id: r.booking_id,
         confirmed_consent: confirmedConsent === true,
       })
         .then(function (data) {
-          toast(who + ' moved to ' + (data.moved_to || 'overflow'), 'good');
+          hide(el('ad-actions'));
+          toast(name + ' moved to ' + (data.moved_to || 'overflow'), 'good');
           return loadList(true);
         })
         .catch(function (err) {
           if (err.code === 'NEEDS_CONSENT' || /did not agree/.test(err.message)) {
             if (window.confirm(
-              who + ' did not tick the overflow box when booking.\n\n' +
+              name + ' did not tick the overflow box when booking.\n\n' +
               'Have they agreed to it just now?'
             )) {
               go(true);
@@ -287,7 +319,7 @@
         })
         .finally(function () {
           delete state.busy[r.booking_id];
-          btn.disabled = false;
+          if (btn) btn.disabled = false;
         });
     }
 
@@ -302,7 +334,7 @@
     call(action, { booking_id: r.booking_id })
       .then(function () {
         r.arrived = !r.arrived;
-        toast(r.vehicle_rego + (r.arrived ? ' ticked in' : ' un-ticked'), 'good');
+        toast(who(r) + (r.arrived ? ' ticked in' : ' un-ticked'), 'good');
         return loadList(true);
       })
       .catch(function (err) { toast(err.message, 'bad'); })
@@ -310,6 +342,439 @@
         delete state.busy[r.booking_id];
         btn.disabled = false;
       });
+  }
+
+  /* -------------------------------------------------- overflow & referrals */
+
+  // The separate section. A site is somewhere we do NOT hold bays for: we
+  // hand the car over, they decide where it goes, and each one is capped by
+  // what that address agreed to take tonight.
+  function renderOverflow() {
+    var wrap = el('ad-over');
+    if (!state.sites.length) { hide(wrap); return; }
+    show(wrap);
+
+    var open = state.sites.filter(function (s) { return s.open; });
+    var left = open.reduce(function (n, s) { return n + s.spots_left; }, 0);
+    var sent = state.rows.filter(function (r) { return r.status === 'transferred'; });
+
+    text(el('ad-over-badge'),
+      left + ' free' + (sent.length ? ' · ' + plural(sent.length, 'car') + ' sent' : ''));
+
+    var box = el('ad-over-sites');
+    box.innerHTML = '';
+    state.sites.forEach(function (s) { box.appendChild(siteCard(s)); });
+
+    var sentBox = el('ad-over-sent');
+    sentBox.innerHTML = '';
+    if (sent.length) {
+      sentBox.appendChild(make('h3', 'ad-over-sub', 'Sent tonight'));
+      sent.forEach(function (r) { sentBox.appendChild(sentCard(r)); });
+    }
+  }
+
+  function siteCard(s) {
+    var card = make('div', 'ad-site' + (s.open ? '' : ' is-shut'));
+
+    var top = make('div', 'ad-site-top');
+    top.appendChild(make('span', 'ad-site-name', s.name));
+
+    var toggle = make('button', 'ad-site-open' + (s.open ? ' is-on' : ''),
+      s.open ? 'Taking cars' : 'Closed');
+    toggle.type = 'button';
+    toggle.addEventListener('click', function () {
+      setLimit(s, { open: !s.open }, toggle);
+    });
+    top.appendChild(toggle);
+    card.appendChild(top);
+
+    var meta = make('div', 'ad-meta');
+    if (s.walk_minutes != null) meta.appendChild(make('span', 'ad-chip', s.walk_minutes + ' min walk'));
+    if (s.their_price_cents != null) {
+      meta.appendChild(make('span', 'ad-chip', money(s.their_price_cents) + ' there'));
+    }
+    meta.appendChild(make('span', 'ad-chip' + (s.referral_fee_cents ? ' is-cash' : ''),
+      s.customer_pays_site
+        ? (s.referral_fee_cents ? money(s.referral_fee_cents) + ' to us' : 'they keep it')
+        : 'we keep the money'));
+    card.appendChild(meta);
+
+    if (s.address) card.appendChild(make('div', 'ad-site-address', s.address));
+
+    var limit = make('div', 'ad-site-limit');
+
+    var down = make('button', 'ad-step', '−');
+    down.type = 'button';
+    down.disabled = s.spots <= s.sent;
+    down.title = 'One fewer car tonight';
+    down.addEventListener('click', function () { setLimit(s, { spots: s.spots - 1 }, down); });
+
+    var count = make('span', 'ad-site-count', s.sent + ' of ' + s.spots + ' sent');
+
+    var up = make('button', 'ad-step', '+');
+    up.type = 'button';
+    up.title = 'One more car tonight';
+    up.addEventListener('click', function () { setLimit(s, { spots: s.spots + 1 }, up); });
+
+    limit.appendChild(down);
+    limit.appendChild(count);
+    limit.appendChild(up);
+    card.appendChild(limit);
+
+    return card;
+  }
+
+  function sentCard(r) {
+    var card = make('div', 'ad-sent');
+
+    var main = make('div', 'ad-row-main');
+    main.appendChild(make('div', 'ad-rego', r.vehicle_rego || r.customer_name || '— no plate —'));
+    var meta = make('div', 'ad-meta');
+    meta.appendChild(make('span', 'ad-chip is-over', r.transfer_site_name || 'overflow'));
+    if (r.transferred_at) meta.appendChild(make('span', 'ad-chip', asTime(r.transferred_at)));
+    if (r.transfer_refund_cents) {
+      meta.appendChild(make('span', 'ad-chip is-cash', money(r.transfer_refund_cents) + ' back'));
+    }
+    main.appendChild(meta);
+    card.appendChild(main);
+
+    var back = make('button', 'ad-move', 'Bring back');
+    back.type = 'button';
+    back.disabled = !!state.busy[r.booking_id];
+    back.addEventListener('click', function () { undoTransfer(r, back); });
+    card.appendChild(back);
+
+    return card;
+  }
+
+  // Tonight only. The standing arrangement with that address does not move
+  // because somebody had people over on a Saturday.
+  function setLimit(s, change, btn) {
+    var params = Object.assign({ event_id: state.eventId, site_id: s.site_id }, change);
+    if (params.spots != null && params.spots < 0) return;
+    btn.disabled = true;
+    call('set_overflow_limit', params)
+      .then(function () { return loadList(true); })
+      .catch(function (err) { toast(err.message, 'bad'); })
+      .finally(function () { btn.disabled = false; });
+  }
+
+  function undoTransfer(r, btn) {
+    state.busy[r.booking_id] = true;
+    btn.disabled = true;
+    call('undo_transfer', { booking_id: r.booking_id })
+      .then(function (data) {
+        toast(data.unplaced
+          ? who(r) + ' is back, but there is no bay free for them'
+          : who(r) + ' is back in ' + data.bay_label, data.unplaced ? 'bad' : 'good');
+        return loadList(true);
+      })
+      .catch(function (err) { toast(err.message, 'bad'); })
+      .finally(function () {
+        delete state.busy[r.booking_id];
+        btn.disabled = false;
+      });
+  }
+
+  /* ---------------------------------------------------- one booking, close */
+
+  function fact(label, value, cls) {
+    var row = make('div', 'ad-fact' + (cls ? ' ' + cls : ''));
+    row.appendChild(make('span', 'ad-fact-key', label));
+    row.appendChild(make('span', 'ad-fact-val', value));
+    return row;
+  }
+
+  function openActions(r) {
+    state.picked = r;
+
+    text(el('ad-act-title'), r.vehicle_rego || r.customer_name || 'Booking');
+
+    var facts = el('ad-act-facts');
+    facts.innerHTML = '';
+    if (r.customer_name) facts.appendChild(fact('Name', r.customer_name));
+    if (r.customer_phone) facts.appendChild(fact('Phone', r.customer_phone));
+    facts.appendChild(fact('Spot', (r.tier_code || '—').replace(/_/g, ' ') +
+      (r.bay_label ? ' · ' + r.bay_label : '') + (r.zone_label ? ' · ' + r.zone_label : '')));
+    facts.appendChild(fact('Paid', money(paidCents(r)) + ' · ' +
+      String(r.payment_method || '').replace(/_/g, ' ')));
+
+    // The distinction the whole overflow idea rests on. Being willing is not
+    // the same as being parked there, and neither is the same as having been
+    // sent to someone else's address.
+    facts.appendChild(fact('Overflow',
+      r.accepts_street_parking ? 'Happy to go in an overflow area'
+        : 'Has not agreed to an overflow area',
+      r.accepts_street_parking ? '' : 'is-quiet'));
+    facts.appendChild(fact('Right now',
+      r.status === 'transferred'
+        ? 'Sent to ' + (r.transfer_site_name || 'another area')
+        : r.in_consent_zone ? 'Parked in ' + (r.zone_label || 'an overflow area')
+          : r.bay_label ? 'In the yard' : 'No bay held'));
+
+    var buttons = el('ad-act-buttons');
+    buttons.innerHTML = '';
+
+    if (r.status === 'transferred') {
+      var back = make('button', 'btn btn-outline', 'Bring them back here');
+      back.type = 'button';
+      back.addEventListener('click', function () {
+        hide(el('ad-actions'));
+        undoTransfer(r, back);
+      });
+      buttons.appendChild(back);
+    } else {
+      // Valet holds keys, so those cars are already movable by hand. Anything
+      // already out on the verge has nowhere further to go.
+      if (!r.in_consent_zone && r.tier_code !== 'valet') {
+        var move = make('button', 'btn btn-outline', 'Move to our overflow');
+        move.type = 'button';
+        move.addEventListener('click', function () { moveToOverflow(r, move); });
+        buttons.appendChild(move);
+      }
+
+      var away = make('button', 'btn btn-outline', 'Send to another area…');
+      away.type = 'button';
+      away.addEventListener('click', function () { openTransfer(r); });
+      buttons.appendChild(away);
+    }
+
+    var kill = make('button', 'ad-link is-danger', 'Cancel this booking…');
+    kill.type = 'button';
+    kill.addEventListener('click', function () { openCancel(r); });
+    buttons.appendChild(kill);
+
+    show(el('ad-actions'));
+  }
+
+  /* ------------------------------------------------ send them somewhere else */
+
+  function siteById(id) {
+    return state.sites.filter(function (s) { return s.site_id === id; })[0];
+  }
+
+  function openTransfer(r) {
+    state.picked = r;
+    hide(el('ad-actions'));
+
+    el('ad-transfer-form').reset();
+    hide(el('ad-tr-error'));
+    hide(el('ad-tr-pass-row'));
+
+    text(el('ad-tr-who'), who(r) + ' — ' + money(paidCents(r)) + ' paid here.');
+
+    var sel = el('ad-tr-site');
+    sel.innerHTML = '';
+    var usable = 0;
+    state.sites.forEach(function (s) {
+      var shut = !s.open || s.spots_left <= 0;
+      var opt = new Option(
+        s.name + (shut ? (s.open ? ' (full)' : ' (closed)') : ' — ' + s.spots_left + ' free'),
+        s.site_id);
+      opt.disabled = shut;
+      if (!shut) usable++;
+      sel.appendChild(opt);
+    });
+
+    // Whatever they ticked when booking was about OUR grass. Going to a
+    // different address is a fresh question, every time.
+    text(el('ad-tr-consent-label'), r.accepts_street_parking
+      ? 'They said yes to an overflow spot — and yes to this address just now'
+      : 'They have agreed to park at this address just now');
+
+    var first = state.sites.filter(function (s) { return s.open && s.spots_left > 0; })[0];
+    if (first) sel.value = first.site_id;
+    describeSite();
+
+    el('ad-tr-submit').disabled = usable === 0;
+    if (!usable) {
+      var box = el('ad-tr-error');
+      text(box, 'Nowhere is taking cars tonight. Open a site or lift a limit first.');
+      show(box);
+    }
+
+    show(el('ad-transfer'));
+  }
+
+  function describeSite() {
+    var s = siteById(el('ad-tr-site').value);
+    var r = state.picked;
+    if (!s || !r) return;
+
+    var bits = [];
+    if (s.address) bits.push(s.address);
+    if (s.walk_minutes != null) bits.push(s.walk_minutes + ' min walk');
+    if (s.their_price_cents != null) bits.push(money(s.their_price_cents) + ' to pay there');
+    if (s.referral_fee_cents) bits.push(money(s.referral_fee_cents) + ' back to us');
+    text(el('ad-tr-detail'), bits.join(' · '));
+
+    // Where they pay at the other gate, what they paid here normally goes
+    // back. Where we run the place ourselves, it does not.
+    var row = el('ad-tr-refund-row');
+    var box = el('ad-tr-refund');
+    if (paidCents(r) <= 0) {
+      hide(row);
+      box.checked = false;
+    } else {
+      show(row);
+      box.checked = !!s.customer_pays_site;
+      text(el('ad-tr-refund-label'), r.refundable_by_card
+        ? 'Put ' + money(paidCents(r)) + ' back on their card'
+        : 'Hand back the ' + money(paidCents(r)) + ' they paid');
+    }
+    refundToggled();
+  }
+
+  function refundToggled() {
+    var wants = el('ad-tr-refund').checked && !el('ad-tr-refund-row').hidden;
+    if (wants) { show(el('ad-tr-pass-row')); } else { hide(el('ad-tr-pass-row')); }
+  }
+
+  function submitTransfer(e) {
+    e.preventDefault();
+    var r = state.picked;
+    if (!r) return;
+
+    var box = el('ad-tr-error');
+    hide(box);
+
+    if (!el('ad-tr-consent').checked) {
+      text(box, 'Ask them first, then tick the box.');
+      show(box);
+      return;
+    }
+
+    var refund = el('ad-tr-refund').checked && !el('ad-tr-refund-row').hidden;
+    var pass = el('ad-tr-pass').value;
+    if (refund && !pass) {
+      text(box, 'Money is going back, so the passphrase is needed again.');
+      show(box);
+      return;
+    }
+
+    var btn = el('ad-tr-submit');
+    btn.disabled = true;
+
+    call('transfer', {
+      event_id: state.eventId,
+      booking_id: r.booking_id,
+      site_id: el('ad-tr-site').value,
+      reason: el('ad-tr-reason').value.trim() || null,
+      confirmed_consent: true,
+      refund: refund,
+      confirm: refund ? true : undefined,
+      confirm_passphrase: refund ? pass : undefined,
+    })
+      .then(function (data) {
+        hide(el('ad-transfer'));
+        state.picked = null;
+        var tail = data.refunded_cents
+          ? ' · ' + money(data.refunded_cents) + (data.refund_by_hand ? ' to hand back' : ' refunded')
+          : '';
+        toast(who(r) + ' sent to ' + data.site + tail, 'good');
+        return loadList(true);
+      })
+      .catch(function (err) {
+        text(box, err.code === 'REAUTH_REQUIRED' ? 'That passphrase did not match.' : err.message);
+        show(box);
+      })
+      .finally(function () { btn.disabled = false; });
+  }
+
+  /* ------------------------------------------------------------ cancelling */
+
+  function openCancel(r) {
+    state.picked = r;
+    state.cancelArmed = false;
+    hide(el('ad-actions'));
+
+    el('ad-cancel-form').reset();
+    hide(el('ad-cx-error'));
+    hide(el('ad-cx-confirm'));
+    hide(el('ad-cx-back'));
+    text(el('ad-cx-submit'), 'Cancel the booking');
+
+    text(el('ad-cx-who'), who(r) + ' — ' + (r.tier_code || '').replace(/_/g, ' ') +
+      (r.bay_label ? ' in ' + r.bay_label : '') + ', ' + money(paidCents(r)) + ' paid.');
+
+    var row = el('ad-cx-refund').parentNode;
+    if (paidCents(r) > 0) {
+      row.hidden = false;
+      el('ad-cx-refund').checked = true;
+      text(el('ad-cx-refund-label'), r.refundable_by_card
+        ? 'Put ' + money(paidCents(r)) + ' back on their card'
+        : 'Hand back the ' + money(paidCents(r)) + ' they paid');
+    } else {
+      row.hidden = true;
+      el('ad-cx-refund').checked = false;
+    }
+
+    show(el('ad-cancel'));
+  }
+
+  function submitCancel(e) {
+    e.preventDefault();
+    var r = state.picked;
+    if (!r) return;
+
+    var box = el('ad-cx-error');
+    hide(box);
+
+    var pass = el('ad-cx-pass').value;
+    if (!pass) {
+      text(box, 'The passphrase is needed to cancel.');
+      show(box);
+      return;
+    }
+
+    // First press only arms it. Nobody cancels a booking on one tap.
+    if (!state.cancelArmed) {
+      state.cancelArmed = true;
+      show(el('ad-cx-confirm'));
+      show(el('ad-cx-back'));
+      text(el('ad-cx-submit'), 'Yes, cancel it');
+      return;
+    }
+
+    var btn = el('ad-cx-submit');
+    btn.disabled = true;
+
+    var reason = el('ad-cx-reason').value;
+    var note = el('ad-cx-note').value.trim();
+
+    call('cancel_booking', {
+      event_id: state.eventId,
+      booking_id: r.booking_id,
+      reason: reason,
+      note: note || null,
+      refund: el('ad-cx-refund').checked && paidCents(r) > 0,
+      confirm: true,
+      confirm_passphrase: pass,
+    })
+      .then(function (data) {
+        hide(el('ad-cancel'));
+        state.picked = null;
+        state.cancelArmed = false;
+        var tail = data.refunded_cents
+          ? ' · ' + money(data.refunded_cents) + (data.refund_by_hand ? ' to hand back' : ' refunded')
+          : '';
+        toast(who(r) + ' cancelled' + tail, 'good');
+        return loadList(true);
+      })
+      .catch(function (err) {
+        state.cancelArmed = false;
+        hide(el('ad-cx-confirm'));
+        hide(el('ad-cx-back'));
+        text(el('ad-cx-submit'), 'Cancel the booking');
+        text(box, err.code === 'REAUTH_REQUIRED' ? 'That passphrase did not match.' : err.message);
+        show(box);
+      })
+      .finally(function () { btn.disabled = false; });
+  }
+
+  function standDownCancel() {
+    state.cancelArmed = false;
+    hide(el('ad-cancel'));
   }
 
   /* -------------------------------------------------------- walk-up sale */
@@ -384,7 +849,7 @@
     var sheet = el('ad-check');
     var list = el('ad-check-list');
     list.innerHTML = '';
-    text(el('ad-check-summary'), 'Checking\u2026');
+    text(el('ad-check-summary'), 'Checking…');
     el('ad-check-summary').className = 'ad-check-summary';
     sheet.hidden = false;
 
@@ -412,7 +877,7 @@
           var row = make('div', 'ad-check-row');
           var mark = make('span', 'ad-check-mark ' +
             (c.ok === true ? 'is-good' : c.ok === false ? 'is-bad' : 'is-unknown'),
-            c.ok === true ? '\u2713' : c.ok === false ? '\u2715' : '?');
+            c.ok === true ? '✓' : c.ok === false ? '✕' : '?');
           var body = make('span', 'ad-check-body');
           body.appendChild(make('span', 'ad-check-name', c.name));
           body.appendChild(make('span', 'ad-check-detail', c.detail));
@@ -431,6 +896,10 @@
   /* ------------------------------------------------------------------ init */
 
   function init() {
+    // Running against the test database looks exactly like running against
+    // the real one, right up until it matters. Say so.
+    if (CFG.isTest) show(el('ad-env'));
+
     el('ad-unlock-form').addEventListener('submit', unlock);
 
     el('ad-event').addEventListener('change', function () {
@@ -444,6 +913,28 @@
     });
 
     el('ad-refresh').addEventListener('click', function () { loadList(); });
+
+    el('ad-over-toggle').addEventListener('click', function () {
+      var body = el('ad-over-body');
+      var open = body.hidden;
+      body.hidden = !open;
+      this.setAttribute('aria-expanded', String(open));
+      el('ad-over').classList.toggle('is-open', open);
+    });
+
+    el('ad-act-close').addEventListener('click', function () {
+      state.picked = null;
+      hide(el('ad-actions'));
+    });
+
+    el('ad-tr-close').addEventListener('click', function () { hide(el('ad-transfer')); });
+    el('ad-tr-site').addEventListener('change', describeSite);
+    el('ad-tr-refund').addEventListener('change', refundToggled);
+    el('ad-transfer-form').addEventListener('submit', submitTransfer);
+
+    el('ad-cx-close').addEventListener('click', standDownCancel);
+    el('ad-cx-back').addEventListener('click', standDownCancel);
+    el('ad-cancel-form').addEventListener('submit', submitCancel);
 
     el('ad-sell-open').addEventListener('click', openSell);
     el('ad-check-open').addEventListener('click', openCheck);

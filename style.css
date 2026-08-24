@@ -1285,3 +1285,124 @@ footer a { color: var(--blue); }
   font-size: 0.8rem; color: var(--grey);
   margin-top: 16px; max-width: none;
 }
+
+/* ---------- Gate: test environment marker ---------- */
+/* The test project looks identical to the real one until it matters. */
+.ad-env {
+  font-size: 0.62rem; letter-spacing: 0.14em; text-transform: uppercase;
+  padding: 3px 8px; border-radius: 999px;
+  background: #C9942A; color: #24180A; font-weight: 500;
+  margin-left: 10px;
+}
+
+/* ---------- Gate: overflow & referrals ---------- */
+/* Its own section, because sending a car to another address is a different
+   promise from putting it in a bay, and it answers to somebody else's limit. */
+.ad-over {
+  margin: 0 16px 14px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--offwhite);
+  overflow: hidden;
+}
+.ad-over-head {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 12px 14px; background: none; border: none; cursor: pointer;
+  font-family: var(--body); text-align: left;
+}
+.ad-over-title {
+  flex: 1; font-size: 0.82rem; font-weight: 500;
+  letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink);
+}
+.ad-over-badge {
+  font-size: 0.74rem; color: var(--grey);
+  border: 1px solid var(--line); border-radius: 999px;
+  padding: 2px 9px; background: var(--white); white-space: nowrap;
+}
+.ad-over-caret { color: var(--grey); transition: transform 0.15s ease; }
+.ad-over.is-open .ad-over-caret { transform: rotate(180deg); }
+.ad-over-body { padding: 0 14px 14px; }
+.ad-over-sub {
+  font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--grey); font-weight: 500; margin: 16px 0 8px;
+}
+.ad-over-note { font-size: 0.76rem; color: var(--grey); margin-top: 12px; }
+
+.ad-site {
+  background: var(--white);
+  border: 1px solid var(--line); border-radius: 5px;
+  padding: 12px 13px; margin-bottom: 10px;
+}
+.ad-site.is-shut { opacity: 0.6; }
+.ad-site-top { display: flex; align-items: center; gap: 10px; }
+.ad-site-name { flex: 1; font-weight: 500; font-size: 0.95rem; }
+.ad-site-open {
+  font-family: var(--body); font-size: 0.72rem; letter-spacing: 0.04em;
+  padding: 4px 10px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--white); color: var(--grey);
+}
+.ad-site-open.is-on { border-color: #2F6B4F; color: #23503B; background: #EAF3EE; }
+.ad-site-address { font-size: 0.78rem; color: var(--grey); margin-top: 6px; }
+
+.ad-site-limit {
+  display: flex; align-items: center; gap: 12px;
+  margin-top: 11px; padding-top: 10px; border-top: 1px solid var(--line);
+}
+.ad-site-count { font-size: 0.86rem; font-variant-numeric: tabular-nums; }
+.ad-step {
+  width: 34px; height: 34px; flex: none;
+  border: 1px solid var(--line); border-radius: 5px; background: var(--white);
+  font-size: 1.1rem; line-height: 1; cursor: pointer; color: var(--ink);
+}
+.ad-step:disabled { opacity: 0.35; cursor: default; }
+
+.ad-sent {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--white); border: 1px solid var(--line);
+  border-left: 3px solid #C9942A; border-radius: 5px;
+  padding: 10px 12px; margin-bottom: 8px;
+}
+.ad-chip.is-over { color: #23503B; background: #EAF3EE; border-color: #CADFD2; }
+
+/* ---------- Gate: the ⋯ sheet ---------- */
+.ad-more {
+  width: 44px; height: 44px; flex: none;
+  border: 1px solid var(--line); border-radius: 6px; background: var(--white);
+  font-size: 1.15rem; line-height: 1; color: var(--grey); cursor: pointer;
+}
+.ad-more:hover { border-color: var(--blue); color: var(--blue); }
+
+.ad-facts { margin-bottom: 6px; }
+.ad-fact {
+  display: flex; gap: 12px; padding: 8px 0;
+  border-bottom: 1px solid var(--line); font-size: 0.9rem;
+}
+.ad-fact:last-child { border-bottom: none; }
+.ad-fact-key {
+  flex: none; width: 92px; color: var(--grey);
+  font-size: 0.74rem; letter-spacing: 0.08em; text-transform: uppercase;
+  padding-top: 3px;
+}
+.ad-fact-val { flex: 1; min-width: 0; }
+.ad-fact.is-quiet .ad-fact-val { color: var(--grey); }
+
+.ad-act-buttons { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
+.ad-act-buttons .btn { width: 100%; margin-top: 0; }
+.ad-link.is-danger { color: var(--orange-flag); border-bottom-color: var(--orange-flag); align-self: center; }
+
+/* ---------- Gate: transfer & cancel sheets ---------- */
+.ad-sheet-lead { font-size: 0.92rem; margin-bottom: 14px; }
+.ad-hint { font-size: 0.78rem; color: var(--grey); margin: 6px 0 4px; }
+.ad-sheet-card.is-danger { border-top: 3px solid var(--orange-flag); }
+.ad-warn {
+  font-size: 0.86rem; color: var(--orange-flag);
+  background: #FFF4F0; border-left: 3px solid var(--orange-flag);
+  padding: 10px 12px; border-radius: 4px; margin-bottom: 16px;
+}
+.ad-confirm {
+  font-size: 0.9rem; font-weight: 500; text-align: center;
+  color: var(--orange-flag); margin-top: 16px;
+}
+.btn-danger { background: var(--orange-flag); color: var(--white); border-color: var(--orange-flag); }
+.btn-danger:hover { background: #93401F; border-color: #93401F; }
+.ad-back { display: block; margin: 12px auto 0; }

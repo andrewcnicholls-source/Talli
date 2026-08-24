@@ -29,6 +29,7 @@
   <header class="ad-head">
     <div class="ad-head-top">
       <span class="ad-brand">talli<span>.</span> gate</span>
+      <span class="ad-env" id="ad-env" hidden>test data</span>
       <button type="button" class="ad-refresh" id="ad-refresh" aria-label="Refresh">↻</button>
     </div>
     <select id="ad-event" class="ad-select" aria-label="Event"></select>
@@ -50,6 +51,25 @@
   </div>
 
   <p class="ad-holds" id="ad-holds" hidden></p>
+
+  <!-- Somewhere else to put a car. Kept apart from the list on purpose: a
+       transfer is a different promise from a bay in the yard, and it is
+       capped by what each neighbour has agreed to take tonight. -->
+  <section class="ad-over" id="ad-over" hidden>
+    <button type="button" class="ad-over-head" id="ad-over-toggle" aria-expanded="false">
+      <span class="ad-over-title">Overflow &amp; referrals</span>
+      <span class="ad-over-badge" id="ad-over-badge">—</span>
+      <span class="ad-over-caret" aria-hidden="true">▾</span>
+    </button>
+    <div class="ad-over-body" id="ad-over-body" hidden>
+      <div id="ad-over-sites"></div>
+      <div id="ad-over-sent"></div>
+      <p class="ad-over-note">
+        A limit here is what that address will take tonight. It does not touch
+        the bays in the yard.
+      </p>
+    </div>
+  </section>
 
   <div class="ad-tools">
     <input type="search" id="ad-search" class="ad-search" placeholder="Plate, name or bay…"
@@ -116,6 +136,98 @@
     <p class="ad-check-note">Nothing secret is shown here &mdash; only whether each
       value is present and whether Stripe accepts it.</p>
   </div>
+</div>
+
+<!-- ---------------------------------------------- one booking, up close -->
+<div class="ad-sheet" id="ad-actions" hidden>
+  <div class="ad-sheet-card">
+    <div class="ad-sheet-head">
+      <h2 id="ad-act-title">Booking</h2>
+      <button type="button" class="ad-sheet-close" id="ad-act-close" aria-label="Close">&times;</button>
+    </div>
+    <div class="ad-facts" id="ad-act-facts"></div>
+    <div class="ad-act-buttons" id="ad-act-buttons"></div>
+  </div>
+</div>
+
+<!-- ------------------------------------------------ send them somewhere -->
+<div class="ad-sheet" id="ad-transfer" hidden>
+  <form class="ad-sheet-card" id="ad-transfer-form">
+    <div class="ad-sheet-head">
+      <h2>Send to another area</h2>
+      <button type="button" class="ad-sheet-close" id="ad-tr-close" aria-label="Close">&times;</button>
+    </div>
+
+    <p class="ad-sheet-lead" id="ad-tr-who"></p>
+
+    <label class="ad-label" for="ad-tr-site">Where to</label>
+    <select id="ad-tr-site" class="ad-select" required></select>
+    <p class="ad-hint" id="ad-tr-detail"></p>
+
+    <label class="ad-label" for="ad-tr-reason">Why <span>optional</span></label>
+    <input type="text" id="ad-tr-reason" class="ad-input" placeholder="Too low, arrived late, wants cheaper…">
+
+    <label class="ad-check">
+      <input type="checkbox" id="ad-tr-consent">
+      <span id="ad-tr-consent-label">They have agreed to park there</span>
+    </label>
+
+    <label class="ad-check" id="ad-tr-refund-row">
+      <input type="checkbox" id="ad-tr-refund">
+      <span id="ad-tr-refund-label">Give back what they paid here</span>
+    </label>
+
+    <div id="ad-tr-pass-row" hidden>
+      <label class="ad-label" for="ad-tr-pass">Passphrase <span>money is moving</span></label>
+      <input type="password" id="ad-tr-pass" class="ad-input" autocomplete="current-password">
+    </div>
+
+    <p class="ad-sheet-error" id="ad-tr-error" role="alert" hidden></p>
+
+    <button type="submit" class="btn btn-primary" id="ad-tr-submit">Send them</button>
+  </form>
+</div>
+
+<!-- ----------------------------------------------------- take it away -->
+<div class="ad-sheet" id="ad-cancel" hidden>
+  <form class="ad-sheet-card is-danger" id="ad-cancel-form">
+    <div class="ad-sheet-head">
+      <h2>Cancel this booking</h2>
+      <button type="button" class="ad-sheet-close" id="ad-cx-close" aria-label="Close">&times;</button>
+    </div>
+
+    <p class="ad-sheet-lead" id="ad-cx-who"></p>
+    <p class="ad-warn">Their space goes back on sale and they lose it. There is
+      no way to put this back from here.</p>
+
+    <label class="ad-label" for="ad-cx-reason">Reason</label>
+    <select id="ad-cx-reason" class="ad-select">
+      <option value="Customer asked to cancel">Customer asked to cancel</option>
+      <option value="Did not turn up">Did not turn up</option>
+      <option value="Duplicate booking">Duplicate booking</option>
+      <option value="Car would not fit">Car would not fit</option>
+      <option value="We could not take them">We could not take them</option>
+      <option value="Other">Other</option>
+    </select>
+
+    <label class="ad-label" for="ad-cx-note">Note <span>optional</span></label>
+    <input type="text" id="ad-cx-note" class="ad-input">
+
+    <label class="ad-check">
+      <input type="checkbox" id="ad-cx-refund">
+      <span id="ad-cx-refund-label">Refund what they paid</span>
+    </label>
+
+    <label class="ad-label" for="ad-cx-pass">Passphrase <span>type it again</span></label>
+    <input type="password" id="ad-cx-pass" class="ad-input" autocomplete="current-password" required>
+
+    <p class="ad-sheet-error" id="ad-cx-error" role="alert" hidden></p>
+
+    <p class="ad-confirm" id="ad-cx-confirm" hidden>Sure? Tap once more and it is done.</p>
+
+    <button type="submit" class="btn btn-danger" id="ad-cx-submit">Cancel the booking</button>
+    <button type="button" class="ad-link ad-back" id="ad-cx-back" hidden>No, leave it alone</button>
+  </form>
 </div>
 
 <div class="ad-toast" id="ad-toast" role="status" hidden></div>
