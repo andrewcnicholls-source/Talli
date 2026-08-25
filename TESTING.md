@@ -6,7 +6,7 @@ There are now two of everything. This file is the map.
 | -------------- | ----------------------------------- | ---------------------------------------- |
 | Site           | https://talli.co.nz                 | https://talli-test.netlify.app           |
 | Netlify project| `talliconz`                         | `talli-test`                             |
-| Git branch     | `main`                              | `staging`                                |
+| Git branch     | `main`                              | any branch you push                      |
 | Supabase       | `oxzwfemyavznykqixhvk`              | `uhdoverwvlxvyyctskle`                   |
 | Stripe         | live keys                           | test-mode keys — real Stripe, fake money |
 | Fixtures       | real                                | five, all named `TEST — …`               |
@@ -19,64 +19,118 @@ Breaking the test site cannot touch a real booking.
 
 ## Before anything works: one thing only you can do
 
-I could not link a GitHub repository to a Netlify project through the API,
-so this last step is yours. It takes about two minutes.
+A Netlify project cannot be linked to a GitHub repository through the API,
+and the token this tooling holds can read projects but not push deploys
+either — Netlify answers `403 Forbidden`. Re-confirmed on 25 Aug. So this
+step is yours, and until it is done the test site stays dark.
 
-All of this work is on the branch `claude/test-environment-setup-kaaudq`.
-The test site is meant to deploy from `staging`, so create that first:
-
-```bash
-git fetch origin
-git checkout -b staging origin/claude/test-environment-setup-kaaudq
-git push -u origin staging
-```
-
-(If you would rather look at it before creating another branch, just put
-`claude/test-environment-setup-kaaudq` in step 4 instead and rename later.)
-
-Then, in Netlify:
+It takes about two minutes, once, forever.
 
 1. Open https://app.netlify.com/projects/talli-test
 2. **Project configuration → Build & deploy → Link repository**
 3. Choose `andrewcnicholls-source/Talli`
-4. Set **Branch to deploy** to `staging`
-5. Leave build command and publish directory blank — `netlify.toml` sets them
-6. **Deploy**
+4. Set **Branch to deploy** to whichever branch you want at
+   `talli-test.netlify.app` — right now that is
+   `claude/parking-checkout-admin-rghtee`
+5. Set **Branch deploys** to **All**
+6. Leave build command and publish directory blank — `netlify.toml` sets them
+7. **Deploy**
 
-That is it. Everything else below is already built and tested.
+Step 5 is the one that matters. With branch deploys on *All*, every branch
+you push gets its own test URL automatically:
 
----
+```
+claude-parking-checkout-admin-rghtee--talli-test.netlify.app
+```
+
+No branch is special, and you never open this screen again.
+
+### Why there is no `staging` branch
+
+An earlier version of this file asked you to create one. It was never
+load-bearing. Which backend a page talks to is decided by **hostname**, in
+`assets/talli-config.js` — not by branch, not at build time:
+
+```js
+var PRODUCTION_HOSTS = [
+  'talli.co.nz',
+  'www.talli.co.nz',
+  'talliconz.netlify.app',
+];
+
+var host = (window.location.hostname || '').toLowerCase();
+var env = PRODUCTION_HOSTS.indexOf(host) !== -1 ? PRODUCTION : TEST;
+```
+
+Anything that is not one of those three hostnames gets the test database.
+`talli-test.netlify.app` does. So does every `…--talli-test.netlify.app`
+branch URL. A dedicated `staging` branch would have bought a fixed address
+for "what's next" at the cost of an extra merge on every change — worth it
+for a team who need one place to look, not for one person.
 
 ## How you work now
 
 ```
-       you edit here                    you merge here
-            │                                 │
-         staging  ──────────────────────────► main
-            │                                 │
-   talli-test.netlify.app              talli.co.nz
-   (fake fixtures, fake money)         (real customers)
+     you work on a branch              you merge when happy
+              │                                 │
+   any branch ──────────────────────────────► main
+              │                                 │
+  <branch>--talli-test.netlify.app        talli.co.nz
+  (fake fixtures, fake money)             (real customers)
 ```
 
 Day to day:
 
 ```bash
-git checkout staging
+git checkout -b try-a-price-ladder
 # ...make your change...
 git commit -am "Try a new price ladder"
-git push origin staging          # test site rebuilds in ~30s
+git push -u origin try-a-price-ladder   # test URL builds in ~30s
 ```
+
+Netlify prints the URL, and it is predictable: the branch name with `/` and
+other punctuation turned into `-`, then `--talli-test.netlify.app`.
 
 Look at it. Poke it. When you're happy:
 
 ```bash
 git checkout main
-git merge staging
-git push origin main             # now it's live
+git merge try-a-price-ladder
+git push origin main                    # now it's live
 ```
 
-If you hate it, `git checkout staging && git reset --hard main` and start
-again. Nothing you did was ever visible to a customer.
+If you hate it, delete the branch. Nothing you did was ever visible to a
+customer, and nothing needed unwinding.
+
+The branch set as **Branch to deploy** is the one that also answers at the
+bare `talli-test.netlify.app`. Point it at whatever you are living in.
+
+## What to exercise first
+
+The branch waiting on the test site adds pre-purchased extras and a set of
+controls for running the night. Worth walking once before an event rather
+than discovering it on a driveway:
+
+**On `/book.html`** — pick a night and a spot, and step 03 offers ponchos,
+earplugs and lolly bags. Check the running total honours the multi-buy: three
+pairs of earplugs should read **$8**, not $9. There is no longer a box asking
+the customer to agree to the overflow verge.
+
+**On `/admin.html`** — the *Tonight* tab is new.
+
+| Try | Expect |
+| --- | --- |
+| Tap `−` on a zone | a space is written off; the count and the online availability both drop |
+| Tap `+` past what you wrote off | a spare opens — the neighbour's berm lives here |
+| `−$5` / `+$5`, or tap a price | the sign in the driveway and the database agree again |
+| **Sold out** on Standard | walk-up jumps to Priority at the right price; online shows none left |
+| **Hand over** on a row with extras | the chips grey out and the "to hand over" count falls |
+
+A booking made with extras shows them on the arrivals row, so the person at
+the gate knows what to fetch.
+
+You do not need a Stripe key for any of this — see *Payments on the test
+site* below. The gate passphrase on test is `talli-test`.
 
 ---
 
@@ -221,7 +275,7 @@ lost, the site was not rebuildable.
 They are now in:
 
 ```
-supabase/migrations/      18 files, the full schema history
+supabase/migrations/      26 files, the full schema history
 supabase/functions/       create-checkout, stripe-webhook, gate-ops,
                           get-booking, register-interest, check-setup
 supabase/test-only/       the test-data reset script (never runs on prod)
@@ -231,6 +285,13 @@ Verified, not assumed: the test database was rebuilt from those files alone,
 and every one of columns, function bodies, RLS policies, indexes,
 constraints, view definitions and grants hashes **identical** to production.
 Three of the six functions deployed to a byte-identical bundle hash.
+
+**As of 25 Aug** there are 26 migrations — the extras, the night-capacity
+levers and the gate pricing controls were added on top — and all of them are
+applied to both projects. Five of the six functions now match byte for byte
+across test and production. The exception is `check-setup`: the test project
+runs a newer build than production, carrying the unset-`SITE_URL` fix. Worth
+deploying to production next time you are in there.
 
 ---
 
@@ -276,8 +337,10 @@ behaviour completely.
 - **Deploy the test site directly instead** — tried that as a way around the
   above, uploading the folder rather than linking the repo. Netlify answered
   `403 Forbidden`: the token this tooling holds can read projects but not
-  push deploys. So the six steps at the top really are the unlock, and the
-  test site stays dark until you do them.
+  push deploys. Tried again on 25 Aug with the same answer, and confirmed the
+  403 came from Netlify rather than any network in between. So the steps at
+  the top really are the unlock, and the test site stays dark until you do
+  them.
 - **Set Supabase secrets** — the tooling has no secrets API. Handled with
   test-project-only fallbacks in the functions, keyed on the project ref, so
   they are unreachable on production. Setting a real secret always wins.
