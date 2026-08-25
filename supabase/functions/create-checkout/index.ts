@@ -4,14 +4,16 @@
 //  Flow, and the order matters:
 //    1. hold_booking() allocates a real bay inside one transaction. If the
 //       yard is full it raises and we never touch Stripe.
-//    2. Only then do we create the Checkout Session, priced from the row the
-//       database just wrote.
-//    3. The session's expiry sits INSIDE the hold, so Stripe stops accepting
+//    2. add_booking_addons() prices any extras — server side, from the
+//       catalogue, never from the request body.
+//    3. Only then do we create the Checkout Session, priced from the rows
+//       the database just wrote.
+//    4. The session's expiry sits INSIDE the hold, so Stripe stops accepting
 //       payment before the sweeper can release the bay. A customer can never
 //       pay for a spot that has just been given away.
 //
-//  The price is read from the database, never from the request body. A browser
-//  does not get to choose what it pays.
+//  No price is ever sent from here. A browser does not get to choose what
+//  it pays — not for the bay, and not for a poncho.
 // =====================================================================
 
 import Stripe from 'https://esm.sh/stripe@18?target=denonext'
@@ -94,8 +96,8 @@ const SALE_ERRORS: Record<string, { status: number; message: string }> = {
   CONSENT_REQUIRED: {
     status: 409,
     message:
-      'The only space left is on the street verge. Tick "happy to park on the ' +
-      'verge" and try again.',
+      'The only space left is on the street verge, which we place by hand on ' +
+      'the night. Come to 86 Paice Ave and ask the marshal.',
   },
 }
 
@@ -139,6 +141,14 @@ Deno.serve(async (req) => {
     return json({ error: 'That email address does not look right' }, 400)
   }
 
+  // Extras arrive as {code, qty} and are taken no further than that. The
+  // database looks up what each code costs and how many one booking may have.
+  const addonsRequested = Array.isArray(body.addons)
+    ? (body.addons as Array<Record<string, unknown>>)
+        .map((a) => ({ code: String(a?.code ?? ''), qty: Number(a?.qty ?? 0) }))
+        .filter((a) => a.code && Number.isFinite(a.qty) && a.qty > 0)
+    : []
+
   // Only sell what is actually on sale. Draft and closed fixtures are invisible
   // to the public key anyway, but this function runs as service role, which
   // bypasses RLS — so check explicitly.
@@ -155,6 +165,10 @@ Deno.serve(async (req) => {
   }
 
   // ---- 1. Allocate a bay. Atomic: booking and allocation, or neither.
+  //
+  // Nothing is asked about the overflow verge any more. Where a car actually
+  // ends up is a judgement made in the driveway on the night, by someone
+  // standing next to it — not a checkbox ticked a fortnight earlier.
   const { data: bookingId, error: holdErr } = await db.rpc('hold_booking', {
     p_event_id: eventId,
     p_property_id: propertyId,
@@ -165,7 +179,7 @@ Deno.serve(async (req) => {
     p_rego: body.vehicle_rego ? String(body.vehicle_rego) : null,
     p_hold_minutes: HOLD_MINUTES,
     p_channel: 'online',
-    p_accepts_street: body.accepts_street_parking === true,
+    p_accepts_street: false,
     p_payment_method: 'stripe',
   })
 
@@ -177,15 +191,39 @@ Deno.serve(async (req) => {
     return json({ error: 'Could not hold a space just then' }, 500)
   }
 
-  // ---- 2. Read back what the database actually wrote. Price comes from here.
-  const { data: booking, error: bErr } = await db
-    .from('booking')
-    .select('id, amount_cents, currency, arrival_from, arrival_until, must_depart_by, tier_code')
-    .eq('id', bookingId)
-    .single()
+  // Give the bay back rather than leave it held for half an hour.
+  const abandon = async () => {
+    await db.rpc('release_booking', { p_booking_id: bookingId, p_status: 'cancelled' })
+  }
+
+  // ---- 2. Price the extras, if any.
+  if (addonsRequested.length) {
+    const { error: addonErr } = await db.rpc('add_booking_addons', {
+      p_booking_id: bookingId,
+      p_items: addonsRequested,
+      p_channel: 'online',
+    })
+    if (addonErr) {
+      console.error('add_booking_addons failed', addonErr)
+      await abandon()
+      return json({ error: 'We could not add those extras. Try again without them.' }, 400)
+    }
+  }
+
+  // ---- 3. Read back what the database actually wrote. Prices come from here.
+  const [{ data: booking, error: bErr }, { data: addonRows }] = await Promise.all([
+    db.from('booking')
+      .select('id, amount_cents, addons_cents, currency, arrival_from, arrival_until, must_depart_by, tier_code')
+      .eq('id', bookingId)
+      .single(),
+    db.from('booking_addon')
+      .select('code, name, qty, amount_cents')
+      .eq('booking_id', bookingId)
+      .order('code'),
+  ])
 
   if (bErr || !booking) {
-    await db.rpc('release_booking', { p_booking_id: bookingId, p_status: 'cancelled' })
+    await abandon()
     return json({ error: 'Could not read the booking back' }, 500)
   }
 
@@ -208,7 +246,7 @@ Deno.serve(async (req) => {
     ? `Arrive ${hhmm(booking.arrival_from)}–${hhmm(booking.arrival_until)}`
     : null
   const departure = booking.must_depart_by
-    ? `You must be away by ${hhmm(booking.must_depart_by)}`
+    ? `Back at your car by ${hhmm(booking.must_depart_by)}`
     : null
 
   const description = [
@@ -218,11 +256,42 @@ Deno.serve(async (req) => {
     departure,
   ].filter(Boolean).join(' · ')
 
+  const currency = booking.currency ?? 'nzd'
+
+  // One line per item at quantity 1, carrying the count in the name. Bundle
+  // pricing means unit × qty does not equal what is owed — "2 for $5" is not
+  // expressible as a Stripe unit price — so the line total is the honest one.
+  const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = [{
+    quantity: 1,
+    price_data: {
+      currency,
+      unit_amount: booking.amount_cents,   // <- from the database, always
+      product_data: {
+        name: `${tier?.label ?? tierCode} — ${ev.name}`,
+        description: description || undefined,
+      },
+    },
+  }]
+
+  for (const line of addonRows ?? []) {
+    lineItems.push({
+      quantity: 1,
+      price_data: {
+        currency,
+        unit_amount: line.amount_cents,
+        product_data: {
+          name: line.qty > 1 ? `${line.name} × ${line.qty}` : line.name,
+          description: 'Collect from the marshal when you arrive',
+        },
+      },
+    })
+  }
+
   // ---- 3a. TEST ONLY: stand in for the entire Stripe round-trip.
   // Writes a recognisable fake session id, confirms the booking exactly as
   // the webhook would, and hands back the same confirmation URL the real
   // flow uses — so every screen after this point is still exercised for
-  // real. Unreachable on production: see IS_TEST above.
+  // real, extras included. Unreachable on production: see IS_TEST above.
   if (stubPayments) {
     const fakeSession = `cs_test_stub_${crypto.randomUUID().replace(/-/g, '')}`
     await db.from('booking')
@@ -232,7 +301,8 @@ Deno.serve(async (req) => {
       p_booking_id: bookingId,
       p_payment_intent_id: `pi_test_stub_${fakeSession.slice(-12)}`,
     })
-    console.log('stubbed payment for booking', bookingId)
+    console.log('stubbed payment for booking', bookingId,
+      'with', (addonRows ?? []).length, 'extras')
     return json({
       url: `${SITE_URL}/booking-confirmed.html?session_id=${fakeSession}`,
       booking_id: bookingId,
@@ -240,7 +310,7 @@ Deno.serve(async (req) => {
     })
   }
 
-  // ---- 3. Create the session, expiring inside the hold.
+  // ---- 4. Create the session, expiring inside the hold.
   const expiresAt = Math.floor(Date.now() / 1000) + SESSION_MINUTES * 60
 
   try {
@@ -248,17 +318,7 @@ Deno.serve(async (req) => {
       mode: 'payment',
       customer_email: email,
       expires_at: expiresAt,
-      line_items: [{
-        quantity: 1,
-        price_data: {
-          currency: booking.currency ?? 'nzd',
-          unit_amount: booking.amount_cents,   // <- from the database, always
-          product_data: {
-            name: `${tier?.label ?? tierCode} — ${ev.name}`,
-            description: description || undefined,
-          },
-        },
-      }],
+      line_items: lineItems,
       // Session metadata does NOT reach the PaymentIntent; set both, so a
       // refund or dispute months later still points at the booking.
       metadata: {
@@ -280,10 +340,9 @@ Deno.serve(async (req) => {
 
     return json({ url: session.url, booking_id: bookingId, expires_at: expiresAt })
   } catch (err) {
-    // Stripe refused. Give the bay straight back rather than let it sit held
-    // for half an hour.
+    // Stripe refused.
     console.error('stripe session failed', err)
-    await db.rpc('release_booking', { p_booking_id: bookingId, p_status: 'cancelled' })
+    await abandon()
     return json({ error: 'Could not start checkout just then' }, 502)
   }
 })

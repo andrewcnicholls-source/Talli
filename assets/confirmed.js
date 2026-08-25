@@ -67,6 +67,24 @@
     return wrap;
   }
 
+  // Named on the page so they know to ask for them — and know they are not
+  // paying twice.
+  function renderExtras(lines) {
+    var box = el('cf-extras');
+    var list = el('cf-extras-list');
+    list.innerHTML = '';
+    if (!lines.length) {
+      hide(box);
+      return;
+    }
+    lines.forEach(function (line) {
+      var li = document.createElement('li');
+      li.textContent = line.qty > 1 ? line.name + ' \u00d7 ' + line.qty : line.name;
+      list.appendChild(li);
+    });
+    show(box);
+  }
+
   function render(b) {
     var settled = b.status === 'paid' || b.status === 'checked_in';
 
@@ -97,8 +115,12 @@
       ),
       row('Back by', b.must_depart_by ? asTime(b.must_depart_by) : null),
       row('Vehicle', b.vehicle_rego),
-      row('Paid', b.amount_cents != null ? money(b.amount_cents) : null),
+      row('Paid', b.amount_cents != null
+        ? money(b.amount_cents + (b.addons_cents || 0))
+        : null),
     ].forEach(function (r) { if (r) details.appendChild(r); });
+
+    renderExtras(b.addons || []);
 
     var pending = el('cf-pending');
     if (settled) hide(pending); else show(pending);

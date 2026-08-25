@@ -52,8 +52,8 @@ Deno.serve(async (req) => {
   const { data: booking, error } = await db
     .from('booking')
     .select(
-      'id, status, tier_code, customer_name, vehicle_rego, amount_cents, currency, ' +
-      'arrival_from, arrival_until, must_depart_by, event_id, property_id',
+      'id, status, tier_code, customer_name, vehicle_rego, amount_cents, addons_cents, ' +
+      'currency, arrival_from, arrival_until, must_depart_by, event_id, property_id',
     )
     .eq('stripe_checkout_session_id', sessionId)
     .maybeSingle()
@@ -64,12 +64,15 @@ Deno.serve(async (req) => {
   }
   if (!booking) return json({ error: 'No booking found for that session' }, 404)
 
-  const [{ data: ev }, { data: property }, { data: tier }] = await Promise.all([
-    db.from('event').select('name, venue, starts_at').eq('id', booking.event_id).maybeSingle(),
-    db.from('property').select('name, address, walk_minutes').eq('id', booking.property_id)
-      .maybeSingle(),
-    db.from('offer_tier').select('label').eq('code', booking.tier_code).limit(1).maybeSingle(),
-  ])
+  const [{ data: ev }, { data: property }, { data: tier }, { data: addons }] =
+    await Promise.all([
+      db.from('event').select('name, venue, starts_at').eq('id', booking.event_id).maybeSingle(),
+      db.from('property').select('name, address, walk_minutes').eq('id', booking.property_id)
+        .maybeSingle(),
+      db.from('offer_tier').select('label').eq('code', booking.tier_code).limit(1).maybeSingle(),
+      db.from('booking_addon').select('code, name, qty, amount_cents')
+        .eq('booking_id', booking.id).order('code'),
+    ])
 
   return json({
     // Short enough to read down the phone, long enough not to collide.
@@ -79,6 +82,10 @@ Deno.serve(async (req) => {
     customer_name: booking.customer_name,
     vehicle_rego: booking.vehicle_rego,
     amount_cents: booking.amount_cents,
+    addons_cents: booking.addons_cents ?? 0,
+    // Named on the page so the customer knows to ask for them, and knows
+    // they are already paid for.
+    addons: addons ?? [],
     currency: booking.currency,
     arrival_from: booking.arrival_from,
     arrival_until: booking.arrival_until,

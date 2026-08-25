@@ -31,38 +31,86 @@
 <!-- ---------------------------------------------------------- the screen -->
 <div id="ad-app" hidden>
 
-  <header class="ad-head">
+  <header class="ad-head" id="ad-head">
     <div class="ad-head-top">
       <span class="ad-brand">talli<span>.</span> gate</span>
       <button type="button" class="ad-refresh" id="ad-refresh" aria-label="Refresh">↻</button>
     </div>
     <select id="ad-event" class="ad-select" aria-label="Event"></select>
+
+    <nav class="ad-tabs" role="tablist">
+      <button type="button" class="ad-tab is-on" id="ad-tab-gate"
+              role="tab" aria-selected="true" aria-controls="ad-pane-gate">Arrivals</button>
+      <button type="button" class="ad-tab" id="ad-tab-night"
+              role="tab" aria-selected="false" aria-controls="ad-pane-night">Tonight</button>
+    </nav>
   </header>
 
-  <div class="ad-stats">
-    <div class="ad-stat">
-      <span class="ad-stat-num" id="ad-stat-arrived">—</span>
-      <span class="ad-stat-key">arrived</span>
-    </div>
-    <div class="ad-stat">
-      <span class="ad-stat-num" id="ad-stat-taken">—</span>
-      <span class="ad-stat-key">prepaid</span>
-    </div>
-    <div class="ad-stat">
-      <span class="ad-stat-num" id="ad-stat-due">—</span>
-      <span class="ad-stat-key">to collect</span>
-    </div>
-  </div>
+  <!-- ------------------------------------------------------ the arrivals -->
+  <section id="ad-pane-gate" role="tabpanel" aria-labelledby="ad-tab-gate">
 
-  <p class="ad-holds" id="ad-holds" hidden></p>
+    <div class="ad-stats">
+      <div class="ad-stat">
+        <span class="ad-stat-num" id="ad-stat-arrived">—</span>
+        <span class="ad-stat-key">arrived</span>
+      </div>
+      <div class="ad-stat">
+        <span class="ad-stat-num" id="ad-stat-free">—</span>
+        <span class="ad-stat-key">spaces free</span>
+      </div>
+      <div class="ad-stat">
+        <span class="ad-stat-num" id="ad-stat-taken">—</span>
+        <span class="ad-stat-key">taken</span>
+      </div>
+    </div>
 
-  <div class="ad-tools">
-    <input type="search" id="ad-search" class="ad-search" placeholder="Plate, name or bay…"
-           autocomplete="off" autocapitalize="characters" spellcheck="false">
-    <button type="button" class="ad-sell-open" id="ad-sell-open">+ Walk-up</button>
-  </div>
+    <p class="ad-holds" id="ad-holds" hidden></p>
 
-  <div class="ad-list" id="ad-list"></div>
+    <div class="ad-tools">
+      <input type="search" id="ad-search" class="ad-search" placeholder="Plate, name or bay…"
+             autocomplete="off" autocapitalize="characters" spellcheck="false">
+      <button type="button" class="ad-sell-open" id="ad-sell-open">+ Walk-up</button>
+    </div>
+
+    <div class="ad-list" id="ad-list"></div>
+  </section>
+
+  <!-- --------------------------------------------------- tonight's state -->
+  <section id="ad-pane-night" role="tabpanel" aria-labelledby="ad-tab-night" hidden>
+
+    <div class="ad-board">
+      <div class="ad-board-fill">
+        <span class="ad-board-num" id="ad-board-filled">—</span>
+        <span class="ad-board-of">of <span id="ad-board-capacity">—</span> spaces filled</span>
+        <div class="ad-bar"><span class="ad-bar-fill" id="ad-board-bar"></span></div>
+        <span class="ad-board-note" id="ad-board-note"></span>
+      </div>
+    </div>
+
+    <!-- ---------------------------------------------------------- spaces -->
+    <h2 class="ad-section">Spaces</h2>
+    <p class="ad-section-note">
+      Lost one to a bad park? Tap &minus;. Squeezed one in, or the neighbour waved
+      you on? Tap +. Both take effect straight away, online as well as here.
+    </p>
+    <div class="ad-zones" id="ad-zones"></div>
+
+    <!-- ---------------------------------------------------------- prices -->
+    <h2 class="ad-section">Prices &amp; what&rsquo;s left</h2>
+    <p class="ad-section-note">
+      Match this to whichever cards are on the sign. Changing a price never
+      touches a booking already taken.
+    </p>
+    <div class="ad-prices" id="ad-prices"></div>
+
+    <!-- ---------------------------------------------------------- extras -->
+    <h2 class="ad-section">Extras to hand over</h2>
+    <div class="ad-extras" id="ad-extras"></div>
+
+    <!-- ----------------------------------------------------------- money -->
+    <h2 class="ad-section">Money</h2>
+    <div class="ad-money" id="ad-money"></div>
+  </section>
 
   <p class="ad-foot">
     Refreshes on its own every 30 seconds.<br>
@@ -78,8 +126,8 @@
       <button type="button" class="ad-sheet-close" id="ad-sell-close" aria-label="Close">×</button>
     </div>
 
-    <label class="ad-label" for="ad-sell-tier">Spot</label>
-    <select id="ad-sell-tier" name="tier" class="ad-select" required></select>
+    <label class="ad-label">Spot</label>
+    <div class="ad-pick" id="ad-sell-tiers"></div>
 
     <label class="ad-label" for="ad-sell-rego">License plate <span>optional</span></label>
     <input type="text" id="ad-sell-rego" name="rego" class="ad-input"
@@ -91,6 +139,9 @@
       <option value="cash">Cash</option>
       <option value="bank_transfer">Bank transfer</option>
     </select>
+
+    <label class="ad-label">Extras <span>optional</span></label>
+    <div class="ad-sell-extras" id="ad-sell-extras"></div>
 
     <div class="ad-sheet-row">
       <div>
@@ -106,6 +157,24 @@
     <p class="ad-sheet-error" id="ad-sell-error" role="alert" hidden></p>
 
     <button type="submit" class="btn btn-primary" id="ad-sell-submit">Take the money</button>
+  </form>
+</div>
+
+<!-- ------------------------------------------------------ set a price -->
+<div class="ad-sheet" id="ad-price" hidden>
+  <form class="ad-sheet-card" id="ad-price-form">
+    <div class="ad-sheet-head">
+      <h2 id="ad-price-title">Set the price</h2>
+      <button type="button" class="ad-sheet-close" id="ad-price-close" aria-label="Close">×</button>
+    </div>
+    <label class="ad-label" for="ad-price-input">What the card in the driveway says</label>
+    <div class="ad-price-entry">
+      <span>$</span>
+      <input type="number" id="ad-price-input" class="ad-input" inputmode="numeric"
+             min="1" max="500" step="1" required>
+    </div>
+    <p class="ad-sheet-error" id="ad-price-error" role="alert" hidden></p>
+    <button type="submit" class="btn btn-primary" id="ad-price-submit">Set it</button>
   </form>
 </div>
 

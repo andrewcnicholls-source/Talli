@@ -64,10 +64,24 @@
       <button type="button" class="bk-more" id="bk-more-toggle" aria-expanded="false" hidden>More options</button>
     </section>
 
-    <!-- ---------------------------------------------- step 3: the details -->
-    <section class="bk-step" id="bk-details" aria-labelledby="bk-h-details" hidden>
+    <!-- ----------------------------------------------- step 3: the extras -->
+    <section class="bk-step" id="bk-extras-step" aria-labelledby="bk-h-extras" hidden>
       <div class="bk-step-head">
         <span class="bk-step-num">03</span>
+        <h2 id="bk-h-extras">Anything else?</h2>
+      </div>
+      <p class="bk-step-note">
+        Worth deciding now rather than in the rain. Add them here and they&rsquo;ll be
+        waiting when you pull in &mdash; no cash, no queue. Skip straight past if you&rsquo;re sorted.
+      </p>
+
+      <div class="bk-extras" id="bk-extras"></div>
+    </section>
+
+    <!-- ---------------------------------------------- step 4: the details -->
+    <section class="bk-step" id="bk-details" aria-labelledby="bk-h-details" hidden>
+      <div class="bk-step-head">
+        <span class="bk-step-num">04</span>
         <h2 id="bk-h-details">Your details</h2>
       </div>
 
@@ -75,6 +89,11 @@
         <div class="bk-summary-line">
           <span class="bk-summary-tier" id="bk-summary-tier"></span>
           <span class="bk-summary-price" id="bk-summary-price"></span>
+        </div>
+        <div class="bk-summary-extras" id="bk-summary-extras" hidden></div>
+        <div class="bk-summary-total" id="bk-summary-total" hidden>
+          <span>Total</span>
+          <strong id="bk-summary-total-price"></strong>
         </div>
         <div class="bk-summary-meta" id="bk-summary-event"></div>
         <div class="bk-summary-meta" id="bk-summary-arrival" hidden></div>
@@ -104,18 +123,15 @@
           </div>
         </div>
 
-        <label class="bk-check" id="bk-street-row">
-          <input type="checkbox" id="bk-street" name="accepts_street">
-          <span>I&rsquo;m happy to go in the overflow area &mdash; the grass verge by the road &mdash; if that&rsquo;s what&rsquo;s left.</span>
-        </label>
-
         <p class="bk-error" id="bk-error" role="alert" hidden></p>
 
         <button type="submit" class="btn btn-primary bk-submit" id="bk-submit">Continue to payment</button>
 
         <p class="bk-fineprint">
           You&rsquo;ll be taken to Stripe to pay by card. Your bay is held while you check out.
-          Your vehicle needs a current WOF and registration. By booking you agree to our
+          A marshal will show you where to park on the night &mdash; on a full night that
+          can mean the overflow area on the verge. Your vehicle needs a current WOF and
+          registration. By booking you agree to our
           <a href="terms.html">terms &amp; conditions</a>.
         </p>
       </form>
@@ -138,46 +154,10 @@
   <div style="margin-top:40px;">
     <div class="section-label">On The Night</div>
     <h2>Matchday essentials</h2>
-    <p>A few things we keep on hand, available for purchase when you arrive — cash or bank transfer.</p>
+    <p>Add any of these to your booking above and they&rsquo;ll be handed over when you arrive.
+       We also carry them on the night &mdash; cash or bank transfer &mdash; but we do run out.</p>
 
-    <div class="merch-grid">
-      <div class="merch-item">
-        <div class="merch-photo">
-          <img src="assets/poncho.jpg" alt="Lightweight Poncho" style="width: 100%; height: 100%; object-fit: cover;">
-        </div>
-        <div class="merch-body">
-          <h3>Lightweight Poncho (Adult)</h3>
-          <p>$5 each</p>
-        </div>
-      </div>
-      <div class="merch-item">
-        <div class="merch-photo">
-          <img src="assets/child-poncho.jpg" alt="Child Poncho" style="width: 100%; height: 100%; object-fit: cover;">
-        </div>
-        <div class="merch-body">
-          <h3>Child Poncho</h3>
-          <p>$5 each</p>
-        </div>
-      </div>
-      <div class="merch-item">
-        <div class="merch-photo">
-          <img src="assets/earplugs.jpg" alt="Ear Plugs" style="width: 100%; height: 100%; object-fit: cover;">
-        </div>
-        <div class="merch-body">
-          <h3>Ear Plugs</h3>
-          <p>$3 or 2 for $5</p>
-        </div>
-      </div>
-      <div class="merch-item">
-        <div class="merch-photo">
-          <img src="assets/lollies.jpg" alt="Pick and Mix Lollies" style="width: 100%; height: 100%; object-fit: cover;">
-        </div>
-        <div class="merch-body">
-          <h3>Pick &amp; Mix Lolly Bags</h3>
-          <p>$3 or 2 for $5</p>
-        </div>
-      </div>
-    </div>
+    <div class="merch-grid" id="bk-merch"></div>
   </div>
 
 </main>

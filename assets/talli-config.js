@@ -60,6 +60,12 @@
     // carry the page; the rest sit behind "more options". Order is deliberate —
     // best value first, then the two upsells.
     headlineTiers: ['standard', 'priority', 'valet'],
+
+    // The running order at the gate, which is not the order the database
+    // sorts by. You sell the cheap spaces first and keep the quick exits
+    // back: Standard until it's gone, then Priority, then Valet. Anything
+    // else the fixture offers falls in behind these.
+    gateTierOrder: ['standard', 'priority', 'valet'],
   };
 
   if (!isTest) return;

@@ -1,0 +1,12 @@
+-- =====================================================================
+--  Talli Parking — v_event_interest honours the caller's permissions
+--
+--  Pre-dates this work, but it is the same defect as the three views
+--  replaced alongside it: v_event_interest ran as SECURITY DEFINER and is
+--  granted to anon, so a public reader could count sign-ups against events
+--  still in draft — fixtures deliberately invisible until they go on sale.
+--
+--  Nothing in the site reads this view; it is a back-office count. Making
+--  it honour the caller's own permissions costs nothing and closes the gap.
+-- =====================================================================
+alter view v_event_interest set (security_invoker = true);
