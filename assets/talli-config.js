@@ -62,9 +62,9 @@
     headlineTiers: ['standard', 'priority', 'valet'],
 
     // The running order at the gate, which is not the order the database
-    // sorts by. You sell the cheap spaces first and keep the quick exits back:
-    // Standard until it's gone, then Priority, then Valet. Anything else the
-    // fixture happens to offer falls in behind these.
+    // sorts by. You sell the cheap spaces first and keep the quick exits
+    // back: Standard until it's gone, then Priority, then Valet. Anything
+    // else the fixture offers falls in behind these.
     gateTierOrder: ['standard', 'priority', 'valet'],
   };
 

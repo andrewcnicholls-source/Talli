@@ -1,20 +1,18 @@
 # Backend
 
-Until now the database schema and the edge functions lived only inside the
-Supabase project, which made them impossible to review and easy to lose. This
-directory is the record of both.
+`TESTING.md` in the repo root is the map of the two environments — sites,
+branches, projects, keys. This file only covers what lives in here.
 
 ```
 migrations/   SQL, applied in filename order
 functions/    edge function sources, one directory per function
-test-only/    fixtures and resets that must never run on production
+test-only/    fixtures and resets that must never be pointed at production
 ```
 
-Everything here has already been applied to the live project
-(`oxzwfemyavznykqixhvk`) — the one `assets/talli-config.js` points at, and the
-one talli.co.nz talks to. The files are the record, not a pending queue.
+Both Supabase projects — `oxzwfemyavznykqixhvk` (production) and
+`uhdoverwvlxvyyctskle` (test) — carry every migration in this directory.
 
-## Two rules worth not relearning
+## Three rules worth not relearning
 
 **Prices are decided by the database, never by the browser.** The page names a
 tier code and a list of `{code, qty}` extras. `hold_booking` and
@@ -22,9 +20,9 @@ tier code and a list of `{code, qty}` extras. `hold_booking` and
 treated as an amount.
 
 **`CREATE OR REPLACE VIEW` resets reloptions.** Replacing a view silently drops
-`security_invoker`, which turns it into a SECURITY DEFINER view that bypasses
-RLS for whoever queries it. Any migration that replaces one of these views must
-re-assert the setting immediately afterwards:
+`security_invoker`, turning it into a SECURITY DEFINER view that bypasses RLS
+for whoever queries it. That happened once already. Any migration replacing one
+of these views must re-assert the setting immediately afterwards:
 
 ```sql
 alter view <name> set (security_invoker = true);
@@ -36,17 +34,27 @@ alter view <name> set (security_invoker = true);
 test-environment work, so `functions/` is the whole set rather than the three
 this change touched.
 
-Three of them carry a TEST-PROJECT FALLBACKS block: `create-checkout` (a
-`SITE_URL` default and a stubbed Stripe round-trip), `gate-ops` (a known
-`GATE_PASSPHRASE`) and `check-setup`. Each one keys off `IS_TEST`, which
-compares the project's own injected `SUPABASE_URL` against the test project's
-ref — so on production every fallback is unreachable, and a real secret always
-wins over one.
+**The `IS_TEST` blocks in the functions are fallbacks, never overrides.** They
+compare the project's own `SUPABASE_URL` — injected by Supabase, not settable
+by a caller — against the test project's ref, and only ever fill in a value
+that has not been set: the test site's `SITE_URL`, a known gate passphrase, and
+a stand-in for the Stripe round-trip. A real secret always wins, and on
+production every one of them is unreachable. Deploying a function that has lost
+these blocks quietly points the test site at production, so keep them when
+merging.
 
 ## The two projects are NOT in step
 
-Production has every migration in this directory. Test does not: as of the
-merge it stops after `20260821093000_addons_at_the_gate`, so it is missing
+Checked against both databases on 25 Aug, and the picture is better than it
+looks from the migration ledgers but still not clean.
+
+**The addons work is fully live on production.** All eight migrations are
+applied, and `create-checkout`, `gate-ops` and `get-booking` are deployed at
+bundle hashes identical to test. Production has been able to sell a poncho
+since 21 Aug; only the front end was missing.
+
+**Test's ledger under-reports what test actually has.** It stops at
+`20260821093000_addons_at_the_gate`, so these four look missing:
 
 ```
 20260821094000_name_the_spares
@@ -55,13 +63,18 @@ merge it stops after `20260821093000_addons_at_the_gate`, so it is missing
 20260821097000_event_interest_view_security_invoker
 ```
 
-The third of those matters most. `v_gate_list` on test still has no
-`security_invoker`, which is exactly the SECURITY DEFINER defect this change
-fixed on production — a test-project anon key can read draft tiers and prices.
-It is the test database, so nothing real is exposed, but do not read a green
-run there as proof the fix works.
+They are not. Verified directly: every view on test carries
+`security_invoker`, `add_booking_addons` is the version that folds duplicate
+codes before pricing, and both it and `addon_price_cents` have `search_path`
+pinned. The effect is there; it was applied as raw SQL rather than through
+`apply_migration`, so it never reached the ledger. Do not replay these four
+blind — check the object first.
 
-Test also carries schema production has never seen — `overflow_site`,
-`booking_transfer` and friends, from work that is not in this repo. Whoever
-brings the two back into step has to reconcile that first, not just replay the
-four migrations above.
+**Test carries schema production has never seen.** `overflow_site`,
+`event_overflow_limit`, `booking_transfer`, `booking_cancellation` and extra
+columns on `v_gate_list`, from work that is in no mainline branch. Worse, the
+`gate-ops` deployed to test no longer has the actions that drive them —
+`cancel_booking`, `transfer`, `undo_transfer`, `set_event_status`,
+`set_sales_close`, `set_overflow_limit` all return `Unknown action`. That half
+of the feature is orphaned: schema on test, code nowhere. Whoever brings the
+two projects back into step has to decide what happens to it first.

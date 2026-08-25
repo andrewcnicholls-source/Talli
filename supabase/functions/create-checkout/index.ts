@@ -256,28 +256,6 @@ Deno.serve(async (req) => {
     departure,
   ].filter(Boolean).join(' · ')
 
-  // ---- 4a. TEST ONLY: stand in for the entire Stripe round-trip.
-  // Writes a recognisable fake session id, confirms the booking exactly as
-  // the webhook would, and hands back the same confirmation URL the real
-  // flow uses — so every screen after this point is still exercised for
-  // real. Unreachable on production: see IS_TEST above.
-  if (stubPayments) {
-    const fakeSession = `cs_test_stub_${crypto.randomUUID().replace(/-/g, '')}`
-    await db.from('booking')
-      .update({ stripe_checkout_session_id: fakeSession })
-      .eq('id', bookingId)
-    await db.rpc('confirm_booking', {
-      p_booking_id: bookingId,
-      p_payment_intent_id: `pi_test_stub_${fakeSession.slice(-12)}`,
-    })
-    console.log('stubbed payment for booking', bookingId)
-    return json({
-      url: `${SITE_URL}/booking-confirmed.html?session_id=${fakeSession}`,
-      booking_id: bookingId,
-      stubbed_payment: true,
-    })
-  }
-
   const currency = booking.currency ?? 'nzd'
 
   // One line per item at quantity 1, carrying the count in the name. Bundle
@@ -306,6 +284,29 @@ Deno.serve(async (req) => {
           description: 'Collect from the marshal when you arrive',
         },
       },
+    })
+  }
+
+  // ---- 3a. TEST ONLY: stand in for the entire Stripe round-trip.
+  // Writes a recognisable fake session id, confirms the booking exactly as
+  // the webhook would, and hands back the same confirmation URL the real
+  // flow uses — so every screen after this point is still exercised for
+  // real, extras included. Unreachable on production: see IS_TEST above.
+  if (stubPayments) {
+    const fakeSession = `cs_test_stub_${crypto.randomUUID().replace(/-/g, '')}`
+    await db.from('booking')
+      .update({ stripe_checkout_session_id: fakeSession })
+      .eq('id', bookingId)
+    await db.rpc('confirm_booking', {
+      p_booking_id: bookingId,
+      p_payment_intent_id: `pi_test_stub_${fakeSession.slice(-12)}`,
+    })
+    console.log('stubbed payment for booking', bookingId,
+      'with', (addonRows ?? []).length, 'extras')
+    return json({
+      url: `${SITE_URL}/booking-confirmed.html?session_id=${fakeSession}`,
+      booking_id: bookingId,
+      stubbed_payment: true,
     })
   }
 
