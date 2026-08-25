@@ -1,0 +1,11 @@
+-- =====================================================================
+--  Talli Parking — booking_addon is as private as booking
+--
+--  Applied straight to production on 21 Aug and never written down, so the
+--  repo could not rebuild the live database. Recorded here.
+--
+--  RLS with no policy already denies every anon read, but booking itself
+--  also has the grant revoked, so a future policy added in haste cannot
+--  quietly open it. Match that.
+-- =====================================================================
+revoke all on booking_addon from anon, authenticated;
