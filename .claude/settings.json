@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "mcp__Supabase__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/supabase-permissions.py\"",
+            "timeout": 10,
+            "statusMessage": "Checking Supabase permission policy..."
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,4 @@
+# Written at deploy time by netlify/build.sh, for the test site only.
+# Never committed: which one you get depends on which site is building.
+/robots.txt
+/_headers
