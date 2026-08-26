@@ -2,3 +2,8 @@
 # Never committed: which one you get depends on which site is building.
 /robots.txt
 /_headers
+
+# Netlify CLI working-copy state. Records which site this checkout is
+# linked to — here, the test project. Never committed: the same repo feeds
+# talli.co.nz, and a linked checkout deploys wherever this file says.
+/.netlify/
