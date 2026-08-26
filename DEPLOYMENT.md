@@ -302,13 +302,63 @@ enable in production as a second small commit. Don't add a framework.
 
 ---
 
-## The other deploy nobody asked for
+## Settings only you can change
 
-GitHub Pages also builds this repository on every push to `main`
-(workflow `pages-build-deployment`, 36 runs). It publishes a third
-public copy of the site at the `github.io` URL.
+Claude's GitHub access is deliberately scoped to code, issues and pull
+requests. Repository *administration* — default branch, branch
+protection, Pages — is blocked at the proxy, so these four are yours.
+Each takes under a minute.
+
+### 1. Make `staging` the default branch
+
+The single highest-value change here. GitHub currently defaults every
+new PR's base to `main`, which is production. One absent-minded merge
+deploys untested code to the live booking site — which is exactly what
+happened while this document was being written.
+
+**Settings → General → Default branch → switch to `staging`.**
+
+After this, PRs default to the integration branch and only a deliberate
+`staging → main` PR (or `/release-production`) reaches production.
+
+### 2. Protect `main`
+
+**Settings → Rules → Rulesets → New branch ruleset**, targeting `main`:
+
+- ✅ Require status checks to pass → add **`check`**
+- ✅ Block force pushes
+- ✅ Restrict deletions
+- ❌ Require a pull request — leave this **off**. `/release-production`
+  fast-forwards `main` directly, and as the only committer you would
+  otherwise have to bypass the rule on every release, which is how
+  protection ends up switched off altogether.
+
+Add **`typecheck`** to the required checks too, but only once you have
+seen it pass green on a PR — see `.github/workflows/ci.yml`.
+
+Worth protecting `staging` the same way, minus the force-push rule.
+
+### 3. Turn off GitHub Pages
+
+GitHub Pages builds this repository on every push to `main` (workflow
+`pages-build-deployment`, 36 runs) and publishes a third public copy of
+the site at the `github.io` URL.
 
 That hostname is not in `PRODUCTION_HOSTS`, so the copy talks to the
 **test** database — no customer data is at risk. But it is an
-unmanaged, un-gated, indexable copy of the booking site that nobody is
-watching. Turn it off in Settings → Pages unless it is wanted.
+unmanaged, un-gated, indexable copy of the booking page, wired to fake
+fixtures, that nobody is watching.
+
+**Settings → Pages → Source → None.**
+
+### 4. Let web sessions reach the sites (optional)
+
+A Claude Code session running on the web cannot fetch `talli.co.nz` or
+`talli-test.netlify.app` — the environment's network policy refuses the
+connection, so `/release-production`'s smoke tests report "not checked"
+rather than passing. Netlify's API is reachable either way, so deploy
+state and commits can always be verified.
+
+To close it, add both hostnames to the environment's allowed hosts at
+https://claude.com/settings/code-environments, or just run releases
+from Claude Code on your own machine, where the checks execute normally.

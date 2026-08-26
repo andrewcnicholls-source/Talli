@@ -70,11 +70,47 @@ pinned. The effect is there; it was applied as raw SQL rather than through
 `apply_migration`, so it never reached the ledger. Do not replay these four
 blind — check the object first.
 
-**Test carries schema production has never seen.** `overflow_site`,
-`event_overflow_limit`, `booking_transfer`, `booking_cancellation` and extra
-columns on `v_gate_list`, from work that is in no mainline branch. Worse, the
-`gate-ops` deployed to test no longer has the actions that drive them —
-`cancel_booking`, `transfer`, `undo_transfer`, `set_event_status`,
-`set_sales_close`, `set_overflow_limit` all return `Unknown action`. That half
-of the feature is orphaned: schema on test, code nowhere. Whoever brings the
-two projects back into step has to decide what happens to it first.
+**Test carries schema production has never seen**, from work that is in no
+mainline branch. Inventoried against both databases on 26 Aug:
+
+| Kind | Test only | Production |
+| --- | --- | --- |
+| Tables | `overflow_site`, `event_overflow_limit`, `booking_transfer`, `booking_cancellation` | absent |
+| Functions | `cancel_booking_admin`, `transfer_booking_to_site`, `undo_booking_transfer`, `set_event_overflow_limit`, `set_event_status`, `set_event_sales_close` | absent |
+| View | `v_overflow_site_status` | absent |
+| `v_gate_list` columns | `customer_email`, `in_consent_zone`, `refundable_by_card`, `transfer_site_id`, `transfer_site_name`, `transferred_at`, `transfer_refund_cents` | absent |
+
+None of it is in a migration file. None of it has a caller: `admin.js`
+calls eight gate-ops actions (`list`, `events`, `check_in`, `hand_over`,
+`sell`, `move_to_overflow`, `set_price`, `set_sold_out`, `adjust_capacity`)
+and `gate-ops` implements exactly those. Nothing anywhere reads one of the
+seven extra `v_gate_list` columns or calls one of the six functions.
+
+What it *is*, read off the signatures: sending a car to a different site
+with recorded consent and a partial refund, admin cancellation with a
+refund, and event status / sales-close controls. A designed feature with
+no interface.
+
+**This does not mean production is missing anything it uses.** The
+question came up as "the Tonight tab works on test but not production",
+and that is not what is happening — checked at every layer on 26 Aug:
+
+- production's deployed `gate-ops` is version 16 and carries all eight
+  actions, `move_to_overflow` included;
+- everything that path reads exists on production — `v_gate_list`,
+  `v_night_capacity`, `v_tier_availability`, `v_bay_inventory`,
+  `event_bay_status`, `reassign_booking`, `booking.accepts_street_parking`,
+  and 35 consent-zone overflow bays;
+- all three views return rows.
+
+So the Tonight tab is whole on production, and this schema is genuinely
+orphaned rather than a missing dependency.
+
+**Do not promote it to production as a way of "catching production up".**
+Two of those functions take refund amounts and Stripe refund IDs and
+mutate booking state; putting them on the live database with no caller
+adds surface to a payments system for no working feature. If the transfer
+and cancellation feature is wanted, it wants: migrations written from the
+existing test objects, the gate-ops actions built, the admin UI built, and
+then the whole thing through staging and real device testing like anything
+else.
