@@ -19,20 +19,20 @@ Breaking the test site cannot touch a real booking.
 
 ## Before anything works: one thing only you can do
 
-I could not link a GitHub repository to a Netlify project through the API,
-so this last step is yours. It takes about two minutes.
+Netlify's API will not link a GitHub repository to a project, so this last
+step is yours. It takes about two minutes. Until it is done the test site
+does not build from git at all — every deploy it has ever had was uploaded
+by hand.
 
-All of this work is on the branch `claude/test-environment-setup-kaaudq`.
-The test site is meant to deploy from `staging`, so create that first:
+The test site is meant to deploy from `staging`, and `staging` does not
+exist yet. Create it from `main`, which now carries everything — the addons
+and checkout work landed after this file was first written:
 
 ```bash
 git fetch origin
-git checkout -b staging origin/claude/test-environment-setup-kaaudq
+git checkout -b staging origin/main
 git push -u origin staging
 ```
-
-(If you would rather look at it before creating another branch, just put
-`claude/test-environment-setup-kaaudq` in step 4 instead and rename later.)
 
 Then, in Netlify:
 
@@ -43,7 +43,28 @@ Then, in Netlify:
 5. Leave build command and publish directory blank — `netlify.toml` sets them
 6. **Deploy**
 
-That is it. Everything else below is already built and tested.
+**Create the branch before you point Netlify at it.** A project set to build
+`staging` while no such branch exists is exactly what a failed test deploy
+looks like: the build stops in *preparing repo* with `couldn't find remote
+ref refs/heads/staging`. Nothing is wrong with the site when that happens —
+there is simply nothing on the other end to check out.
+
+### The fallback: deploying without git
+
+The project also takes a deploy straight from a working copy, and that is
+how every build on it so far was made. From the repo root, once the Netlify
+CLI is authenticated:
+
+```bash
+npx netlify-cli deploy --build --prod --site talli-test
+```
+
+That uploads the tree, runs `netlify.toml`'s build in Netlify's build
+system and publishes to talli-test.netlify.app. It pays no attention to
+branches — it ships whatever is on disk — so treat it as the way to unstick
+a deploy, not the way you work.
+
+Everything else below is already built and tested.
 
 ---
 
