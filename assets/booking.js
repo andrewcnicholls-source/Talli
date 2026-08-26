@@ -27,6 +27,9 @@
     picked: {},      // code -> quantity
     interestEvent: null,
     submitting: false,
+    // Basis points. 200 = 2%. Read from the database, because the number on
+    // this page and the number Stripe charges have to be the same number.
+    surchargeBps: 0,
   };
 
   /* ---------------------------------------------------------------- utils */
@@ -91,6 +94,20 @@
     }, 0);
   }
 
+  // Mirrors card_surcharge_cents() in the database. Online is always a card
+  // payment, so this applies to every booking made on this page — on the
+  // whole order, extras included, because that is what the card costs us.
+  function surchargeOn(baseCents) {
+    if (!state.surchargeBps) return 0;
+    return Math.round(baseCents * state.surchargeBps / 10000);
+  }
+
+  // 200 -> "2", 250 -> "2.5". Trailing zeros in a percentage read as a
+  // precision nobody asked for.
+  function surchargePct() {
+    return (state.surchargeBps / 100).toFixed(2).replace(/\.?0+$/, '');
+  }
+
   function make(tag, className, content) {
     var n = document.createElement(tag);
     if (className) n.className = className;
@@ -126,6 +143,29 @@
       if (!res.ok) throw new Error('Could not reach the booking system (' + res.status + ')');
       return res.json();
     });
+  }
+
+  /* ---------------------------------------------------- the card surcharge */
+
+  // One row, world-readable, and deliberately so: the surcharge is itemised
+  // before anyone commits to paying it, which means the browser needs it.
+  function loadSurcharge() {
+    read('/payment_setting?select=card_surcharge_bps&limit=1')
+      .then(function (rows) {
+        state.surchargeBps = (rows && rows[0] && rows[0].card_surcharge_bps) || 0;
+        var note = el('bk-tier-surcharge');
+        if (state.surchargeBps) {
+          text(note, 'Prices are as shown on the sign in the driveway. Paying by ' +
+            'card adds a ' + surchargePct() + '% surcharge, itemised before you pay.');
+          note.hidden = false;
+        }
+        if (state.tier) paintSummary();
+      })
+      .catch(function () {
+        // Better to show the sign price and let Stripe present the surcharge
+        // than to block a booking over a settings row that would not load.
+        state.surchargeBps = 0;
+      });
   }
 
   /* --------------------------------------------------------- step 1: event */
@@ -533,10 +573,24 @@
     });
     box.hidden = lines.length === 0;
 
+    var subtotal = state.tier.price_cents + extrasTotal();
+    var surcharge = surchargeOn(subtotal);
+
+    var row = el('bk-summary-surcharge');
+    if (surcharge > 0) {
+      text(el('bk-summary-surcharge-label'),
+        'Card payment surcharge (' + surchargePct() + '%)');
+      text(el('bk-summary-surcharge-price'), money(surcharge));
+      row.hidden = false;
+    } else {
+      row.hidden = true;
+    }
+
+    // Worth spelling out whenever the total is not simply the price on the
+    // card — which, once a surcharge exists, is every booking.
     var total = el('bk-summary-total');
-    if (lines.length) {
-      text(el('bk-summary-total-price'),
-        money(state.tier.price_cents + extrasTotal()));
+    if (lines.length || surcharge > 0) {
+      text(el('bk-summary-total-price'), money(subtotal + surcharge));
       total.hidden = false;
     } else {
       total.hidden = true;
@@ -669,6 +723,7 @@
 
     loadEvents();
     loadExtras();
+    loadSurcharge();
   }
 
   if (document.readyState === 'loading') {

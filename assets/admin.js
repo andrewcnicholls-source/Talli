@@ -42,6 +42,9 @@
     sellTier: null,
     sellExtras: {},
     priceTier: null,
+    // Basis points. 200 = 2%. Comes down with the night's state so the screen
+    // and the database never disagree about what a card costs.
+    surchargeBps: 0,
   };
 
   function el(id) { return document.getElementById(id); }
@@ -53,6 +56,24 @@
     var d = (cents || 0) / 100;
     return '$' + (cents % 100 === 0 ? d.toFixed(0) : d.toFixed(2));
   }
+
+  // The sign price is the cash price. Card costs us a percentage to accept, so
+  // card sales — the terminal here, and every sale on the website — pay it.
+  // Mirrors card_surcharge_cents() in the database; the database still decides
+  // what the booking records.
+  var CARD_METHODS = ['stripe', 'tap_to_pay'];
+
+  function surchargeOn(cents, paymentMethod) {
+    if (!state.surchargeBps) return 0;
+    if (CARD_METHODS.indexOf(paymentMethod) === -1) return 0;
+    return Math.round((cents || 0) * state.surchargeBps / 10000);
+  }
+
+  // 200 -> "2", 250 -> "2.5".
+  function surchargePct() {
+    return (state.surchargeBps / 100).toFixed(2).replace(/\.?0+$/, '');
+  }
+
   function asTime(iso) {
     if (!iso) return null;
     var d = new Date(iso);
@@ -196,6 +217,7 @@
         state.tiers = data.tiers || [];
         state.extras = data.extras || [];
         state.summary = data.summary || null;
+        state.surchargeBps = data.card_surcharge_bps || 0;
         renderAll();
       })
       .catch(function (err) { toast(err.message, 'bad'); })
@@ -293,7 +315,7 @@
     if (r.payment_method && r.payment_method !== 'stripe') {
       meta.appendChild(make('span', 'ad-chip is-cash',
         r.payment_method.replace(/_/g, ' ') + ' ' +
-        money((r.amount_cents || 0) + (r.addons_cents || 0))));
+        money((r.amount_cents || 0) + (r.addons_cents || 0) + (r.surcharge_cents || 0))));
     }
     if (r.status === 'held') meta.appendChild(make('span', 'ad-chip is-warn', 'unpaid hold'));
     if (meta.childNodes.length) main.appendChild(meta);
@@ -496,6 +518,15 @@
           ? 'Marked sold out'
           : t.spots_left_gate + ' left at the gate · ' + t.spots_left + ' online'));
 
+      // The number above is what goes on the sign, and it is what a cash
+      // customer hands over. Card is that plus the surcharge, so say both
+      // rather than making anyone work it out at the driver's window.
+      if (state.surchargeBps) {
+        card.appendChild(make('div', 'ad-price-card',
+          'cash ' + money(t.price_cents) + ' · card ' +
+          money(t.price_cents + surchargeOn(t.price_cents, 'tap_to_pay'))));
+      }
+
       var row = make('div', 'ad-price-actions');
       row.appendChild(button('ad-nudge', '−$5', function () {
         setPrice(t, t.price_cents - 500);
@@ -531,8 +562,26 @@
     text(el('ad-price-title'), shortName(tier));
     el('ad-price-input').value = String(Math.round(tier.price_cents / 100));
     el('ad-price-error').hidden = true;
+    paintPriceHint();
     show(el('ad-price'));
     el('ad-price-input').focus();
+  }
+
+  // Typed here, the number is the sign price — the cash price. Show what that
+  // becomes on a card as it is typed, so nobody has to discover it at the
+  // first tap-to-pay of the night.
+  function paintPriceHint() {
+    var hint = el('ad-price-hint');
+    var dollars = Number(el('ad-price-input').value);
+    if (!state.surchargeBps || !isFinite(dollars) || dollars <= 0) {
+      hide(hint);
+      return;
+    }
+    var cents = Math.round(dollars * 100);
+    text(hint, 'Cash ' + money(cents) + ' · card ' +
+      money(cents + surchargeOn(cents, 'tap_to_pay')) +
+      ' (includes the ' + surchargePct() + '% card surcharge)');
+    show(hint);
   }
 
   function submitPrice(e) {
@@ -597,6 +646,7 @@
       ['Prepaid online', money(s.online_cents), false],
       ['Sold at the gate', money(s.gate_cents), false],
       ['Of that, extras', money(s.addons_cents), false],
+      ['Of that, card surcharge', money(s.surcharge_cents), false],
       ['Still to collect', money(s.cash_due_cents), s.cash_due_cents > 0],
     ].forEach(function (line) {
       var row = make('div', 'ad-money-row' + (line[2] ? ' is-lead' : ''));
@@ -615,6 +665,7 @@
     state.sellExtras = {};
     renderSellTiers();
     renderSellExtras();
+    renderSellCharge();
     show(el('ad-sell'));
   }
 
@@ -651,6 +702,7 @@
       opt.addEventListener('click', function () {
         state.sellTier = t.code;
         renderSellTiers();
+        renderSellCharge();
       });
       wrap.appendChild(opt);
     });
@@ -686,6 +738,69 @@
     if (next === 0) delete state.sellExtras[item.code];
     else state.sellExtras[item.code] = next;
     renderSellExtras();
+    renderSellCharge();
+  }
+
+  // Mirrors addon_price_cents() in the database, the same way the booking page
+  // does: enough to be honest on screen while the database does the sum that
+  // is recorded. "2 for $5" means unit price × quantity is the wrong answer.
+  function extraTotal(item, qty) {
+    if (qty <= 0) return 0;
+    if (!item.bundle_qty || !item.bundle_price_cents) return item.price_cents * qty;
+    return Math.min(
+      item.price_cents * qty,
+      Math.floor(qty / item.bundle_qty) * item.bundle_price_cents +
+        (qty % item.bundle_qty) * item.price_cents
+    );
+  }
+
+  function sellExtrasTotal() {
+    return state.catalogue.reduce(function (sum, item) {
+      return sum + extraTotal(item, state.sellExtras[item.code] || 0);
+    }, 0);
+  }
+
+  /* -------------------------------------------- what to actually charge */
+
+  // The one line the marshal reads out loud. Everything above it is how the
+  // sale is described; this is the number the driver hands over, and it moves
+  // the moment the payment method does.
+  function renderSellCharge() {
+    var box = el('ad-sell-charge');
+    var tier = state.tiers.filter(function (t) { return t.code === state.sellTier; })[0];
+    if (!tier) {
+      hide(box);
+      return;
+    }
+
+    var method = el('ad-sell-payment').value;
+    var extras = sellExtrasTotal();
+    var subtotal = tier.price_cents + extras;
+    var surcharge = surchargeOn(subtotal, method);
+
+    text(el('ad-sell-charge-spot-name'), shortName(tier));
+    text(el('ad-sell-charge-spot'), money(tier.price_cents));
+
+    var extraRow = el('ad-sell-charge-extras-row');
+    if (extras > 0) {
+      text(el('ad-sell-charge-extras'), money(extras));
+      show(extraRow);
+    } else {
+      hide(extraRow);
+    }
+
+    var surRow = el('ad-sell-charge-surcharge-row');
+    if (surcharge > 0) {
+      text(el('ad-sell-charge-surcharge-label'),
+        'Card surcharge (' + surchargePct() + '%)');
+      text(el('ad-sell-charge-surcharge'), money(surcharge));
+      show(surRow);
+    } else {
+      hide(surRow);
+    }
+
+    text(el('ad-sell-charge-total'), money(subtotal + surcharge));
+    show(box);
   }
 
   function submitSell(e) {
@@ -723,7 +838,11 @@
         if (data.addons_failed) {
           toast('Space sold, but the extras did not save — take that cash', 'bad');
         } else {
-          toast(plate ? 'Sold — ' + plate : 'Sold', 'good');
+          // The charged figure comes back from the database rather than being
+          // repeated from the screen, so a rate that changed mid-night shows
+          // up here rather than being quietly wrong.
+          var charged = data.charge_cents != null ? ' · ' + money(data.charge_cents) : '';
+          toast((plate ? 'Sold — ' + plate : 'Sold') + charged, 'good');
         }
         return loadList(true);
       })
@@ -836,9 +955,13 @@
     el('ad-sell-open').addEventListener('click', openSell);
     el('ad-sell-close').addEventListener('click', function () { hide(el('ad-sell')); });
     el('ad-sell-form').addEventListener('submit', submitSell);
+    // Cash and card are different numbers. Switching the method has to move
+    // the figure being read out, not just what gets recorded.
+    el('ad-sell-payment').addEventListener('change', renderSellCharge);
 
     el('ad-price-close').addEventListener('click', function () { hide(el('ad-price')); });
     el('ad-price-form').addEventListener('submit', submitPrice);
+    el('ad-price-input').addEventListener('input', paintPriceHint);
 
     el('ad-check-open').addEventListener('click', openCheck);
     el('ad-check-close').addEventListener('click', function () {

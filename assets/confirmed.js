@@ -115,8 +115,11 @@
       ),
       row('Back by', b.must_depart_by ? asTime(b.must_depart_by) : null),
       row('Vehicle', b.vehicle_rego),
+      // Named separately from the total, because a line the customer can see
+      // on their bank statement should be a line they can see here.
+      row('Card surcharge', b.surcharge_cents ? money(b.surcharge_cents) : null),
       row('Paid', b.amount_cents != null
-        ? money(b.amount_cents + (b.addons_cents || 0))
+        ? money(b.amount_cents + (b.addons_cents || 0) + (b.surcharge_cents || 0))
         : null),
     ].forEach(function (r) { if (r) details.appendChild(r); });
 

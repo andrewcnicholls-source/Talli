@@ -53,7 +53,8 @@ Deno.serve(async (req) => {
     .from('booking')
     .select(
       'id, status, tier_code, customer_name, vehicle_rego, amount_cents, addons_cents, ' +
-      'currency, arrival_from, arrival_until, must_depart_by, event_id, property_id',
+      'surcharge_cents, currency, arrival_from, arrival_until, must_depart_by, ' +
+      'event_id, property_id',
     )
     .eq('stripe_checkout_session_id', sessionId)
     .maybeSingle()
@@ -83,6 +84,9 @@ Deno.serve(async (req) => {
     vehicle_rego: booking.vehicle_rego,
     amount_cents: booking.amount_cents,
     addons_cents: booking.addons_cents ?? 0,
+    // Itemised on the confirmation page for the same reason it is itemised at
+    // checkout: the customer paid it, so they get to see it.
+    surcharge_cents: booking.surcharge_cents ?? 0,
     // Named on the page so the customer knows to ask for them, and knows
     // they are already paid for.
     addons: addons ?? [],

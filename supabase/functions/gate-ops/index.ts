@@ -74,27 +74,47 @@ type Row = Record<string, any>
 // end of a driveway, one request that sometimes carries a little too much
 // beats four that each might not arrive.
 async function nightState(eventId: string) {
-  const [listRes, capRes, tierRes] = await Promise.all([
+  const [listRes, capRes, tierRes, rateRes, chargeRes] = await Promise.all([
     db.from('v_gate_list').select('*').eq('event_id', eventId),
     db.from('v_night_capacity').select('*').eq('event_id', eventId)
       .order('exit_rank', { ascending: true }),
     db.from('v_tier_availability').select('*').eq('event_id', eventId)
       .order('sort_order', { ascending: true }),
+    // The gate screen has to be able to say "charge them $46" before the sale
+    // exists, so it needs the rate, not just the figure on a finished booking.
+    db.from('payment_setting').select('card_surcharge_bps').maybeSingle(),
+    // Straight from booking rather than through v_gate_list. Adding a column
+    // to that view means restating all of it, and a restatement written
+    // against one branch drops whatever another branch added. This join costs
+    // one small query and cannot go stale.
+    db.from('booking').select('id, surcharge_cents').eq('event_id', eventId),
   ])
   if (listRes.error) throw listRes.error
   if (capRes.error) throw capRes.error
   if (tierRes.error) throw tierRes.error
+  if (chargeRes.error) throw chargeRes.error
+
+  const surcharges = new Map<string, number>()
+  for (const b of (chargeRes.data ?? []) as Row[]) {
+    surcharges.set(String(b.id), b.surcharge_cents ?? 0)
+  }
 
   // Not yet arrived first — that is the working list. Within each group,
   // earliest arrival window first.
-  const rows = (listRes.data ?? []).sort((a, b) => {
-    if (a.arrived !== b.arrived) return a.arrived ? 1 : -1
-    return String(a.arrival_from ?? '').localeCompare(String(b.arrival_from ?? ''))
-  })
+  const rows = (listRes.data ?? [])
+    .map((r: Row) => ({ ...r, surcharge_cents: surcharges.get(r.booking_id) ?? 0 }))
+    .sort((a, b) => {
+      if (a.arrived !== b.arrived) return a.arrived ? 1 : -1
+      return String(a.arrival_from ?? '').localeCompare(String(b.arrival_from ?? ''))
+    })
 
   const zones = capRes.data ?? []
   const paid = rows.filter((r: Row) => r.status === 'paid')
-  const value = (r: Row) => (r.amount_cents ?? 0) + (r.addons_cents ?? 0)
+  // What the car is worth to the till: the space, the extras, and the card
+  // surcharge if they paid by card. A cash sale carries no surcharge, so this
+  // is still the sign price for everyone paying in notes.
+  const value = (r: Row) =>
+    (r.amount_cents ?? 0) + (r.addons_cents ?? 0) + (r.surcharge_cents ?? 0)
 
   // What is still in the box. Counted across the whole event, because the
   // question at 5pm is "have I got enough ponchos", not "who bought them".
@@ -117,6 +137,7 @@ async function nightState(eventId: string) {
     rows,
     zones,
     tiers: tierRes.data ?? [],
+    card_surcharge_bps: rateRes.data?.card_surcharge_bps ?? 0,
     extras: [...extras.values()].sort((a, b) => a.name.localeCompare(b.name)),
     summary: {
       total: rows.length,
@@ -137,6 +158,8 @@ async function nightState(eventId: string) {
       gate_cents: paid.filter((r: Row) => r.channel === 'gate')
         .reduce((sum: number, r: Row) => sum + value(r), 0),
       addons_cents: paid.reduce((sum: number, r: Row) => sum + (r.addons_cents ?? 0), 0),
+      surcharge_cents: paid.reduce(
+        (sum: number, r: Row) => sum + (r.surcharge_cents ?? 0), 0),
       extras_pending: rows
         .filter((r: Row) => r.status === 'paid')
         .reduce((sum: number, r: Row) => sum + (r.addons_pending ?? 0), 0),
@@ -193,13 +216,15 @@ Deno.serve(async (req) => {
       // What is still sellable right now, for the walk-up form.
       case 'tiers': {
         if (!eventId) return json({ error: 'event_id is required' }, 400)
-        const { data, error } = await db
-          .from('v_tier_availability')
-          .select('code, label, price_cents, spots_left_gate, manually_sold_out, property_id, sort_order')
-          .eq('event_id', eventId)
-          .order('sort_order', { ascending: true })
+        const [{ data, error }, { data: rate }] = await Promise.all([
+          db.from('v_tier_availability')
+            .select('code, label, price_cents, spots_left_gate, manually_sold_out, property_id, sort_order')
+            .eq('event_id', eventId)
+            .order('sort_order', { ascending: true }),
+          db.from('payment_setting').select('card_surcharge_bps').maybeSingle(),
+        ])
         if (error) throw error
-        return json({ tiers: data })
+        return json({ tiers: data, card_surcharge_bps: rate?.card_surcharge_bps ?? 0 })
       }
 
       case 'check_in': {
@@ -326,7 +351,21 @@ Deno.serve(async (req) => {
           await db.rpc('set_addons_handed_over', { p_booking_id: data, p_handed: true })
         }
 
-        return json({ ok: true, booking_id: data })
+        // Hand back what the database settled on, so the confirmation the
+        // marshal reads is the figure that was actually recorded — not the
+        // one the screen worked out a moment before the sale.
+        const { data: sold } = await db.from('booking')
+          .select('amount_cents, addons_cents, surcharge_cents')
+          .eq('id', data)
+          .maybeSingle()
+
+        return json({
+          ok: true,
+          booking_id: data,
+          charge_cents: sold
+            ? (sold.amount_cents ?? 0) + (sold.addons_cents ?? 0) + (sold.surcharge_cents ?? 0)
+            : null,
+        })
       }
 
       // ------------------------------------------------ the night's levers
