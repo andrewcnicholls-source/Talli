@@ -4,6 +4,75 @@ Static site (plain HTML/CSS/JS) backed by Supabase. Booking flow lives in
 `assets/booking.js`, admin views in `assets/admin.js`, shared config in
 `assets/talli-config.js`.
 
+## How work gets done here
+
+`DEPLOYMENT.md` is the full map: environments, branches, deploys,
+rollback, database and payment separation. The short version, and the
+rules that bind agents:
+
+### Branch names are not the conventional ones
+
+| Branch | Deploys to | Means |
+| --- | --- | --- |
+| `staging` | https://talli-test.netlify.app | the integration branch — merge here |
+| `main` | https://talli.co.nz | the **release** branch — merging here is a production deploy |
+
+`staging` is where feature branches land and where device testing
+happens. `main` is downstream of it. Both are defined once, in
+`scripts/talli-env.sh`; read that rather than hardcoding a name.
+
+> GitHub's default base branch is still `main`, so a PR opened without
+> thinking targets production. Set the base to `staging` explicitly.
+
+### Agents work in worktrees, never on a protected branch
+
+Parallel agents in one checkout overwrite each other. Each agent gets
+its own worktree and its own branch, named `feature/<task>`, sibling to
+the repo root at `../Talli-<task>`.
+
+Never commit directly to `main` or `staging`.
+
+### The four skills
+
+| Skill | When |
+| --- | --- |
+| `/new-agent <task>` | starting work — creates the branch and worktree. Deploys nothing. |
+| `/finish-agent` | work is done — validates, commits, pushes, drafts the PR. Deploys nothing. |
+| `/cleanup-agent` | the worktree is finished with — removes it, but never unmerged or uncommitted work. |
+| `/release-production` | staging has been device-tested — promotes that exact commit to talli.co.nz. |
+
+### Validation
+
+`bash scripts/check.sh` is the project's only validation command, and
+CI runs the same script. There is no build, no bundler, no test
+framework and no linter — do not invent `npm test`, `npm run lint` or
+`npm run build`, and never report a check as passing without running
+it.
+
+### Staging is shared, and it is the real test
+
+- Staging is Andrew's device-testing environment: phones, tablets,
+  desktops, touch, the booking flow, test-mode payments. An automated
+  check passing is not the same thing and does not replace it.
+- Never push a feature branch to `staging` to "have a look". It would
+  overwrite whatever is being tested on a phone at that moment. Code
+  reaches staging by merging.
+- Staging must never use production payment credentials, and must
+  never hold production data. Its Stripe key is `sk_test_…`, in the
+  test Supabase project; production's `sk_live_…` is in the production
+  project, and nowhere else.
+- Never copy real customer or payment data into test. There is no
+  masking process, and the fixtures are invented for this reason.
+
+### Production releases are deliberate
+
+Only a commit that has actually been running on staging is promoted,
+and only after explicit confirmation at the moment of release. Netlify
+publishes the static site; **migrations and edge functions are a
+separate manual step against Supabase** and go first. Never force-push,
+never deploy an unidentified version, never claim a deploy succeeded
+before Netlify reports it ready at that commit.
+
 ## Supabase environments
 
 | Environment | Project name | Project ID | Notes |
@@ -11,7 +80,9 @@ Static site (plain HTML/CSS/JS) backed by Supabase. Booking flow lives in
 | Test | `talli-test` | `uhdoverwvlxvyyctskle` | Scratch. Safe to break. |
 | Production | andrewcnicholls-source's Project | `oxzwfemyavznykqixhvk` | Live site data. |
 
-`assets/talli-config.js` points at the production project.
+`assets/talli-config.js` carries both, and switches on the browser's
+hostname at load time — `talli.co.nz` and its aliases get production,
+everything else falls to test. There is no build-time substitution.
 
 ## Database permission policy
 
