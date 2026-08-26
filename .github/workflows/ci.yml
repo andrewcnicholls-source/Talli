@@ -1,0 +1,45 @@
+# =====================================================================
+#  CI for Talli.
+#
+#  Runs the same script a contributor runs locally — scripts/check.sh —
+#  so a green PR means the same thing as a green terminal. There is
+#  deliberately nothing here that cannot also be run by hand.
+#
+#  This gate sits in front of `staging`, which deploys to the shared
+#  device-test site, and in front of `main`, which is the live booking
+#  site. See DEPLOYMENT.md.
+# =====================================================================
+name: checks
+
+on:
+  pull_request:
+    branches: [staging, main]
+  push:
+    branches: [staging, main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The secret scan and the migration checks read tracked files
+          # via `git ls-files`, which needs the repository, not a
+          # partial checkout of the diff.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Run project checks
+        run: bash scripts/check.sh
+
+      # Deliberately not installed here: `deno check` against the edge
+      # functions has never been run in this repository, so wiring it
+      # into the required gate would be asserting a guarantee nobody has
+      # verified. scripts/check.sh reports it as skipped rather than
+      # passed. Install deno locally and re-run the script to close it.

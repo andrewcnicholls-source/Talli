@@ -1,6 +1,8 @@
 # Talli — test environment
 
-There are now two of everything. This file is the map.
+There are now two of everything. This file is the map of what is *in*
+each environment. `DEPLOYMENT.md` is the map of how code *moves*
+between them.
 
 |                | **Production**                      | **Test**                                 |
 | -------------- | ----------------------------------- | ---------------------------------------- |
@@ -17,89 +19,94 @@ Breaking the test site cannot touch a real booking.
 
 ---
 
-## Before anything works: one thing only you can do
+## This is done now
 
-Netlify's API will not link a GitHub repository to a project, so this last
-step is yours. It takes about two minutes. Until it is done the test site
-does not build from git at all — every deploy it has ever had was uploaded
-by hand.
+Both of the things this section used to ask for have happened. The
+`staging` branch exists, the `talli-test` project is linked to the
+repository and building from it, and the last test deploy was a real
+git build:
 
-The test site is meant to deploy from `staging`, and `staging` does not
-exist yet. Create it from `main`, which now carries everything — the addons
-and checkout work landed after this file was first written:
+```
+talli-test   staging   f396224   built from git, published 26 Aug
+talliconz    main      6d5e2ee   built from git, published 26 Aug
+```
+
+Netlify records the commit for every deploy, so "which code am I
+looking at?" is always answerable — see `DEPLOYMENT.md`, question 4.
+
+**One thing to fix before the workflow is usable:** `staging` is three
+commits *behind* `main`. The test site is running older code than the
+live site, which is backwards. Bring it up to date once, and then it
+stays ahead:
 
 ```bash
 git fetch origin
-git checkout -b staging origin/main
-git push -u origin staging
+git push origin origin/main:refs/heads/staging   # fast-forward, no force
 ```
-
-Then, in Netlify:
-
-1. Open https://app.netlify.com/projects/talli-test
-2. **Project configuration → Build & deploy → Link repository**
-3. Choose `andrewcnicholls-source/Talli`
-4. Set **Branch to deploy** to `staging`
-5. Leave build command and publish directory blank — `netlify.toml` sets them
-6. **Deploy**
-
-**Create the branch before you point Netlify at it.** A project set to build
-`staging` while no such branch exists is exactly what a failed test deploy
-looks like: the build stops in *preparing repo* with `couldn't find remote
-ref refs/heads/staging`. Nothing is wrong with the site when that happens —
-there is simply nothing on the other end to check out.
 
 ### The fallback: deploying without git
 
-The project also takes a deploy straight from a working copy, and that is
-how every build on it so far was made. From the repo root, once the Netlify
-CLI is authenticated:
+The project also takes a deploy straight from a working copy. From the
+repo root, once the Netlify CLI is authenticated:
 
 ```bash
 npx netlify-cli deploy --build --prod --site talli-test
 ```
 
-That uploads the tree, runs `netlify.toml`'s build in Netlify's build
-system and publishes to talli-test.netlify.app. It pays no attention to
-branches — it ships whatever is on disk — so treat it as the way to unstick
-a deploy, not the way you work.
-
-Everything else below is already built and tested.
-
----
+That ships whatever is on disk and pays no attention to branches — so
+the resulting deploy has **no commit attached**, and nobody can then
+say what is on the test site. `/release-production` refuses to promote
+a deploy like that, on purpose. Treat it as the way to unstick a
+broken deploy, not the way you work.
 
 ## How you work now
 
 ```
-       you edit here                    you merge here
-            │                                 │
-         staging  ──────────────────────────► main
-            │                                 │
-   talli-test.netlify.app              talli.co.nz
-   (fake fixtures, fake money)         (real customers)
+       agents work here                 you merge here            you promote here
+             │                                │                          │
+   feature/x ─PR─CI──────────────────────► staging ──────────────────► main
+                                              │                          │
+                                    talli-test.netlify.app         talli.co.nz
+                                   (fake fixtures, fake money)    (real customers)
+                                              │                          ▲
+                                              └──── device testing ──────┘
 ```
 
-Day to day:
+`DEPLOYMENT.md` is the full account. The four skills:
+
+```
+/new-agent booking-cancellation   isolated worktree + feature branch
+/finish-agent                     validate, commit, push, draft the PR
+/cleanup-agent                    remove the worktree when it's merged
+/release-production               promote the tested commit to talli.co.nz
+```
+
+By hand, without agents, it is the same three moves:
 
 ```bash
-git checkout staging
+git switch -c feature/price-ladder origin/staging
 # ...make your change...
+bash scripts/check.sh
 git commit -am "Try a new price ladder"
-git push origin staging          # test site rebuilds in ~30s
+git push -u origin feature/price-ladder
+# open a PR against staging, let CI run, merge
+# test site rebuilds in ~30s
 ```
 
-Look at it. Poke it. When you're happy:
+Look at it. Poke it on a phone. When you're happy, `/release-production`
+— or by hand, the same fast-forward it would do:
 
 ```bash
-git checkout main
-git merge staging
-git push origin main             # now it's live
+git push origin origin/staging:refs/heads/main    # now it's live
 ```
 
-If you hate it, `git checkout staging && git reset --hard main` and start
-again. Nothing you did was ever visible to a customer.
+If you hate it, close the PR. Nothing you did was ever visible to a
+customer.
 
----
+**Two things not to do.** Don't commit straight to `staging` while an
+agent has a branch in flight, and don't push a feature branch to
+`staging` to have a look — that overwrites whatever is being tested on
+a phone at that moment.
 
 ## Which environment am I looking at?
 
@@ -293,12 +300,12 @@ behaviour completely.
 
 ## What I could not do
 
-- **Link the Netlify project to the repo** — no API for it. See the top.
-- **Deploy the test site directly instead** — tried that as a way around the
-  above, uploading the folder rather than linking the repo. Netlify answered
-  `403 Forbidden`: the token this tooling holds can read projects but not
-  push deploys. So the six steps at the top really are the unlock, and the
-  test site stays dark until you do them.
+- **Link the Netlify project to the repo** — no API for it. ~~See the top.~~
+  *Done since, by hand. Both projects now build from git and every deploy
+  carries its commit.*
+- **Deploy the test site directly instead** — Netlify answered `403
+  Forbidden`: the token this tooling holds can read projects but not push
+  deploys. Still true, and no longer needed.
 - **Set Supabase secrets** — the tooling has no secrets API. Handled with
   test-project-only fallbacks in the functions, keyed on the project ref, so
   they are unreachable on production. Setting a real secret always wins.
