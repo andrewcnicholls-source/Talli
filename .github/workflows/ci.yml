@@ -38,8 +38,28 @@ jobs:
       - name: Run project checks
         run: bash scripts/check.sh
 
-      # Deliberately not installed here: `deno check` against the edge
-      # functions has never been run in this repository, so wiring it
-      # into the required gate would be asserting a guarantee nobody has
-      # verified. scripts/check.sh reports it as skipped rather than
-      # passed. Install deno locally and re-run the script to close it.
+  # -------------------------------------------------------------------
+  #  Edge function typechecking.
+  #
+  #  Separate, and deliberately NOT required yet. `deno check` has never
+  #  been run against these functions — their imports (esm.sh, jsr.io)
+  #  are unreachable from the sandbox they were written in, so nobody
+  #  has seen the result. Wiring an unseen check into the required gate
+  #  would block every PR on a guess.
+  #
+  #  GitHub's runners can reach those hosts, so this job gets a real
+  #  answer. Once it has been green on a PR, delete `continue-on-error`
+  #  and add `typecheck` to the required checks in branch protection.
+  # -------------------------------------------------------------------
+  typecheck:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: deno check
+        run: deno check supabase/functions/*/index.ts
