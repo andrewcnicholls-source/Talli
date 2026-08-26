@@ -1,6 +1,6 @@
 ---
 name: cleanup-agent
-description: Safely remove a Talli agent worktree once its work is merged or deliberately abandoned. Use when finished with an agent workspace, or when the user types /cleanup-agent. Refuses to delete uncommitted or unmerged work without explicit confirmation, and never removes the main checkout.
+description: Safely remove an agent worktree once its work is merged or deliberately abandoned. Use when finished with an agent workspace, or when the user types /cleanup-agent. Refuses to delete uncommitted or unmerged work without explicit confirmation, treats git merge status as the only proof, and never removes the main checkout.
 ---
 
 # cleanup-agent
@@ -28,8 +28,19 @@ else's merge. Ask git.
 git rev-parse --show-toplevel
 git branch --show-current
 git worktree list --porcelain
-. "$(git rev-parse --show-toplevel)/scripts/talli-env.sh"
 ```
+
+**In the Talli repository**, source `scripts/talli-env.sh` for
+`$TALLI_INTEGRATION_BRANCH` and `$TALLI_PROTECTED_BRANCHES`.
+**Anywhere else**, the integration branch is the remote's default:
+
+```bash
+BASE="$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null \
+        | sed 's#^origin/##')"
+```
+
+Protected: that branch, plus any of `main`, `master`, `develop`,
+`trunk`, `staging`, `release`, `production` that exist.
 
 If run with no argument, the target is the worktree you are in. If run
 with a name, resolve it against `git worktree list` and confirm the
@@ -64,17 +75,24 @@ what they are. Never `git clean`, never `git checkout -- .`, never
 ```bash
 git fetch origin --prune
 git branch --contains "$BRANCH_TIP" -a
+git merge-base --is-ancestor "$BRANCH_TIP" "origin/$BASE"
+```
+
+In Talli, check both branches, because they mean different things:
+
+```bash
 git merge-base --is-ancestor "$BRANCH_TIP" "origin/$TALLI_INTEGRATION_BRANCH"
 git merge-base --is-ancestor "$BRANCH_TIP" "origin/$TALLI_PRODUCTION_BRANCH"
 ```
-
-Three outcomes, and they are not the same:
 
 | Result | Meaning | What to do |
 | --- | --- | --- |
 | Ancestor of `origin/staging` | Merged and on the test site's branch | Safe |
 | Ancestor of `origin/main` too | Also released to production | Safe |
 | Ancestor of neither | **Unmerged** | Stop and warn |
+
+Elsewhere, "merged into the integration branch" is the whole test —
+being an ancestor of `origin/$BASE` is safe, anything else is not.
 
 If the fetch fails, say the merge check is against stale refs and treat
 the result as unproven. Do not guess.
@@ -155,12 +173,12 @@ If you removed the worktree but left the branch, say so, and say why.
 
 ## Never
 
-- Delete the main checkout, or a worktree whose branch is `main` or
-  `staging`.
+- Delete the main checkout, or a worktree whose branch is protected.
 - Remove a worktree with uncommitted, staged, untracked or stashed
   changes unless the user has seen the list and said to.
 - Delete an unmerged branch on your own judgement.
 - Use `worktree remove --force`, `branch -D`, `git clean`, or
   `push --delete` without being asked.
-- Treat "it worked on staging" as proof a branch is merged.
+- Treat "it worked on staging" — or on any deployed environment — as
+  proof a branch is merged. Ask git.
 - Touch another agent's worktree because it looked idle.

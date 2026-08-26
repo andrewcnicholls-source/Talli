@@ -1,6 +1,6 @@
 ---
 name: release-production
-description: Promote the exact commit currently running on the Talli staging site to production at talli.co.nz. Use when staging has been device-tested and the user wants it live, or when the user types /release-production. Handles bookings and real payments — verifies the staging deployment, identifies migrations and payment changes, requires explicit confirmation, and verifies the result.
+description: Promote the exact commit currently running on the Talli staging site to production at talli.co.nz. Use when Talli staging has been device-tested and the user wants it live, or when the user types /release-production. Specific to the Talli booking site and refuses to run in any other repository — it handles bookings and real payments, verifies the staging deployment, identifies migrations and payment changes, requires explicit confirmation, and verifies the result.
 ---
 
 # release-production
@@ -49,11 +49,46 @@ green Netlify deploy does not mean the backend shipped. Section 5
 below covers this and it is the most common way this release can go
 wrong.
 
+## 0. Refuse to run outside Talli
+
+This skill is **specific to one application**. It knows Talli's two
+Netlify projects by id, its two Supabase projects by ref, that `main`
+is the production branch, and that promotion is a fast-forward. None of
+that is transferable, and every one of those facts is load-bearing on a
+release that takes real money.
+
+So before anything else:
+
+```bash
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
+git -C "$ROOT" remote get-url origin      # expect andrewcnicholls-source/Talli
+test -f "$ROOT/scripts/talli-env.sh" && echo "topology file: present"
+```
+
+If the remote is not `andrewcnicholls-source/Talli`, **or**
+`scripts/talli-env.sh` is missing, **stop immediately.** Say something
+like:
+
+```
+/release-production is specific to the Talli booking site.
+
+This repository is <owner/repo>, which it knows nothing about — not
+its hosting, not its branch topology, not whether it even has a
+staging environment.
+
+No changes were made. Tell me how this project releases and I'll help
+with that directly.
+```
+
+Do not adapt this skill to another repository on the fly. Do not guess
+at a deployment mechanism. A release procedure improvised against an
+unfamiliar production system is exactly the thing this skill exists to
+prevent.
+
 ## 1. Establish the ground truth
 
 ```bash
-. "$(git rev-parse --show-toplevel)/scripts/talli-env.sh"
-git rev-parse --show-toplevel
+. "$ROOT/scripts/talli-env.sh"
 git remote -v                     # must be andrewcnicholls-source/Talli
 git fetch origin --prune --tags
 git status --short
@@ -482,6 +517,7 @@ extra step: they keep the instant rollback path open.
 
 ## Never
 
+- Run this skill against any repository other than Talli.
 - Force-push, or rewrite history on `main`.
 - Deploy a commit that is not the one staging is serving.
 - Deploy when you cannot identify the staging commit.

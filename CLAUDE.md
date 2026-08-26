@@ -41,6 +41,23 @@ Never commit directly to `main` or `staging`.
 | `/cleanup-agent` | the worktree is finished with — removes it, but never unmerged or uncommitted work. |
 | `/release-production` | staging has been device-tested — promotes that exact commit to talli.co.nz. |
 
+### Where the skills live
+
+`.claude/skills/` in this repository, which means a Claude Code session
+only sees them with this repo checked out. A chat in a claude.ai
+*project* is not Claude Code and never sees them.
+
+To have them in every Claude Code session, any repository, upload them
+to the Claude account — `bash scripts/package-skills.sh` builds the
+zips, and claude.ai → Settings → Capabilities → Skills takes them. The
+repository copies stay the source of truth; re-run and re-upload after
+a change or the account copy drifts.
+
+`new-agent`, `finish-agent` and `cleanup-agent` work in any repository:
+they read `scripts/talli-env.sh` when it exists and otherwise derive
+the integration branch from the remote's default. `release-production`
+is Talli-only and refuses to run elsewhere.
+
 ### Validation
 
 `bash scripts/check.sh` is the project's only validation command, and

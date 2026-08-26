@@ -1,6 +1,6 @@
 ---
 name: finish-agent
-description: Validate, commit and push an agent's feature branch, then hand back a PR title and body. Use when work in a Talli agent worktree is finished and ready for review, or when the user types /finish-agent. Runs the project's real checks, refuses to work on protected branches, and never deploys to staging or production.
+description: Validate, commit and push an agent's feature branch, then hand back a PR title and body. Use when work in an agent worktree is finished and ready for review, or when the user types /finish-agent. Runs the validation commands the repository actually defines, refuses to work on protected branches, and never deploys to staging or production.
 ---
 
 # finish-agent
@@ -12,32 +12,48 @@ whether it passes, and explain what happens next.
 /finish-agent
 ```
 
-**This skill does not deploy anything.** Talli's test site builds from
-the `staging` branch, and that branch is shared. Pushing a feature
-branch there would overwrite whatever another agent is currently
-device-testing. Code reaches staging by being merged, not by being
-copied.
+**This skill does not deploy anything.** In Talli, the test site builds
+from the shared `staging` branch — pushing a feature branch there would
+overwrite whatever another agent is currently device-testing. Code
+reaches a shared environment by being merged, not by being copied. That
+holds as a general rule, not just here.
 
 ## Steps
 
-### 1. Establish where you are
+### 1. Establish where you are, and the branch topology
 
 ```bash
 git rev-parse --show-toplevel
 git branch --show-current
 git worktree list
-. "$(git rev-parse --show-toplevel)/scripts/talli-env.sh"
 ```
+
+**In the Talli repository**, `scripts/talli-env.sh` exists at the root
+and is authoritative — source it for `$TALLI_INTEGRATION_BRANCH` (which
+is `staging`, not `main`) and `$TALLI_PROTECTED_BRANCHES`.
+
+**Anywhere else**, the integration branch is the remote's default:
+
+```bash
+BASE="$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null \
+        | sed 's#^origin/##')"
+```
+
+Protected: that branch, plus any of `main`, `master`, `develop`,
+`trunk`, `staging`, `release`, `production` that exist.
 
 ### 2. Refuse to run on a protected branch
 
-If the current branch is in `$TALLI_PROTECTED_BRANCHES` (`main`,
-`staging`), stop. Explain what those branches mean:
+If the current branch is protected, stop. Say what it deploys to if you
+know — in Talli:
 
 - `main` is the live booking site. Committing here is a production
   deployment.
 - `staging` is the shared device-test site. Committing here overwrites
   what someone may be testing on a phone right now.
+
+Elsewhere, say plainly that it is a shared branch and the work belongs
+on its own.
 
 Offer to move the work onto a feature branch instead
 (`git switch -c feature/<name>`), which preserves everything. Do not
@@ -57,29 +73,54 @@ change to `assets/talli-config.js` that was not asked for, an edited
 migration that has already been applied somewhere. Name them; let the
 user decide. Do not silently revert them.
 
-Two things in this repository deserve a second look every time:
+Two things in the Talli repository deserve a second look every time:
 
 - **`assets/talli-config.js`** — the hostname switch is the only thing
   keeping the test site off production data.
 - **`supabase/migrations/`** — a migration already applied to a project
   must never be edited in place. New behaviour means a new file.
 
-### 4. Run the checks
+The general form of that: anything holding an environment boundary, and
+anything already applied elsewhere that cannot be edited retroactively.
+
+### 4. Run the checks that exist
+
+**In the Talli repository:**
 
 ```bash
 bash scripts/check.sh
 ```
 
-That is the project's validation command, and it is the same one CI
-runs. There is no build, no bundler, no test framework and no linter in
-this repository — do not invent `npm test`, `npm run lint` or
-`npm run build`, and do not report them as passing.
+That is the project's only validation command, and CI runs the same
+file. There is no build, no bundler, no test framework and no linter —
+do not invent `npm test`, `npm run lint` or `npm run build`.
 
-What `scripts/check.sh` actually covers: JavaScript syntax, local
-asset references, the environment switch, the edge-function `IS_TEST`
-guards, the production build no-op, committed secrets, migration
-filenames. What it does **not** cover: anything about how the site
-behaves in a browser. Say both.
+What it covers: JavaScript syntax, local asset references, the
+environment switch, the edge-function `IS_TEST` guards, the production
+build no-op, committed secrets, migration filenames. What it does
+**not** cover: anything about how the site behaves in a browser. Say
+both.
+
+**Anywhere else**, find out what the repository actually has before
+running anything. Look, in this order, for what the project itself
+defines:
+
+```bash
+ls Makefile justfile Taskfile.yml 2>/dev/null
+[ -f package.json ] && python3 -c "import json;print(' '.join(json.load(open('package.json')).get('scripts',{})))"
+ls pyproject.toml tox.ini noxfile.py Cargo.toml go.mod 2>/dev/null
+ls .github/workflows/*.y*ml 2>/dev/null
+```
+
+The CI workflow is the best guide — whatever it runs on a PR is what
+the project considers validation. Run those same commands: formatting,
+lint, typecheck, unit tests, integration tests, build, in whatever
+subset genuinely exists.
+
+**Never invent a command.** A `package.json` without a `test` script
+means there are no tests, not that you should write `npm test` and
+report the failure as a problem. Say "no test script defined" and move
+on. Report exactly what you ran and what it returned.
 
 If it fails:
 
@@ -151,16 +192,23 @@ Staging has NOT been updated. It updates when this merges to staging.
 
 Adapt the shape; keep the honesty. In particular:
 
-- **The PR base is `staging`, not `main`.** `main` is the production
-  release branch — a PR merged there deploys to the live booking site
-  without ever reaching a device. GitHub's default base is currently
-  `main`, so say the base explicitly and use a compare URL that spells
-  it out.
+- **In Talli the PR base is `staging`, not `main`.** `main` is the
+  production release branch — a PR merged there deploys to the live
+  booking site without ever reaching a device. Say the base explicitly
+  and use a compare URL that spells it out. Elsewhere, base the PR on
+  the integration branch from step 1, and still name it explicitly
+  rather than relying on the repository's default.
 - Always end with whether staging was updated. It was not.
 - If the branch adds files under `supabase/migrations/` or changes
   anything under `supabase/functions/`, list them under "out-of-band
   release steps". Netlify deploys the static site only; those two need
-  a separate, deliberate step against Supabase.
+  a separate, deliberate step against Supabase. The general form:
+  anything in the diff that the deployment pipeline does not itself
+  ship — migrations, infrastructure, secrets, scheduled jobs — gets
+  named, because a green deploy will not carry it.
+- The "Next" steps describe Talli's route to production. In another
+  repository, describe that repository's actual route, and if you do
+  not know it, say so instead of inventing one.
 
 ## Never
 

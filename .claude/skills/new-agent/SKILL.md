@@ -1,6 +1,6 @@
 ---
 name: new-agent
-description: Create an isolated git worktree and feature branch for a Claude agent to work in. Use when starting a new piece of work on Talli, or when the user types /new-agent with a task name. Creates a workspace only — never touches staging, production, Netlify, Supabase or any deployed environment.
+description: Create an isolated git worktree and feature branch so an agent can work without colliding with other agents in the same checkout. Use when starting a new piece of work, or when the user types /new-agent with a task name. Branches from the repository's integration branch and creates a sibling worktree directory. Creates a workspace only — never deploys, and never touches a deployed environment.
 ---
 
 # new-agent
@@ -46,14 +46,45 @@ git worktree list --porcelain | awk '/^worktree /{print $2; exit}'
 
 Use that path as `ROOT`.
 
-### 2. Read the environment definition
+### 2. Work out the branch topology
+
+Two facts are needed: which branch new work should be based on, and
+which branches must never be committed to directly.
+
+**In the Talli repository** — `scripts/talli-env.sh` exists at the root
+— source it and use it. It is authoritative:
 
 ```bash
 . "$ROOT/scripts/talli-env.sh"
 ```
 
-This gives `TALLI_BRANCH_PREFIX`, `TALLI_WORKTREE_PREFIX` and the
-protected branch list. Do not hardcode branch names.
+That gives `$TALLI_INTEGRATION_BRANCH` (`staging`, not `main` — read
+the file's comments before assuming), `$TALLI_PROTECTED_BRANCHES`,
+`$TALLI_BRANCH_PREFIX` and `$TALLI_WORKTREE_PREFIX`.
+
+**In any other repository**, derive them:
+
+```bash
+BASE="$(git -C "$ROOT" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null \
+        | sed 's#^origin/##')"
+```
+
+That is the remote's own default branch, which is the right base for
+new work almost everywhere. If it comes back empty the remote HEAD is
+not set locally — try `git -C "$ROOT" remote set-head origin -a`, and
+if it still fails, ask rather than guessing between `main` and
+`master`.
+
+Treat as protected: that base branch, plus any of `main`, `master`,
+`develop`, `trunk`, `staging`, `release`, `production` that exist in
+the repository. Branch prefix `feature/`. Worktree prefix: the repo
+directory's own name plus a hyphen, so the sibling of `~/code/foo` is
+`~/code/foo-<task>`.
+
+Never hardcode a branch name. A repository whose default branch is
+`main` and one whose deployable branch is `staging` are both normal,
+and getting it backwards is how an agent ends up basing work on
+untested code — or committing to production.
 
 ### 3. Inspect the current state and report it before changing anything
 
@@ -98,7 +129,9 @@ git -C "$ROOT" show-ref --verify --quiet "refs/remotes/origin/$BRANCH" # remote
 test -e "$WORKTREE"                                                    # directory
 ```
 
-Where `WORKTREE="$(dirname "$ROOT")/${TALLI_WORKTREE_PREFIX}${SLUG}"`.
+Where `WORKTREE="$(dirname "$ROOT")/${PREFIX}${SLUG}"` and `PREFIX` is
+`$TALLI_WORKTREE_PREFIX` in the Talli repo, or `$(basename "$ROOT")-`
+anywhere else.
 
 If **any** of these already exists, do not proceed. Report exactly what
 exists and offer the choices:
@@ -119,13 +152,16 @@ checked out — an agent's work should be based on the current deployable
 version:
 
 ```bash
-git -C "$ROOT" worktree add -b "$BRANCH" "$WORKTREE" \
-    "origin/$TALLI_INTEGRATION_BRANCH"
+git -C "$ROOT" worktree add -b "$BRANCH" "$WORKTREE" "origin/$BASE"
 ```
 
-If `origin/$TALLI_INTEGRATION_BRANCH` does not exist, say so and stop —
-that branch is the deploy source for the test site and its absence is a
-real problem worth surfacing, not routing around.
+where `$BASE` is the integration branch established in step 2.
+
+If `origin/$BASE` does not exist, say so and stop. In the Talli repo
+that branch is the deploy source for the test site, so its absence is a
+real problem worth surfacing rather than routing around; elsewhere it
+means the topology was guessed wrong, which is worth knowing before a
+branch is created from the wrong place.
 
 ### 7. Verify it worked
 
@@ -157,7 +193,9 @@ Open it:
 Nothing was deployed. Staging and production are untouched.
 ```
 
-Always include that last line. It is the point of the skill.
+Always include a closing line saying nothing was deployed — it is the
+point of the skill. In a repository with no staging or production to
+speak of, say "Nothing was deployed." on its own.
 
 ## Never
 
