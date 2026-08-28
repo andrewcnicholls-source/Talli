@@ -6,8 +6,8 @@ between them.
 
 |                | **Production**                      | **Test**                                 |
 | -------------- | ----------------------------------- | ---------------------------------------- |
-| Site           | https://talli.co.nz                 | https://talli-test.netlify.app           |
-| Netlify project| `talliconz`                         | `talli-test`                             |
+| Site           | https://talli.co.nz                 | https://staging.talli.pages.dev          |
+| Cloudflare Pages| production branch                  | preview branch                           |
 | Git branch     | `main`                              | `staging`                                |
 | Supabase       | `oxzwfemyavznykqixhvk`              | `uhdoverwvlxvyyctskle`                   |
 | Stripe         | live keys                           | test-mode keys — real Stripe, fake money |
@@ -19,45 +19,22 @@ Breaking the test site cannot touch a real booking.
 
 ---
 
-## This is done now
+## Hosting
 
-Both of the things this section used to ask for have happened. The
-`staging` branch exists, the `talli-test` project is linked to the
-repository and building from it, and the last test deploy was a real
-git build:
+Both environments are one Cloudflare Pages project, `talli`. `main` is
+its production branch and `staging` is its only enabled preview branch,
+which gets the stable alias `staging.talli.pages.dev`.
 
-```
-talli-test   staging   f396224   built from git, published 26 Aug
-talliconz    main      6d5e2ee   built from git, published 26 Aug
-```
+Feature branches are deliberately not built. Every branch build costs
+against the monthly quota — the constraint that moved this project off
+Netlify in the first place — and each one would publish another
+un-gated copy of the booking page.
 
-Netlify records the commit for every deploy, so "which code am I
-looking at?" is always answerable — see `DEPLOYMENT.md`, question 4.
-
-**One thing to fix before the workflow is usable:** `staging` is three
-commits *behind* `main`. The test site is running older code than the
-live site, which is backwards. Bring it up to date once, and then it
-stays ahead:
-
-```bash
-git fetch origin
-git push origin origin/main:refs/heads/staging   # fast-forward, no force
-```
-
-### The fallback: deploying without git
-
-The project also takes a deploy straight from a working copy. From the
-repo root, once the Netlify CLI is authenticated:
-
-```bash
-npx netlify-cli deploy --build --prod --site talli-test
-```
-
-That ships whatever is on disk and pays no attention to branches — so
-the resulting deploy has **no commit attached**, and nobody can then
-say what is on the test site. `/release-production` refuses to promote
-a deploy like that, on purpose. Treat it as the way to unstick a
-broken deploy, not the way you work.
+Cloudflare records the commit for every deployment, so "which code am I
+looking at?" is always answerable — see `DEPLOYMENT.md`, question 4. A
+deployment uploaded from a working copy rather than built from git has
+no commit attached, and `/release-production` refuses to promote one, on
+purpose.
 
 ## How you work now
 
@@ -66,7 +43,7 @@ broken deploy, not the way you work.
              │                                │                          │
    feature/x ─PR─CI──────────────────────► staging ──────────────────► main
                                               │                          │
-                                    talli-test.netlify.app         talli.co.nz
+                                  staging.talli.pages.dev        talli.co.nz
                                    (fake fixtures, fake money)    (real customers)
                                               │                          ▲
                                               └──── device testing ──────┘
@@ -120,7 +97,7 @@ You will not have to wonder.
 - Every test fixture is named `TEST — something`.
 
 The switch is by hostname, in `assets/talli-config.js`. Only `talli.co.nz`,
-`www.talli.co.nz` and `talliconz.netlify.app` count as production. Anything
+and `www.talli.co.nz` count as production. Anything
 else — previews, `localhost`, a URL nobody anticipated — falls to **test**.
 The default points away from real customer data on purpose.
 
@@ -140,10 +117,10 @@ stop a confused customer booking a fixture that does not exist — not to keep
 a determined person out. That is fine, because the test database holds no
 customer data and every write is still guarded server-side.
 
-If you ever want real protection there, Netlify's own password feature does
-it at the edge. I tried to enable it and their API refused (`422`) — it needs
-a paid plan. If you upgrade, turn it on under *Access & security* and delete
-`assets/talli-testgate.js`.
+If you ever want real protection there, Cloudflare Access does it at the
+edge, before a byte of HTML is served, and it is free at this scale —
+which the Netlify equivalent was not. Zero Trust → Access → Applications,
+pointed at the staging hostname, then delete `assets/talli-testgate.js`.
 
 The gate screen passphrase on the test project is a fallback baked into the
 function, used only because the test project has no secrets set. Set
@@ -280,36 +257,33 @@ Tiers are per-offer; copy the pattern in
 
 ---
 
-## One change that touches production
+## The one build step, and why it cannot touch production
 
-`netlify.toml` is new, and Netlify reads it from **whichever branch it
-builds** — so the live site sees it too.
+`scripts/build.sh` runs on **every** Pages build, production included.
 
-It is written to do nothing on production. The build command checks
-`SITE_NAME` and exits immediately unless it is the test project; only the
-test site gets a `robots.txt` and a `noindex` header. Production publishes
-byte-for-byte what is in the repo, exactly as before.
+It is written to do nothing on production. It reads `CF_PAGES_BRANCH`
+and exits immediately on the production branch; every other branch gets
+a `robots.txt` and a `noindex` header. Production publishes byte-for-byte
+what is in the repo.
 
-I verified both paths locally, but I could not test a real production deploy
-without deploying to production, which I wasn't going to do while you slept.
-**On your next merge to `main`, just confirm talli.co.nz still loads.** If
-anything looks wrong, deleting `netlify.toml` restores the previous
-behaviour completely.
+That guard is the whole safety property, so `scripts/check.sh` tests it
+by *running* the script both ways and asserting what it wrote — not by
+grepping the source, which would keep passing on a script that had
+stopped working.
 
 ---
 
-## What I could not do
+## What still needs a human
 
-- **Link the Netlify project to the repo** — no API for it. ~~See the top.~~
-  *Done since, by hand. Both projects now build from git and every deploy
-  carries its commit.*
-- **Deploy the test site directly instead** — Netlify answered `403
-  Forbidden`: the token this tooling holds can read projects but not push
-  deploys. Still true, and no longer needed.
 - **Set Supabase secrets** — the tooling has no secrets API. Handled with
   test-project-only fallbacks in the functions, keyed on the project ref, so
   they are unreachable on production. Setting a real secret always wins.
-- **Enable Netlify password protection** — their API returned `422`; it needs
-  a paid plan.
-- **Point `test.talli.co.nz` at the test site** — needs a DNS record only you
-  can add. Say the word and I'll do the Netlify side.
+  The test project wants `SITE_URL` = `https://staging.talli.pages.dev`,
+  and an `ALLOWED_ORIGIN` that matches it.
+- **DNS for `talli.co.nz`** — the zone lives at Crazy Domains and moves to
+  Cloudflare as part of this migration. Nameserver changes and record
+  verification are yours; a dropped MX record bounces mail silently, so the
+  record set gets exported and checked before the nameservers change.
+- **Point `test.talli.co.nz` at the test site** — once the zone is on
+  Cloudflare this is a custom domain on the Pages project plus one record.
+  Say the word and I'll do the Cloudflare side.

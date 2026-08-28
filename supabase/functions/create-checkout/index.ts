@@ -52,7 +52,7 @@ const TEST_PROJECT_REF = 'uhdoverwvlxvyyctskle'
 const IS_TEST = (Deno.env.get('SUPABASE_URL') ?? '').includes(TEST_PROJECT_REF)
 
 const SITE_URL = Deno.env.get('SITE_URL') ??
-  (IS_TEST ? 'https://talli-test.netlify.app' : 'https://talli.co.nz')
+  (IS_TEST ? 'https://staging.talli.pages.dev' : 'https://talli.co.nz')
 const ALLOWED_ORIGIN = Deno.env.get('ALLOWED_ORIGIN') ?? '*'
 
 // Holds run slightly longer than the Stripe session so the sweeper can never

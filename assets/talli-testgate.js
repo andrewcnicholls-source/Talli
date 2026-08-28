@@ -14,9 +14,10 @@
    reachable from a browser.
 
    If real access control is ever wanted here, the right answer is
-   Netlify's own password protection (Site settings -> Access & security),
-   which is enforced at the edge before a byte of HTML is served. It needs
-   a paid Netlify plan. Turn it on and delete this file.
+   Cloudflare Access (Zero Trust -> Access -> Applications), pointed at
+   the staging hostname. It is enforced at the edge before a byte of HTML
+   is served, and unlike the Netlify equivalent this replaced, it is free
+   at this scale. Turn it on and delete this file.
 
    The gate screen at /admin.html is deliberately exempt: it already has a
    passphrase of its own that is checked server-side, and asking for two in

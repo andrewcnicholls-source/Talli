@@ -13,8 +13,9 @@ Create an isolated workspace for one agent to do one piece of work.
 
 That is the whole job. This skill creates a branch and a worktree and
 tells the user how to open it. **It deploys nothing, migrates nothing,
-and touches no environment.** If you find yourself reaching for Netlify
-or Supabase while running this skill, stop — you are in the wrong skill.
+and touches no environment.** If you find yourself reaching for
+Cloudflare or Supabase while running this skill, stop — you are in the
+wrong skill.
 
 ## Why worktrees
 
@@ -199,7 +200,7 @@ speak of, say "Nothing was deployed." on its own.
 
 ## Never
 
-- Deploy to Netlify, or run anything against Supabase.
+- Deploy to Cloudflare, or run anything against Supabase.
 - Modify `main` or `staging`, or any environment configuration.
 - Overwrite an existing branch, worktree or directory without the user
   explicitly saying to.

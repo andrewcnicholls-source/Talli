@@ -51,7 +51,7 @@ Upload these at claude.ai -> Settings -> Capabilities -> Skills.
 
   release-production
       Talli only. It refuses to run anywhere else, by design — it
-      knows this application's Netlify and Supabase projects by id and
+      knows this application's Cloudflare and Supabase projects by name
       none of that transfers. Upload it if you want it on hand; it
       will decline politely in any other repository.
 

@@ -3,8 +3,8 @@
 #  Talli — the one place the environment topology is written down.
 #
 #  Every skill and script reads this file rather than hardcoding a
-#  branch name or a site id. If the topology ever changes — say the
-#  Netlify projects get re-pointed at different branches — this file is
+#  branch name or a project name. If the topology ever changes — say the
+#  Pages project gets re-pointed at different branches — this file is
 #  the only thing that has to change.
 #
 #  Source it, don't run it:  . scripts/talli-env.sh
@@ -14,9 +14,9 @@
 #  Branches
 #
 #  Two long-lived branches, and they are NOT the conventional names.
-#  Netlify decides what each one means, and Netlify says:
+#  Cloudflare Pages decides what each one means, and it says:
 #
-#    staging  -> talli-test.netlify.app   the shared device-test site
+#    staging  -> staging.talli.pages.dev  the shared device-test site
 #    main     -> talli.co.nz              real customers, real money
 #
 #  So `staging` is the integration branch: feature branches merge there,
@@ -32,14 +32,22 @@ TALLI_PRODUCTION_BRANCH="main"
 TALLI_PROTECTED_BRANCHES="main staging"
 
 # ---------------------------------------------------------------------
-#  Netlify projects
+#  Cloudflare Pages
+#
+#  ONE Pages project serves both environments. `main` is its production
+#  branch; `staging` is its only enabled preview branch, which gets the
+#  stable alias below. Feature branches are deliberately NOT built —
+#  every branch build costs against the monthly quota and would publish
+#  another un-gated copy of the booking page.
+#
+#  The account id is read from the environment rather than committed,
+#  so a checkout carries no account identifiers. Set it alongside
+#  CLOUDFLARE_API_TOKEN. Dashboard -> Workers & Pages -> Account ID.
 # ---------------------------------------------------------------------
-TALLI_STAGING_SITE_NAME="talli-test"
-TALLI_STAGING_SITE_ID="ec2dd376-9da5-428b-bdd7-3a496a796841"
-TALLI_STAGING_URL="https://talli-test.netlify.app"
+TALLI_CF_ACCOUNT_ID="${CLOUDFLARE_ACCOUNT_ID:-}"
+TALLI_CF_PAGES_PROJECT="talli"
 
-TALLI_PRODUCTION_SITE_NAME="talliconz"
-TALLI_PRODUCTION_SITE_ID="a290ff77-40ca-4238-9ac1-e91736b3fd7d"
+TALLI_STAGING_URL="https://staging.talli.pages.dev"
 TALLI_PRODUCTION_URL="https://talli.co.nz"
 
 # ---------------------------------------------------------------------
@@ -65,13 +73,13 @@ TALLI_BRANCH_PREFIX="feature/"
 TALLI_PAYMENT_PATHS="supabase/functions/create-checkout supabase/functions/stripe-webhook supabase/functions/check-setup assets/booking.js assets/confirmed.js booking-confirmed.html"
 TALLI_BOOKING_PATHS="assets/booking.js assets/admin.js supabase/functions/gate-ops supabase/functions/get-booking book.html admin.html"
 
-# Things Netlify does NOT deploy. Changes here need a separate,
+# Things Cloudflare Pages does NOT deploy. Changes here need a separate,
 # deliberate release step against Supabase.
 TALLI_OUT_OF_BAND_PATHS="supabase/migrations supabase/functions"
 
 export TALLI_INTEGRATION_BRANCH TALLI_PRODUCTION_BRANCH TALLI_PROTECTED_BRANCHES
-export TALLI_STAGING_SITE_NAME TALLI_STAGING_SITE_ID TALLI_STAGING_URL
-export TALLI_PRODUCTION_SITE_NAME TALLI_PRODUCTION_SITE_ID TALLI_PRODUCTION_URL
+export TALLI_CF_ACCOUNT_ID TALLI_CF_PAGES_PROJECT
+export TALLI_STAGING_URL TALLI_PRODUCTION_URL
 export TALLI_STAGING_SUPABASE_REF TALLI_PRODUCTION_SUPABASE_REF
 export TALLI_WORKTREE_PREFIX TALLI_BRANCH_PREFIX
 export TALLI_PAYMENT_PATHS TALLI_BOOKING_PATHS TALLI_OUT_OF_BAND_PATHS

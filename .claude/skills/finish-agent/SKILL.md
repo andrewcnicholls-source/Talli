@@ -171,7 +171,7 @@ Changes:
   supabase/migrations/20260826120000_booking_cancellation.sql  (new)
 
 Out-of-band release steps this branch will need:
-  1 new migration — Netlify does not apply migrations.
+  1 new migration — Cloudflare Pages does not apply migrations.
 
 Suggested PR
   Base: staging
@@ -183,7 +183,7 @@ Suggested PR
 Next:
   1. Open the PR against staging.
   2. CI runs scripts/check.sh on it.
-  3. Merge when approved — that deploys to talli-test.netlify.app.
+  3. Merge when approved — that deploys to staging.talli.pages.dev.
   4. Test the staging site on real devices.
   5. Run /release-production to promote the tested commit to talli.co.nz.
 
@@ -201,11 +201,11 @@ Adapt the shape; keep the honesty. In particular:
 - Always end with whether staging was updated. It was not.
 - If the branch adds files under `supabase/migrations/` or changes
   anything under `supabase/functions/`, list them under "out-of-band
-  release steps". Netlify deploys the static site only; those two need
-  a separate, deliberate step against Supabase. The general form:
-  anything in the diff that the deployment pipeline does not itself
-  ship — migrations, infrastructure, secrets, scheduled jobs — gets
-  named, because a green deploy will not carry it.
+  release steps". Cloudflare Pages deploys the static site only; those
+  two need a separate, deliberate step against Supabase. The general
+  form: anything in the diff that the deployment pipeline does not
+  itself ship — migrations, infrastructure, secrets, scheduled jobs —
+  gets named, because a green deploy will not carry it.
 - The "Next" steps describe Talli's route to production. In another
   repository, describe that repository's actual route, and if you do
   not know it, say so instead of inventing one.
