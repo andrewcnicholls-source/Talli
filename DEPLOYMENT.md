@@ -294,6 +294,48 @@ or a Supabase service-role JWT is committed.
 
 ---
 
+## 10. Where does the domain point?
+
+The registrar is **Crazy Domains**; the zone moves to Cloudflare so the
+apex can reach Pages at all. `talli.co.nz` cannot be a CNAME — the DNS
+spec forbids it at a zone apex — and Pages publishes no stable A record
+to point at, so hosting the zone on Cloudflare is not a preference here,
+it is the requirement.
+
+The whole zone is two records, and **no mail runs on this domain** — no
+MX, no SPF, no DKIM, no DMARC. That is the fact that makes the
+nameserver change cheap. Confirm it is still true before moving; the
+usual way this goes wrong is a record nobody remembered.
+
+Before the migration:
+
+| Record | Value | Actually served by |
+| --- | --- | --- |
+| `talli.co.nz` A | `104.198.14.52` | Netlify (legacy apex load balancer) |
+| `www.talli.co.nz` CNAME | `andrewcnicholls-source.github.io` | GitHub Pages |
+
+After: both are custom domains on the `talli` Pages project, managed by
+Cloudflare, and GitHub Pages is off. See "Turn off GitHub Pages" below
+for why the second row was a live problem and not just untidy.
+
+### Moving it
+
+1. Export the full record set from Crazy Domains first. It is the
+   rollback artifact.
+2. Add `talli.co.nz` to Cloudflare on the Free plan; let it scan-import,
+   then check the imported zone against the export record by record.
+3. Attach `talli.co.nz` and `www.talli.co.nz` as custom domains on the
+   Pages project. SSL/TLS → **Full (strict)**.
+4. Change the nameservers at Crazy Domains to the pair Cloudflare
+   assigns. `ns1`/`ns2.crazydomains.com` happen to run on Cloudflare's
+   network themselves — that is Crazy Domains' own arrangement and
+   changes nothing about this step.
+5. Verify with the smoke tests in `/release-production` §9.
+
+Rollback once the zone is on Cloudflare is a record edit, not a
+nameserver change: point the apex back at Netlify's IP. Much faster, and
+the reason step 4 comes last.
+
 ## Feature flags
 
 There are none, and nothing here needs one yet.
@@ -352,15 +394,25 @@ Worth protecting `staging` the same way, minus the force-push rule.
 ### 3. Turn off GitHub Pages
 
 GitHub Pages builds this repository on every push to `main` (workflow
-`pages-build-deployment`, 36 runs) and publishes a third public copy of
-the site at the `github.io` URL.
+`pages-build-deployment`) and publishes another public copy of the site
+at the `github.io` URL.
 
-That hostname is not in `PRODUCTION_HOSTS`, so the copy talks to the
-**test** database — no customer data is at risk. But it is an
-unmanaged, un-gated, indexable copy of the booking page, wired to fake
-fixtures, that nobody is watching.
+**This is worse than it first looks, and an earlier version of this file
+got it wrong.** The reasoning used to be that `github.io` is not in
+`PRODUCTION_HOSTS`, so the copy talks to the test database and no
+customer data is at risk. That is true of the `github.io` hostname
+itself — but `www.talli.co.nz` is a CNAME to it, and `www.talli.co.nz`
+*is* in `PRODUCTION_HOSTS`. The environment switch runs in the browser
+against the hostname in the address bar, so anyone arriving on
+`www.talli.co.nz` gets the GitHub Pages copy wired to the **production**
+database and **live** Stripe keys.
 
-**Settings → Pages → Source → None.**
+So there are two production surfaces on two platforms, only one of which
+goes through the staging gate. Both halves of the fix matter:
+
+- **Settings → Pages → Source → None.**
+- Attach `www.talli.co.nz` to the Pages project as a custom domain, so
+  it serves the same deployment as the apex.
 
 ### 4. Let web sessions reach the sites (optional)
 
