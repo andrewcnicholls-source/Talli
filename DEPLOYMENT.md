@@ -359,8 +359,37 @@ enable in production as a second small commit. Don't add a framework.
 
 Claude's GitHub access is deliberately scoped to code, issues and pull
 requests. Repository *administration* — default branch, branch
-protection, Pages — is blocked at the proxy, so these four are yours.
-Each takes under a minute.
+protection, Pages — is blocked at the proxy, and the Cloudflare
+dashboard is outside it entirely. So these are yours. Each takes under
+a minute.
+
+### 0. Set the Pages production branch to `main`
+
+**Workers & Pages → `talli` → Settings → Build → Production branch.**
+
+This is the one Pages setting that cannot be inferred from the
+repository, and getting it wrong fails quietly. It was set to `staging`
+when the project was first created.
+
+Nothing in the repo defends against it, because nothing in the repo can
+see it. Two guards *look* like they would, and neither does:
+
+- `scripts/build.sh` compares `CF_PAGES_BRANCH` against
+  `TALLI_PRODUCTION_BRANCH` from `scripts/talli-env.sh` — the repo's
+  idea of production, not Cloudflare's. So a `staging` build still
+  correctly gets `robots.txt` and `noindex`, whatever Cloudflare has
+  labelled it.
+- `talli.pages.dev` is not in `PRODUCTION_HOSTS`, so that hostname
+  resolves to the test database regardless.
+
+Both of those hold right up until a **custom domain** is attached. Then
+`talli.co.nz` serves whatever the production branch is — and because
+the environment switch reads the hostname, staging code would be
+running against the **production** database with live Stripe keys. The
+site would look fine. That is the whole problem with it.
+
+So: fix the setting before attaching a domain, not after. Changing it
+does not relabel existing deployments — retrigger a build, or push.
 
 ### 1. Make `staging` the default branch
 
