@@ -360,10 +360,37 @@ enable in production as a second small commit. Don't add a framework.
 Claude's GitHub access is deliberately scoped to code, issues and pull
 requests. Repository *administration* — default branch, branch
 protection, Pages — is blocked at the proxy, and the Cloudflare
-dashboard is outside it entirely. So these are yours. Each takes under
-a minute.
+dashboard is outside it entirely. So these are yours. Each takes
+under a minute, and the two Cloudflare ones come first because their
+failure modes are the worst.
 
-### 0. Set the Pages production branch to `main`
+### 0a. Create a **Pages** project, not a Worker
+
+**Workers & Pages → Create → the _Pages_ tab → Connect to Git.**
+
+Cloudflare's default "Connect to Git" flow creates a **Worker**. That
+happened here, and the tell is a build that fails at a *deploy command*
+with `wrangler` logs — a Pages project has no deploy command at all, so
+if you see one you are on the wrong product.
+
+Workers was investigated properly rather than dismissed. It has real
+advantages: `.assetsignore` (which would fix the published-surface
+problem below), stable per-branch preview URLs, and it is where
+Cloudflare is steering new projects. It was rejected for one decisive
+reason:
+
+> **Workers Builds injects `WORKERS_CI_BRANCH`, not `CF_PAGES_BRANCH`.**
+
+`scripts/build.sh` keys off `CF_PAGES_BRANCH`. On a Worker that is
+always empty, so `"" = "main"` is false, every build — production
+included — counts as non-production, and `noindex` gets written onto
+`talli.co.nz`. The live booking site would quietly leave Google. The
+build would go green while doing it.
+
+If the project ever does move to Workers, that guard has to change in
+the same commit. It is the load-bearing line.
+
+### 0b. Set the Pages production branch to `main`
 
 **Workers & Pages → `talli` → Settings → Build → Production branch.**
 
