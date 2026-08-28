@@ -109,9 +109,12 @@ Do not infer this from git. Ask the deployment platform.
 bash scripts/cf-deploy.sh preview
 ```
 
-It prints one `key: value` per line. Use the Cloudflare MCP server
-instead if it is configured and can answer the same questions — the
-fields below are what matter, not how you fetched them.
+It prints one `key: value` per line.
+
+**Do not go looking for an MCP tool that does this.** Cloudflare's MCP
+server covers D1, KV, R2, Hyperdrive and Workers; it has no Pages
+deployments tool, so there is no way to ask it what commit a deployment
+is serving. This script is the route, not a fallback for one.
 
 | Field | Why |
 | --- | --- |
@@ -129,7 +132,10 @@ to guessing from the branch tip.
 
 If the command exits non-zero you did not get an answer, which is not
 the same as "nothing is deployed". STOP, and say which of the two it
-was.
+was. Exit `3` is the one to read carefully: it means Cloudflare answered
+in a shape the script does not understand, so the script needs fixing
+and **nothing has been learned about the deployment**. Do not report
+that as a release problem, and do not fall back to the branch tip.
 
 ## 3. Ask Cloudflare what production is running
 
