@@ -204,7 +204,7 @@ Deno.serve(async (req) => {
       : IS_TEST,
     detail: !siteUrl
       ? (IS_TEST
-        ? 'Not set, which is correct here — the test project falls back to https://talli-test.netlify.app.'
+        ? 'Not set, which is correct here — the test project falls back to https://staging.talli.pages.dev.'
         : 'Not set. Defaults to https://talli.co.nz, which happens to be right — but set it explicitly.')
       : siteUrl.endsWith('/')
       ? `Set to ${siteUrl} — remove the trailing slash.`

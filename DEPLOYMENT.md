@@ -12,9 +12,8 @@ passphrases, Stripe test mode. This file describes how things *move*.
 
 |                    | **Local** | **Test / staging** | **Production** |
 | --- | --- | --- | --- |
-| Where | a git worktree on your machine | https://talli-test.netlify.app | https://talli.co.nz |
-| Netlify project | none | `talli-test` | `talliconz` |
-| Netlify site id | — | `ec2dd376-9da5-428b-bdd7-3a496a796841` | `a290ff77-40ca-4238-9ac1-e91736b3fd7d` |
+| Where | a git worktree on your machine | https://staging.talli.pages.dev | https://talli.co.nz |
+| Cloudflare Pages | none | preview branch | production branch |
 | Deploys from | nothing | branch `staging` | branch `main` |
 | Supabase project | test | test `uhdoverwvlxvyyctskle` | prod `oxzwfemyavznykqixhvk` |
 | Stripe | test mode | test mode | **live** |
@@ -28,9 +27,13 @@ into it and it deploys to the test site. `main` is the *release*
 branch — a commit reaches it only by being promoted after device
 testing, and arriving there is a production deployment.
 
-The names come from Netlify, which is already configured this way.
-Everything in `scripts/talli-env.sh` derives from those two facts, and
-that file is the only place they are written down.
+The names come from Cloudflare Pages, which is configured this way.
+One Pages project serves both: `main` is its production branch and
+`staging` is its only enabled preview branch. Feature branches are
+deliberately not built — every build costs against the monthly quota
+and would publish another un-gated copy of the booking page.
+Everything in `scripts/talli-env.sh` derives from those facts, and that
+file is the only place they are written down.
 
 ### How an environment is chosen
 
@@ -39,14 +42,20 @@ Not at deploy time. There is no build step and nothing is substituted.
 hostname:
 
 ```
-talli.co.nz, www.talli.co.nz, talliconz.netlify.app  ->  PRODUCTION
-everything else                                       ->  TEST
+talli.co.nz, www.talli.co.nz  ->  PRODUCTION
+everything else               ->  TEST
 ```
 
 The default points at test on purpose. A preview URL, a `file://`
 page, `localhost`, a hostname nobody anticipated — all of them land on
 the test database. Getting it wrong costs a wasted test, not a real
 booking.
+
+This is why `talli.pages.dev` — the Pages project's own hostname for
+the production branch — is **not** in that list. It serves the same
+commit as production, and leaving it out means it talks to the test
+database behind a red banner rather than standing up a second,
+unwatched copy of the live booking page.
 
 This is also why promoting a commit is safe: the identical bytes are
 test on one hostname and production on another. Nothing is rebuilt
@@ -96,42 +105,42 @@ staging**, in about 30 seconds. `main` is downstream of staging, not
 upstream of it.
 
 ```
-feature/x ──PR──> staging ──> talli-test.netlify.app ──devices──> main ──> talli.co.nz
+feature/x ──PR──> staging ──> staging.talli.pages.dev ──devices──> main ──> talli.co.nz
 ```
 
 ## 4. How do I know which commit staging is running?
 
-Netlify records it. Do not infer it from the branch tip — the branch
-can have moved since the last successful build.
+Cloudflare records it. Do not infer it from the branch tip — the
+branch can have moved since the last successful build.
 
-- **Netlify UI:** app.netlify.com/projects/talli-test → Deploys. Each
-  entry shows its commit, its branch and its time.
-- **In a session:** `netlify-project-services-reader / get-project`
-  gives the current deploy id; `netlify-deploy-services-reader /
-  get-deploy-for-site` gives its `commit_ref`, `branch`, `state` and
-  `published_at`.
-- Every deploy also has an immutable permalink,
-  `https://<deploy-id>--talli-test.netlify.app`, which keeps serving
-  that exact build forever. Useful for comparing before and after.
+- **Dashboard:** Workers & Pages → `talli` → Deployments. Each entry
+  shows its commit, its branch and its time.
+- **In a session:** the Cloudflare MCP server reports a deployment's
+  `latest_stage.status` and its
+  `deployment_trigger.metadata.commit_hash`.
+- Every deployment also has an immutable preview URL,
+  `https://<deployment-id>.talli.pages.dev`, which keeps serving that
+  exact build forever. Useful for comparing before and after.
 
-The same applies to production against `talliconz`.
+The same applies to production, on the same project's production
+branch.
 
 > **A session running on Claude Code for web cannot reach `talli.co.nz`
-> or `talli-test.netlify.app`** — the environment's network policy
+> or `staging.talli.pages.dev`** — the environment's network policy
 > refuses the connection (`CONNECT tunnel failed, response 403`). The
-> Netlify API *is* reachable, so deploy state and commits can always be
-> verified; a live HTTP smoke test cannot. `/release-production`
+> Cloudflare API *is* reachable, so deploy state and commits can always
+> be verified; a live HTTP smoke test cannot. `/release-production`
 > reports that as "not checked" rather than as a pass. Run it from a
 > local Claude Code session if you want the smoke tests to actually
 > execute.
 
-If a deploy has no `commit_ref`, it was uploaded from a working copy
+If a deployment has no commit hash, it was uploaded from a working copy
 rather than built from git, and there is no way to know what code it
 is. `release-production` stops when it sees that.
 
 ## 5. How do I test staging on physical devices?
 
-Open https://talli-test.netlify.app on the actual hardware.
+Open https://staging.talli.pages.dev on the actual hardware.
 
 - Front-door passphrase: `talli-test` (see `TESTING.md` — it is a
   signpost, not security).
@@ -153,7 +162,7 @@ a browser.
 /release-production
 ```
 
-It asks Netlify which commit staging is actually serving, refuses to
+It asks Cloudflare which commit staging is actually serving, refuses to
 proceed if the staging branch has moved past it, lists the commits,
 migrations and payment-touching changes in the release, asks you to
 confirm the device testing, shows a summary, and asks once more.
@@ -164,20 +173,20 @@ Then it fast-forwards `main` to that exact commit:
 git push origin <staging-commit>:refs/heads/main
 ```
 
-A fast-forward. No force, no rewrite. Netlify builds that commit and
-publishes it. The skill then polls until Netlify reports `ready` **at
-that commit**, and smoke-tests the live site.
+A fast-forward. No force, no rewrite. Cloudflare builds that commit
+and publishes it. The skill then polls until Cloudflare reports the
+deployment `success` **at that commit**, and smoke-tests the live site.
 
-Netlify has no cross-project deploy promotion — `talli-test` and
-`talliconz` are separate projects — so the tested *commit* carries
-across rather than the tested *build*. Since there is no build step,
-those amount to the same files.
+A preview deployment is not promoted to production — Pages rebuilds on
+the production branch — so the tested *commit* carries across rather
+than the tested *build*. Since there is no build step, those amount to
+the same files.
 
 ### The backend is not in that deploy
 
-Netlify publishes static files. It does not apply migrations and does
-not deploy edge functions. Both are separate, deliberate steps against
-Supabase, done **before** the front end goes out:
+Cloudflare Pages publishes static files. It does not apply migrations
+and does not deploy edge functions. Both are separate, deliberate steps
+against Supabase, done **before** the front end goes out:
 
 1. `apply_migration` against `oxzwfemyavznykqixhvk`, one file at a
    time, verified between each.
@@ -185,7 +194,7 @@ Supabase, done **before** the front end goes out:
    `supabase/functions/`.
 3. Then the fast-forward push.
 
-A green Netlify deploy proves nothing about either.
+A green Pages deployment proves nothing about either.
 
 ## 7. How do I roll back production?
 
@@ -194,14 +203,15 @@ One does not do the other.**
 
 ### Application — fast, safe
 
-Netlify deploys are immutable and every previous one is still there.
+Pages deployments are immutable and every previous one is still there.
 
-app.netlify.com/projects/talliconz → **Deploys** → the last known-good
-deploy → **Publish deploy**. Instant, no rebuild, no git change.
+Workers & Pages → `talli` → **Deployments** → the last known-good
+deployment → **Rollback to this deployment**. Instant, no rebuild, no
+git change.
 
 Then bring git back in line with `git revert` and an ordinary push.
-**Never force-push `main` backwards.** Netlify and everyone's checkout
-both read that branch.
+**Never force-push `main` backwards.** Cloudflare and everyone's
+checkout both read that branch.
 
 ### Database — slow, sometimes impossible
 
@@ -253,8 +263,9 @@ itself before concluding a migration is missing.
 
 ## 9. How are the payment credentials separated?
 
-Stripe keys are **not in this repository and not on Netlify.** Neither
-Netlify project has a single environment variable set — verified.
+Stripe keys are **not in this repository and not on Cloudflare.** The
+Pages project has no environment variables set at all, and does not
+need any.
 
 They live in Supabase Edge Function secrets, per project:
 
@@ -354,10 +365,10 @@ fixtures, that nobody is watching.
 ### 4. Let web sessions reach the sites (optional)
 
 A Claude Code session running on the web cannot fetch `talli.co.nz` or
-`talli-test.netlify.app` — the environment's network policy refuses the
-connection, so `/release-production`'s smoke tests report "not checked"
-rather than passing. Netlify's API is reachable either way, so deploy
-state and commits can always be verified.
+`staging.talli.pages.dev` — the environment's network policy refuses
+the connection, so `/release-production`'s smoke tests report "not
+checked" rather than passing. Cloudflare's API is reachable either way,
+so deploy state and commits can always be verified.
 
 To close it, add both hostnames to the environment's allowed hosts at
 https://claude.com/settings/code-environments, or just run releases

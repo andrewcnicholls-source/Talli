@@ -40,10 +40,14 @@
   };
 
   // Only these hostnames are the real thing. Everything else is test.
+  //
+  // The Pages project's own talli.pages.dev is deliberately NOT here.
+  // It serves the same commit as production, so leaving it out means it
+  // talks to the test database behind a red banner rather than standing
+  // up a second, unwatched copy of the live booking page.
   var PRODUCTION_HOSTS = [
     'talli.co.nz',
     'www.talli.co.nz',
-    'talliconz.netlify.app',
   ];
 
   var host = (window.location.hostname || '').toLowerCase();
@@ -81,7 +85,7 @@
   // gate screen before anything is painted.
   document.documentElement.setAttribute('data-talli-env', 'test');
 
-  // Belt and braces alongside the header Netlify sends. A crawler that
+  // Belt and braces alongside the header Cloudflare sends. A crawler that
   // ignores one may still honour the other.
   var robots = document.createElement('meta');
   robots.name = 'robots';

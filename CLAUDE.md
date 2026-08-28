@@ -14,7 +14,7 @@ rules that bind agents:
 
 | Branch | Deploys to | Means |
 | --- | --- | --- |
-| `staging` | https://talli-test.netlify.app | the integration branch — merge here |
+| `staging` | https://staging.talli.pages.dev | the integration branch — merge here |
 | `main` | https://talli.co.nz | the **release** branch — merging here is a production deploy |
 
 `staging` is where feature branches land and where device testing
@@ -84,11 +84,11 @@ it.
 ### Production releases are deliberate
 
 Only a commit that has actually been running on staging is promoted,
-and only after explicit confirmation at the moment of release. Netlify
-publishes the static site; **migrations and edge functions are a
-separate manual step against Supabase** and go first. Never force-push,
-never deploy an unidentified version, never claim a deploy succeeded
-before Netlify reports it ready at that commit.
+and only after explicit confirmation at the moment of release.
+Cloudflare Pages publishes the static site; **migrations and edge
+functions are a separate manual step against Supabase** and go first.
+Never force-push, never deploy an unidentified version, never claim a
+deploy succeeded before Cloudflare reports it successful at that commit.
 
 ## Supabase environments
 

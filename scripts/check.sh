@@ -88,7 +88,7 @@ CFG="assets/talli-config.js"
 if [ ! -f "$CFG" ]; then
   fail "$CFG is missing — the environment switch has no home"
 else
-  for host in 'talli.co.nz' 'www.talli.co.nz' 'talliconz.netlify.app'; do
+  for host in 'talli.co.nz' 'www.talli.co.nz'; do
     if grep -q "'$host'" "$CFG"; then
       pass "production host listed: $host"
     else
@@ -134,18 +134,35 @@ done
 # ---------------------------------------------------------------------
 head "Production build stays a no-op"
 # ---------------------------------------------------------------------
-# netlify.toml is read from whichever branch is building, production
-# included. build.sh must keep returning immediately unless it is the
-# test project, or a deploy starts rewriting the live site.
-if [ -f netlify/build.sh ]; then
-  if grep -q 'SITE_NAME:-}" != "'"$TALLI_STAGING_SITE_NAME"'"' netlify/build.sh \
-     && grep -q 'exit 0' netlify/build.sh; then
-    pass "netlify/build.sh still exits early unless SITE_NAME=$TALLI_STAGING_SITE_NAME"
+# scripts/build.sh runs on every Cloudflare Pages build, production
+# included. It must return immediately on the production branch, or a
+# deploy starts rewriting the live site.
+#
+# This runs the script rather than grepping it. The grep it replaced
+# would have kept passing on a script that had stopped working, which
+# is the one failure that matters here.
+if [ -f scripts/build.sh ]; then
+  bt=$(mktemp -d)
+  mkdir -p "$bt/scripts"
+  cp scripts/build.sh scripts/talli-env.sh "$bt/scripts/"
+
+  CF_PAGES_BRANCH="$TALLI_PRODUCTION_BRANCH" bash "$bt/scripts/build.sh" >/dev/null 2>&1
+  if [ -e "$bt/robots.txt" ] || [ -e "$bt/_headers" ]; then
+    fail "scripts/build.sh writes files on $TALLI_PRODUCTION_BRANCH — it would modify the live deploy"
   else
-    fail "netlify/build.sh no longer short-circuits on production — it would modify the live deploy"
+    pass "scripts/build.sh writes nothing on $TALLI_PRODUCTION_BRANCH"
   fi
+
+  CF_PAGES_BRANCH="$TALLI_INTEGRATION_BRANCH" bash "$bt/scripts/build.sh" >/dev/null 2>&1
+  if [ -s "$bt/robots.txt" ] && [ -s "$bt/_headers" ]; then
+    pass "scripts/build.sh writes robots.txt and _headers on $TALLI_INTEGRATION_BRANCH"
+  else
+    fail "scripts/build.sh no longer writes the noindex rules on $TALLI_INTEGRATION_BRANCH — the test site would be indexable"
+  fi
+
+  rm -rf "$bt"
 else
-  skip "netlify/build.sh not present"
+  skip "scripts/build.sh not present"
 fi
 
 # ---------------------------------------------------------------------

@@ -23,8 +23,9 @@ Never "deploy main". Never "deploy latest".
 
 ## How a release physically happens here
 
-Netlify's `talliconz` project builds the `main` branch. So promoting is
-a **fast-forward of `main` to the commit staging is serving**:
+The `talli` Pages project builds `main` as its production branch. So
+promoting is a **fast-forward of `main` to the commit staging is
+serving**:
 
 ```
 staging branch  ──┐
@@ -32,27 +33,28 @@ staging branch  ──┐
 main branch     ──┘
 ```
 
-Netlify then rebuilds that commit and publishes it to talli.co.nz.
+Cloudflare then rebuilds that commit on the production branch and
+publishes it to talli.co.nz.
 
-There is no cross-project artifact promotion on Netlify — the two sites
-are separate projects — so the tested *commit* is what carries across,
-not the tested *build*. That is safe here for a specific reason worth
-knowing: the site is static files with no build step, and the
-environment switch in `assets/talli-config.js` runs in the browser off
-the hostname. The identical bytes behave as test on
-`talli-test.netlify.app` and as production on `talli.co.nz`. Nothing is
-rebuilt differently for production.
+A preview deployment is never promoted to production — Pages rebuilds —
+so the tested *commit* is what carries across, not the tested *build*.
+That is safe here for a specific reason worth knowing: the site is
+static files with no build step, and the environment switch in
+`assets/talli-config.js` runs in the browser off the hostname. The
+identical bytes behave as test on `staging.talli.pages.dev` and as
+production on `talli.co.nz`. Nothing is rebuilt differently for
+production.
 
-**Netlify does not deploy the backend.** Database migrations and edge
+**Cloudflare does not deploy the backend.** Database migrations and edge
 functions are a separate, manual release track against Supabase. A
-green Netlify deploy does not mean the backend shipped. Section 5
+green Pages deployment does not mean the backend shipped. Section 5
 below covers this and it is the most common way this release can go
 wrong.
 
 ## 0. Refuse to run outside Talli
 
-This skill is **specific to one application**. It knows Talli's two
-Netlify projects by id, its two Supabase projects by ref, that `main`
+This skill is **specific to one application**. It knows Talli's Pages
+project by name, its two Supabase projects by ref, that `main`
 is the production branch, and that promotion is a fast-forward. None of
 that is transferable, and every one of those facts is load-bearing on a
 release that takes real money.
@@ -99,45 +101,44 @@ a release ships what is on the remote — but say what they are, because
 an uncommitted change to `assets/talli-config.js` sitting in the
 working tree is worth knowing about before you touch production.
 
-## 2. Ask Netlify what staging is actually serving
+## 2. Ask Cloudflare what staging is actually serving
 
 Do not infer this from git. Ask the deployment platform.
 
-```
-mcp__Netlify__netlify-project-services-reader
-  operation: get-project
-  params: { siteId: $TALLI_STAGING_SITE_ID }
+```bash
+bash scripts/cf-deploy.sh preview
 ```
 
-Take `_enrichedFields.currentDeploy.currentDeploy.id`, then:
-
-```
-mcp__Netlify__netlify-deploy-services-reader
-  operation: get-deploy-for-site
-  params: { siteId: $TALLI_STAGING_SITE_ID, deployId: <that id> }
-```
-
-From that response you need:
+It prints one `key: value` per line. Use the Cloudflare MCP server
+instead if it is configured and can answer the same questions — the
+fields below are what matter, not how you fetched them.
 
 | Field | Why |
 | --- | --- |
-| `state` | Must be `ready`. Anything else — `building`, `error`, `enqueued` — means STOP. |
-| `commit_ref` | **This is the release candidate.** Call it `S`. |
+| `status` | Must be `success`. Anything else — `active`, `failure`, `canceled` — means STOP. |
+| `commit` | **This is the release candidate.** Call it `S`. |
 | `branch` | Should be `staging`. |
-| `published_at` | How long it has been up for testing. |
+| `created_on` | How long it has been up for testing. |
 | `id` | The staging deployment id, for the record. |
-| `links.permalink` | The immutable URL of that exact build. |
+| `url` | The immutable URL of that exact build. |
 
-If `commit_ref` is null or absent, the deploy was uploaded from
-somebody's working copy rather than built from git, and **there is no
-way to know what code is on staging**. STOP and say exactly that. Do
-not fall back to guessing from the branch tip.
+If `commit` is empty, the deployment was uploaded from somebody's
+working copy rather than built from git, and **there is no way to know
+what code is on staging**. STOP and say exactly that. Do not fall back
+to guessing from the branch tip.
 
-## 3. Ask Netlify what production is running
+If the command exits non-zero you did not get an answer, which is not
+the same as "nothing is deployed". STOP, and say which of the two it
+was.
 
-Same two calls against `$TALLI_PRODUCTION_SITE_ID`. Call its
-`commit_ref` `P`, and keep its deploy `id` — that id is the rollback
-handle and it must appear in the final report either way.
+## 3. Ask Cloudflare what production is running
+
+```bash
+bash scripts/cf-deploy.sh production
+```
+
+Call its `commit` `P`, and keep its deployment `id` — that id is the
+rollback handle and it must appear in the final report either way.
 
 ## 4. Prove the release is what it claims to be
 
@@ -176,16 +177,15 @@ Three outcomes, and they are not the same thing:
 
 - **200** — reachable, note it.
 - **A non-200 from the site** — does not by itself block a release; the
-  site sits behind a passphrase gate and Netlify may answer curl oddly.
+  site sits behind a passphrase gate and Cloudflare may answer curl
+  oddly.
   Report the code you got.
 - **`CONNECT tunnel failed, response 403`** — the *session's* network
   policy blocked the request; nothing was learned about the site.
   Sessions running on Claude Code on the web cannot reach `talli.co.nz`
-  or `talli-test.netlify.app` at all. Report it as **not checked** and
-  fall back to Netlify's own metadata, which is reachable: `state`,
-  `published_at`, and `screenshot_url` (Netlify screenshots each deploy
-  after publishing, so a screenshot existing is real evidence the build
-  rendered).
+  or `staging.talli.pages.dev` at all. Report it as **not checked** and
+  fall back to Cloudflare's own metadata, which is reachable: `status`,
+  `created_on` and the deployment `url`.
 
 Never convert a blocked request into a tick.
 
@@ -231,8 +231,8 @@ Rules:
 - **A migration must be applied to test and exercised there before
   production.** If a migration in this release is not yet on the test
   project, the thing on staging was never really tested. STOP.
-- **Migrations are not applied by the deploy.** Netlify ships static
-  files. Somebody has to apply them, deliberately, with
+- **Migrations are not applied by the deploy.** Cloudflare Pages ships
+  static files. Somebody has to apply them, deliberately, with
   `mcp__Supabase__apply_migration` against
   `$TALLI_PRODUCTION_SUPABASE_REF`.
 - **Backwards-compatible migrations go first, before the code deploy.**
@@ -259,7 +259,7 @@ is a customer who paid and has nowhere to park.
 git diff --name-only "$P" "$S" -- supabase/functions/
 ```
 
-Netlify does not deploy these either. A changed function needs
+Cloudflare does not deploy these either. A changed function needs
 `mcp__Supabase__deploy_edge_function` against the production project —
 which is deliberately *not* pre-approved by the permission hook.
 
@@ -298,8 +298,8 @@ list and ask. Record the answers in the release summary as the user
 gave them.
 
 ```
-STAGING TESTING — https://talli-test.netlify.app @ <S>
-                  deployed <published_at>
+STAGING TESTING — https://staging.talli.pages.dev @ <S>
+                  deployed <created_on>
 
 [ ] Desktop browser
 [ ] iPhone / iPad (Safari)
@@ -330,8 +330,8 @@ user.
 READY TO RELEASE
 
   Version:            a1b2c3d  Let a customer cancel before the gate opens
-  Staging deploy:     6a8eb9ad97cc2e1b1195b74f   ready, published 3h ago
-  Staging permalink:  https://6a8eb9ad...--talli-test.netlify.app
+  Staging deploy:     6a8eb9ad-97cc-2e1b-1195-b74f   success, 3h ago
+  Staging permalink:  https://6a8eb9ad.talli.pages.dev
   Target:             PRODUCTION — https://talli.co.nz
 
   Commits (4):
@@ -353,7 +353,7 @@ READY TO RELEASE
 
   Rollback:
     Previous production deploy 6a8ebbb26280b500089fa6ef  (commit 6d5e2ee)
-    Application rollback: available, instant, via Netlify
+    Application rollback: available, instant, via Cloudflare
     Database rollback: NOT automatic — see below
 
   Device testing: confirmed by Andrew on iPhone, Android and desktop
@@ -383,23 +383,22 @@ Wait for a clear yes. Anything ambiguous is a no.
    `--force-with-lease` here.** If git rejects it as non-fast-forward,
    `main` moved while you were working: go back to step 3 and start
    again.
-4. Netlify picks up the push and builds. Nothing else triggers it.
+4. Cloudflare picks up the push and builds. Nothing else triggers it.
 
 ## 9. Verify — do not trust the push
 
 A successful `git push` says nothing about whether the site deployed.
 
-Poll the production project until its current deploy settles:
+Poll the production environment until its current deployment settles:
 
-```
-mcp__Netlify__netlify-project-services-reader  get-project
-mcp__Netlify__netlify-deploy-services-reader   get-deploy-for-site
+```bash
+bash scripts/cf-deploy.sh production
 ```
 
-The release is deployed only when **`state` is `ready` AND
-`commit_ref` equals S**. A `ready` deploy of the wrong commit is not
-this release. If `state` is `error`, read `error_message` and go to
-rollback — do not retry blindly.
+The release is deployed only when **`status` is `success` AND `commit`
+equals S**. A successful deployment of the wrong commit is not this
+release. If `status` is `failure`, read the build log in the dashboard
+and go to rollback — do not retry blindly.
 
 Then smoke-test for real. **If the session cannot reach the site — the
 `CONNECT tunnel failed, response 403` case above — say so and stop
@@ -441,7 +440,7 @@ PRODUCTION RELEASE COMPLETE
   Version:            a1b2c3d
   Production deploy:  6a9f01c...   ready
   URL:                https://talli.co.nz
-  Permalink:          https://6a9f01c...--talliconz.netlify.app
+  Permalink:          https://6a9f01c.talli.pages.dev
   Staging tested:     yes — iPhone, Android, desktop, test payment
 
   Migrations applied to production:
@@ -460,8 +459,8 @@ PRODUCTION RELEASE COMPLETE
   (or, from a session without network access to the site:)
   Smoke tests:
     – NOT RUN — this session cannot reach talli.co.nz (proxy 403).
-      Netlify reports the deploy ready at a1b2c3d and captured a
-      screenshot. Please open https://talli.co.nz and confirm.
+      Cloudflare reports the deployment successful at a1b2c3d.
+      Please open https://talli.co.nz and confirm.
 
   Previous version:   6d5e2ee  (deploy 6a8ebbb26280b500089fa6ef)
   Rollback:           available — application only, see below
@@ -489,14 +488,15 @@ one does not do the other.**
 
 ### Application
 
-Netlify keeps every deploy immutable and addressable. The previous
-production deploy id from step 3 is a working site, still there.
+Cloudflare keeps every deployment immutable and addressable. The
+previous production deployment id from step 3 is a working site, still
+there.
 
-- Netlify → `talliconz` → **Deploys** → the previous deploy →
-  **Publish deploy**. Instant, no build, no git change.
+- Workers & Pages → `talli` → **Deployments** → the previous deployment
+  → **Rollback to this deployment**. Instant, no build, no git change.
 - Then bring git back in line with `git revert` and a normal push.
   **Never force-push `main` to an older commit** — that rewrites the
-  history of a branch other people and Netlify both read.
+  history of a branch other people and Cloudflare both read.
 
 ### Database
 
@@ -530,5 +530,5 @@ extra step: they keep the instant rollback path open.
   deploy work.
 - Put a real card through production to test a release.
 - Write that device testing happened when it did not.
-- Write that the release succeeded before Netlify reports `ready` at
-  commit S.
+- Write that the release succeeded before Cloudflare reports the
+  deployment successful at commit S.
