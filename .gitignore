@@ -6,3 +6,7 @@
 # Skill bundles built by scripts/package-skills.sh for upload to a
 # Claude account. Rebuildable; the SKILL.md files are the source.
 /dist/
+
+# Scratch state written by the Supabase CLI (version-check cache and
+# linked-project markers). Recreated on demand; never part of a deploy.
+/supabase/.temp/
