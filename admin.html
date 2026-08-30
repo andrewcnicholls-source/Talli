@@ -154,6 +154,28 @@
       </div>
     </div>
 
+    <!-- What to actually ask for. The sign price is the cash price, so a card
+         sale is a different number and the marshal should not be doing that
+         arithmetic in the dark. -->
+    <div class="ad-charge" id="ad-sell-charge" hidden>
+      <div class="ad-charge-row">
+        <span id="ad-sell-charge-spot-name">Spot</span>
+        <span id="ad-sell-charge-spot"></span>
+      </div>
+      <div class="ad-charge-row" id="ad-sell-charge-extras-row" hidden>
+        <span>Extras</span>
+        <span id="ad-sell-charge-extras"></span>
+      </div>
+      <div class="ad-charge-row" id="ad-sell-charge-surcharge-row" hidden>
+        <span id="ad-sell-charge-surcharge-label">Card surcharge</span>
+        <span id="ad-sell-charge-surcharge"></span>
+      </div>
+      <div class="ad-charge-total">
+        <span>Charge them</span>
+        <strong id="ad-sell-charge-total"></strong>
+      </div>
+    </div>
+
     <p class="ad-sheet-error" id="ad-sell-error" role="alert" hidden></p>
 
     <button type="submit" class="btn btn-primary" id="ad-sell-submit">Take the money</button>
@@ -173,6 +195,7 @@
       <input type="number" id="ad-price-input" class="ad-input" inputmode="numeric"
              min="1" max="500" step="1" required>
     </div>
+    <p class="ad-price-hint" id="ad-price-hint" hidden></p>
     <p class="ad-sheet-error" id="ad-price-error" role="alert" hidden></p>
     <button type="submit" class="btn btn-primary" id="ad-price-submit">Set it</button>
   </form>

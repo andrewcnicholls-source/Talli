@@ -59,6 +59,8 @@
       <p class="bk-step-context" id="bk-tier-event"></p>
       <p class="bk-step-note">The difference is how quickly you can get out afterwards.</p>
 
+      <p class="bk-step-note bk-surcharge-note" id="bk-tier-surcharge" hidden></p>
+
       <div class="bk-cards" id="bk-tiers"></div>
       <div class="bk-cards" id="bk-tiers-more" hidden></div>
       <button type="button" class="bk-more" id="bk-more-toggle" aria-expanded="false" hidden>More options</button>
@@ -91,6 +93,11 @@
           <span class="bk-summary-price" id="bk-summary-price"></span>
         </div>
         <div class="bk-summary-extras" id="bk-summary-extras" hidden></div>
+        <div class="bk-summary-line bk-summary-extra bk-summary-surcharge"
+             id="bk-summary-surcharge" hidden>
+          <span id="bk-summary-surcharge-label">Card payment surcharge</span>
+          <span id="bk-summary-surcharge-price"></span>
+        </div>
         <div class="bk-summary-total" id="bk-summary-total" hidden>
           <span>Total</span>
           <strong id="bk-summary-total-price"></strong>

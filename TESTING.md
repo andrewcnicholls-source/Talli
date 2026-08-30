@@ -187,6 +187,39 @@ you in plain words whether the key and the webhook are in the same mode. A
 live key with a test webhook is the failure that looks like success, and that
 button exists to catch it.
 
+### The card surcharge
+
+The price on the sign is the **cash** price. Paying by card adds a percentage
+on top, itemised rather than folded in. One row holds the rate:
+
+```sql
+-- read it
+select card_surcharge_bps from payment_setting;   -- 200 = 2.00%
+
+-- change it (test project only; production is a deliberate step)
+update payment_setting set card_surcharge_bps = 250, updated_at = now();
+```
+
+`stripe` and `tap_to_pay` attract it. `cash`, `bank_transfer`, `free` and
+`other` do not, so a cash walk-up still hands over exactly what the sign says.
+Set it to `0` and every surcharge line disappears from both the booking page
+and the gate screen.
+
+What to check on the test site:
+
+- **Website** — the summary at *Your details* itemises the surcharge and shows
+  a total above the sign price, and the Stripe page shows the same three
+  lines. The amount Stripe charges is the total on the page.
+- **Gate, cash** — the walk-up sheet reads *Charge them $X*, where X is the
+  sign price plus any extras and no surcharge.
+- **Gate, card** — switch *Paid by* to **Card (tap to pay)** without touching
+  anything else; the surcharge line appears and the figure goes up.
+- **Tonight** — each price card shows `cash $x · card $y`, and *Money* has an
+  *Of that, card surcharge* line.
+
+A booking never re-prices. Change the rate mid-night and the sales already
+taken keep the surcharge they were charged.
+
 ---
 
 ## The test fixtures

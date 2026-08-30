@@ -576,6 +576,13 @@ footer a { color: var(--blue); }
   color: var(--blue-deep);
   margin-top: 4px;
 }
+/* The surcharge sits with the extras: another line added to the sign price,
+   shown before anyone commits to paying it. */
+.bk-summary-surcharge { margin-top: 8px; }
+
+/* Under the tier cards, where the sign prices are. */
+.bk-surcharge-note { margin-top: 4px; }
+
 .bk-summary-total {
   display: flex;
   align-items: baseline;
@@ -1689,6 +1696,67 @@ footer a { color: var(--blue); }
   font-weight: 300;
   color: var(--grey);
   margin-top: 3px;
+}
+
+/* ---------- What the sign price becomes on a card ---------- */
+.ad-price-card {
+  font-size: 0.82rem;
+  font-weight: 300;
+  color: var(--blue);
+  margin-top: 3px;
+  font-variant-numeric: tabular-nums;
+}
+.ad-price-hint {
+  font-size: 0.85rem;
+  font-weight: 300;
+  color: var(--blue);
+  margin: 10px 0 0;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Walk-up: the figure to read out ----------
+
+   Deliberately the loudest thing in the sheet. In the dark, at a driver's
+   window, this is the only line that has to be got right. */
+.ad-charge {
+  background: var(--blue-tint);
+  border-radius: 4px;
+  padding: 12px 14px;
+  margin-top: 18px;
+}
+.ad-charge-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.9rem;
+  font-weight: 300;
+  color: var(--blue-deep);
+  padding: 2px 0;
+  font-variant-numeric: tabular-nums;
+}
+.ad-charge-total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(43, 76, 126, 0.22);
+  font-size: 0.78rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--blue);
+}
+.ad-charge-total strong {
+  font-family: var(--display);
+  font-size: 1.7rem;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  line-height: 1;
+  color: var(--blue-deep);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ---------- Walk-up: extras across the bonnet ---------- */

@@ -211,16 +211,24 @@ Deno.serve(async (req) => {
   }
 
   // ---- 3. Read back what the database actually wrote. Prices come from here.
-  const [{ data: booking, error: bErr }, { data: addonRows }] = await Promise.all([
-    db.from('booking')
-      .select('id, amount_cents, addons_cents, currency, arrival_from, arrival_until, must_depart_by, tier_code')
-      .eq('id', bookingId)
-      .single(),
-    db.from('booking_addon')
-      .select('code, name, qty, amount_cents')
-      .eq('booking_id', bookingId)
-      .order('code'),
-  ])
+  //
+  // surcharge_cents is written by a database trigger the moment addons_cents
+  // moves, so by the time this read runs it is already the surcharge on the
+  // full order — bay and extras together. Reading it here rather than working
+  // it out is the whole point: Stripe charges what the database decided.
+  const [{ data: booking, error: bErr }, { data: addonRows }, { data: rate }] =
+    await Promise.all([
+      db.from('booking')
+        .select('id, amount_cents, addons_cents, surcharge_cents, currency, ' +
+                'arrival_from, arrival_until, must_depart_by, tier_code')
+        .eq('id', bookingId)
+        .single(),
+      db.from('booking_addon')
+        .select('code, name, qty, amount_cents')
+        .eq('booking_id', bookingId)
+        .order('code'),
+      db.from('payment_setting').select('card_surcharge_bps').maybeSingle(),
+    ])
 
   if (bErr || !booking) {
     await abandon()
@@ -282,6 +290,25 @@ Deno.serve(async (req) => {
         product_data: {
           name: line.qty > 1 ? `${line.name} × ${line.qty}` : line.name,
           description: 'Collect from the marshal when you arrive',
+        },
+      },
+    })
+  }
+
+  // Its own line, never folded into the bay price. The customer is entitled to
+  // see what the card costs them, and Stripe's receipt is the record of it.
+  const surcharge = booking.surcharge_cents ?? 0
+  if (surcharge > 0) {
+    const bps = rate?.card_surcharge_bps ?? 0
+    const pct = (bps / 100).toFixed(2).replace(/\.?0+$/, '')
+    lineItems.push({
+      quantity: 1,
+      price_data: {
+        currency,
+        unit_amount: surcharge,
+        product_data: {
+          name: `Card payment surcharge${pct ? ` (${pct}%)` : ''}`,
+          description: 'What it costs us to accept a card. Cash at the gate does not attract it.',
         },
       },
     })
