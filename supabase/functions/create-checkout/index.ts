@@ -296,6 +296,8 @@ Deno.serve(async (req) => {
 
   // Its own line, never folded into the bay price. The customer is entitled to
   // see what the card costs them, and Stripe's receipt is the record of it.
+  // The rate itself is never named: the dollars are the fact, the percentage
+  // is the arithmetic behind it, and only one of those belongs on a receipt.
   const surcharge = booking.surcharge_cents ?? 0
   if (surcharge > 0) {
     lineItems.push({
