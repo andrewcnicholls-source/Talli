@@ -216,7 +216,7 @@ Deno.serve(async (req) => {
   // moves, so by the time this read runs it is already the surcharge on the
   // full order — bay and extras together. Reading it here rather than working
   // it out is the whole point: Stripe charges what the database decided.
-  const [{ data: booking, error: bErr }, { data: addonRows }, { data: rate }] =
+  const [{ data: booking, error: bErr }, { data: addonRows }] =
     await Promise.all([
       db.from('booking')
         .select('id, amount_cents, addons_cents, surcharge_cents, currency, ' +
@@ -227,7 +227,6 @@ Deno.serve(async (req) => {
         .select('code, name, qty, amount_cents')
         .eq('booking_id', bookingId)
         .order('code'),
-      db.from('payment_setting').select('card_surcharge_bps').maybeSingle(),
     ])
 
   if (bErr || !booking) {
@@ -299,15 +298,13 @@ Deno.serve(async (req) => {
   // see what the card costs them, and Stripe's receipt is the record of it.
   const surcharge = booking.surcharge_cents ?? 0
   if (surcharge > 0) {
-    const bps = rate?.card_surcharge_bps ?? 0
-    const pct = (bps / 100).toFixed(2).replace(/\.?0+$/, '')
     lineItems.push({
       quantity: 1,
       price_data: {
         currency,
         unit_amount: surcharge,
         product_data: {
-          name: `Card payment surcharge${pct ? ` (${pct}%)` : ''}`,
+          name: 'Card payment surcharge',
           description: 'What it costs us to accept a card. Cash at the gate does not attract it.',
         },
       },

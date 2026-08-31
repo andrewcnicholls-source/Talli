@@ -42,7 +42,7 @@
     sellTier: null,
     sellExtras: {},
     priceTier: null,
-    // Basis points. 200 = 2%. Comes down with the night's state so the screen
+    // Basis points. 400 = 4%. Comes down with the night's state so the screen
     // and the database never disagree about what a card costs.
     surchargeBps: 0,
   };
@@ -67,11 +67,6 @@
     if (!state.surchargeBps) return 0;
     if (CARD_METHODS.indexOf(paymentMethod) === -1) return 0;
     return Math.round((cents || 0) * state.surchargeBps / 10000);
-  }
-
-  // 200 -> "2", 250 -> "2.5".
-  function surchargePct() {
-    return (state.surchargeBps / 100).toFixed(2).replace(/\.?0+$/, '');
   }
 
   function asTime(iso) {
@@ -580,7 +575,7 @@
     var cents = Math.round(dollars * 100);
     text(hint, 'Cash ' + money(cents) + ' · card ' +
       money(cents + surchargeOn(cents, 'tap_to_pay')) +
-      ' (includes the ' + surchargePct() + '% card surcharge)');
+      ' (includes the card surcharge)');
     show(hint);
   }
 
@@ -791,8 +786,6 @@
 
     var surRow = el('ad-sell-charge-surcharge-row');
     if (surcharge > 0) {
-      text(el('ad-sell-charge-surcharge-label'),
-        'Card surcharge (' + surchargePct() + '%)');
       text(el('ad-sell-charge-surcharge'), money(surcharge));
       show(surRow);
     } else {
