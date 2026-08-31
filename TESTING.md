@@ -285,8 +285,32 @@ select id, '22222222-2222-2222-2222-222222222222'
 from event where name = 'TEST — Blues v Crusaders';
 ```
 
-Tiers are per-offer; copy the pattern in
-`supabase/migrations/20260814125456_talli_exit_axis_functions_and_tiers.sql`.
+Tiers are per-offer, and there are three of them — Standard, Priority
+exit, Valet. Copy them from an event that already sells rather than from
+`20260814125456_talli_exit_axis_functions_and_tiers.sql`, which seeds the
+six-tier menu that `20260831100000_talli_three_tiers_everywhere.sql`
+retired:
+
+```sql
+insert into offer_tier
+  (event_offer_id, code, label, price_cents, zone_codes, bay_kind,
+   guarantees_clear_exit, arrival_from, arrival_until, departure_by,
+   sort_order, active)
+select neo.id, t.code, t.label, t.price_cents, t.zone_codes, t.bay_kind,
+       t.guarantees_clear_exit,
+       ne.starts_at + (t.arrival_from  - oe.starts_at),
+       ne.starts_at + (t.arrival_until - oe.starts_at),
+       null, t.sort_order, true
+from offer_tier  t
+join event_offer oo  on oo.id = t.event_offer_id
+join event       oe  on oe.id = oo.event_id
+join event       ne  on ne.name  = 'TEST — Blues v Crusaders'
+join event_offer neo on neo.event_id = ne.id
+where oe.name = 'TEST — Tomorrow Night (on sale)' and t.active;
+```
+
+Anything else you add is a fourth option on the gate screen, which is
+the thing the three-tier change was for.
 
 ---
 
