@@ -27,7 +27,7 @@
     picked: {},      // code -> quantity
     interestEvent: null,
     submitting: false,
-    // Basis points. 200 = 2%. Read from the database, because the number on
+    // Basis points. 400 = 4%. Read from the database, because the number on
     // this page and the number Stripe charges have to be the same number.
     surchargeBps: 0,
   };
@@ -102,12 +102,6 @@
     return Math.round(baseCents * state.surchargeBps / 10000);
   }
 
-  // 200 -> "2", 250 -> "2.5". Trailing zeros in a percentage read as a
-  // precision nobody asked for.
-  function surchargePct() {
-    return (state.surchargeBps / 100).toFixed(2).replace(/\.?0+$/, '');
-  }
-
   function make(tag, className, content) {
     var n = document.createElement(tag);
     if (className) n.className = className;
@@ -156,7 +150,7 @@
         var note = el('bk-tier-surcharge');
         if (state.surchargeBps) {
           text(note, 'Prices are as shown on the sign in the driveway. Paying by ' +
-            'card adds a ' + surchargePct() + '% surcharge, itemised before you pay.');
+            'card adds a surcharge, shown as its own line before you pay.');
           note.hidden = false;
         }
         if (state.tier) paintSummary();
@@ -578,8 +572,6 @@
 
     var row = el('bk-summary-surcharge');
     if (surcharge > 0) {
-      text(el('bk-summary-surcharge-label'),
-        'Card payment surcharge (' + surchargePct() + '%)');
       text(el('bk-summary-surcharge-price'), money(surcharge));
       row.hidden = false;
     } else {

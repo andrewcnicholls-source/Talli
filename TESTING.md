@@ -194,16 +194,21 @@ on top, itemised rather than folded in. One row holds the rate:
 
 ```sql
 -- read it
-select card_surcharge_bps from payment_setting;   -- 200 = 2.00%
+select card_surcharge_bps from payment_setting;   -- 400 = 4.00%
 
 -- change it (test project only; production is a deliberate step)
-update payment_setting set card_surcharge_bps = 250, updated_at = now();
+update payment_setting set card_surcharge_bps = 450, updated_at = now();
 ```
 
 `stripe` and `tap_to_pay` attract it. `cash`, `bank_transfer`, `free` and
 `other` do not, so a cash walk-up still hands over exactly what the sign says.
 Set it to `0` and every surcharge line disappears from both the booking page
 and the gate screen.
+
+The rate itself is **never shown to a customer**. Every screen — the booking
+summary, the Stripe checkout line, the walk-up sheet, the price hint on the
+gate — names the surcharge and prints the dollars, and nothing anywhere
+prints the percentage. Changing the rate changes the amounts and no wording.
 
 What to check on the test site:
 
