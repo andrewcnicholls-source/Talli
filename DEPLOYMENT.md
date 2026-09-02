@@ -235,19 +235,21 @@ keys, different data. Nothing is shared, and there is no connection
 between them.
 
 - **Production** `oxzwfemyavznykqixhvk` — real bookings, real people.
-- **Test** `uhdoverwvlxvyyctskle` — five fixtures, all named
-  `TEST — …`. No customer data, ever.
+- **Test** `uhdoverwvlxvyyctskle` — the known Eden Park calendar and
+  nothing else, every name prefixed `TEST — …`. No customer data, ever.
 
 Migrations are version-controlled in `supabase/migrations/`, applied in
 filename order. `scripts/check.sh` enforces the naming and rejects
 duplicate timestamps.
 
 **Never copy production data into test.** There is no masking process
-here, and building one is a bigger job than it sounds. The test
-fixtures are invented on purpose. To refresh them, run
-`supabase/test-only/reset-test-data.sql` against the test project — it
-lives outside `migrations/` deliberately, so `supabase db push` can
-never carry it to the live site.
+here, and building one is a bigger job than it sounds. Real event names
+and dates are public; bookings and people are not, and none of theirs
+are ever in test. `supabase/test-only/reset-test-data.sql` holds the
+event list and is the only thing that decides what exists there —
+anything not on its list is deleted when it runs. It lives outside
+`migrations/` deliberately, so `supabase db push` can never carry it to
+the live site.
 
 Agents develop against test. Production is touched only when a change
 has been through staging. The `PreToolUse` hook at
@@ -344,7 +346,10 @@ What the project has instead is a per-fixture `status` column
 (`draft`, `announced`, `on_sale`, …) which already does the job for the
 one thing that matters: a fixture in `draft` is invisible to the public
 key, so new inventory can exist in production before anyone can book
-it. `TEST — Draft, Hidden From Public` exercises that path.
+it. Test carries the real Eden Park calendar, so nothing sits in `draft`
+permanently any more; the one-line statement that puts a fixture there
+to exercise the path is at the bottom of
+`supabase/test-only/reset-test-data.sql`.
 
 If a change ever is too large to ship in one go, the shape that fits
 this architecture — no build step, config in one browser-side file — is

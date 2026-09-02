@@ -11,7 +11,7 @@ between them.
 | Git branch     | `main`                              | `staging`                                |
 | Supabase       | `oxzwfemyavznykqixhvk`              | `uhdoverwvlxvyyctskle`                   |
 | Stripe         | live keys                           | test-mode keys — real Stripe, fake money |
-| Fixtures       | real                                | five, all named `TEST — …`               |
+| Fixtures       | real                                | the real Eden Park calendar, every name prefixed `TEST — …` |
 | Customer data  | real people                         | none, ever                               |
 
 They share nothing. Different database, different keys, different money.
@@ -229,25 +229,57 @@ taken keep the surcharge they were charged.
 
 ## The test fixtures
 
-Five, chosen to cover the states worth rehearsing:
+Test carries the **known Eden Park schedule and nothing else** — the events
+Eden Park has actually announced, at their real dates and times, so the
+picker on a phone shows the season you would really be selling. The list
+lives in `supabase/test-only/reset-test-data.sql`, and that file is the only
+thing that decides what exists: anything not on the list is deleted on every
+run.
 
-| Fixture | Why it's there |
-| --- | --- |
-| `TEST — Tomorrow Night (on sale)` | the ordinary happy path |
-| `TEST — Next Week (on sale)` | so the picker has a real choice |
-| `TEST — Online Sales Closed (gate only)` | proves online shuts off and the gate takes over |
-| `TEST — Announced, No Prices Yet` | the register-interest capture |
-| `TEST — Draft, Hidden From Public` | must be invisible to the public key |
+| Fixture | Demand | Status |
+| --- | --- | --- |
+| `TEST — Auckland v Counties Manukau (NPC)` — Sat 12 Sep 2026, 2.05pm | standard | on sale |
+| `TEST — Auckland v Manawatu (NPC)` — Fri 25 Sep 2026, 7.05pm | standard | on sale |
+| `TEST — All Blacks v Australia (Bledisloe Cup)` — Sat 10 Oct 2026, 7.10pm | premium | on sale |
+| `TEST — BLACKCAPS v India (T20)` — Fri 30 Oct 2026, 8.00pm | high | on sale |
+| `TEST — BLACKCAPS v India (ODI)` — Wed 4 Nov 2026, 3.00pm | high | on sale |
+| `TEST — Robbie Williams (BRITPOP World Tour)` — Tue 24 Nov 2026 | premium | on sale |
+| `TEST — Guns N' Roses (with Airbourne)` — Thu 17 Dec 2026 | premium | on sale |
+| `TEST — Bruno Mars (The Romantic Tour)` — Sat 13 and Sun 14 Mar 2027 | premium | announced |
+| `TEST — One NZ Warriors (Anzac Round)` — Sun 25 Apr 2027 | premium | announced |
+| `TEST — One NZ Warriors (Origin week)` — Sun 13 Jun 2027 | premium | announced |
+| `TEST — State of Origin Game 2` — Wed 16 Jun 2027 | premium | announced |
 
-Property, zones, all 36 bays and the pricing ladder are copied exactly from
-production. Only the fixtures are invented.
+A crowd, not a booking in the venue's diary. Under a couple of thousand
+people nobody walks to Paice Ave, so it is not a night the driveway sells and
+it does not belong in the picker. The NPC games are the floor — already
+marginal, listed because they are the smallest thing still worth a look.
+Eden Park's smaller diary entries are deliberately absent.
+
+The `TEST — ` prefix stays. It is the one thing that tells you at a glance,
+on a phone, that you are not on talli.co.nz — and it matters more now that
+the names themselves are real.
+
+Property, zones, all the bays and the pricing ladder are copied exactly from
+production. Only the prefix and the demand tiers are ours.
+
+Real dates cost the three fixtures that used to sit permanently in the states
+worth rehearsing — on sale tomorrow, online sales closed, and draft. Each is
+one statement away, and the three are written out at the bottom of
+`reset-test-data.sql`. Run one, test, then re-run the file to put the
+calendar back.
 
 ### Resetting the test data
 
-Dates go stale and test bookings pile up. To wipe the bookings and re-anchor
-every fixture to today, run `supabase/test-only/reset-test-data.sql` against
-the **test** project (Supabase → SQL Editor). It is re-runnable and safe to
-run as often as you like.
+Test bookings pile up, and Eden Park announces things. To wipe the bookings
+and put the calendar back to the list above, run
+`supabase/test-only/reset-test-data.sql` against the **test** project
+(Supabase → SQL Editor). It is re-runnable and safe to run as often as you
+like.
+
+When a new event is announced, add a row to the list in that file and run it
+again. Nothing else needs touching: the offer, the three-tier ladder, gates,
+end time and the online cutoff are all derived from the start time.
 
 It lives outside `supabase/migrations/` deliberately, so `supabase db push`
 can never carry it to the live site.
@@ -279,23 +311,26 @@ Three of the six functions deployed to a byte-identical bundle hash.
 
 ## Adding a real fixture to the test site
 
-**Do it on the gate screen.** `/admin.html` has a **+** beside the event
-picker: pick a template, edit the name, the date and the prices, and
-tap *Save event*. It writes the event, its offer against the property
-and its tiers in one transaction, so a half-made event with nothing on
-sale cannot happen. *Save as template* keeps the shape — the tier menu
-and the timings, never the date — for next time.
+**For a quick look, do it on the gate screen.** `/admin.html` has a **+**
+beside the event picker: pick a template, edit the name, the date and the
+prices, and tap *Save event*. It writes the event, its offer against the
+property and its tiers in one transaction, so a half-made event with
+nothing on sale cannot happen. *Save as template* keeps the shape — the
+tier menu and the timings, never the date — for next time.
 
 Use the `TEST — ` prefix in the name so it stays obvious which site you
-are on.
-
-New events land as **draft**, which means hidden. The Tonight tab now
-carries the status and the buttons that move it: draft, announced, on
+are on. New events land as **draft**, which means hidden; the Tonight tab
+carries the status and the buttons that move it — draft, announced, on
 sale, closed, cancelled.
+
+**Nothing made that way survives a reset.** The modal writes to the test
+database, and `supabase/test-only/reset-test-data.sql` rebuilds it from
+scratch. So a fixture you want to keep belongs in that file, whether you
+first made it in the modal or not — see "Resetting the test data" above.
 
 ### By hand, if you would rather
 
-Nothing stops you doing it in SQL either:
+The same thing in SQL, and the shape a row in the reset script takes:
 
 ```sql
 insert into event (name, starts_at, demand_tier, status)
@@ -327,7 +362,7 @@ join event_offer oo  on oo.id = t.event_offer_id
 join event       oe  on oe.id = oo.event_id
 join event       ne  on ne.name  = 'TEST — Blues v Crusaders'
 join event_offer neo on neo.event_id = ne.id
-where oe.name = 'TEST — Tomorrow Night (on sale)' and t.active;
+where oe.name = 'TEST — Auckland v Counties Manukau (NPC)' and t.active;
 ```
 
 Anything else you add is a fourth option on the gate screen, which is
