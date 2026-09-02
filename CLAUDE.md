@@ -124,8 +124,18 @@ Andrew's standing instruction, enforced by the `PreToolUse` hook at
    (create/pause/restore), and branch operations against production are not
    pre-approved. Nor is any project ID the hook doesn't recognise.
 
-Read-only introspection (`list_*`, `get_*`, `query_logs`,
-`generate_typescript_types`, `search_docs`) runs unprompted on either project.
+**Reading production never asks.** Read-only introspection — `list_*`,
+`get_*`, `query_logs`, `generate_typescript_types`, `search_docs` — runs
+unprompted on either project. Those tools are named in `permissions.allow`
+in `.claude/settings.json`, so the approval does not depend on the hook
+being loaded: they are read-only by definition and carry no SQL to inspect.
+
+`execute_sql` is deliberately **not** on that list. Its name says nothing
+about what it does, so allowing it wholesale would auto-approve deletes
+along with selects. A `SELECT` through it is allowed by the hook instead,
+which reads the statement and asks only on the destructive shapes above.
+If the hook is not loaded in a given session, a production `SELECT` will
+prompt — approve it; that is the intended answer, not a warning.
 
 ### Working practice
 
