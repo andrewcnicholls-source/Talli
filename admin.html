@@ -36,7 +36,11 @@
       <span class="ad-brand">talli<span>.</span> gate</span>
       <button type="button" class="ad-refresh" id="ad-refresh" aria-label="Refresh">↻</button>
     </div>
-    <select id="ad-event" class="ad-select" aria-label="Event"></select>
+    <div class="ad-event-row">
+      <select id="ad-event" class="ad-select" aria-label="Event"></select>
+      <button type="button" class="ad-event-new" id="ad-new-open"
+              aria-label="New event" title="New event">+</button>
+    </div>
 
     <nav class="ad-tabs" role="tablist">
       <button type="button" class="ad-tab is-on" id="ad-tab-gate"
@@ -78,6 +82,20 @@
   <!-- --------------------------------------------------- tonight's state -->
   <section id="ad-pane-night" role="tabpanel" aria-labelledby="ad-tab-night" hidden>
 
+    <!-- Whether the site is selling this night at all, and the one tap that
+         changes it. First thing on the screen because it is the setting most
+         easily left wrong: a game that never went on sale looks exactly like
+         a game nobody booked. -->
+    <div class="ad-status" id="ad-status">
+      <div class="ad-status-head">
+        <span class="ad-status-name" id="ad-status-name">&mdash;</span>
+        <span class="ad-status-pill" id="ad-status-pill">&mdash;</span>
+      </div>
+      <div class="ad-status-when" id="ad-status-when"></div>
+      <p class="ad-status-note" id="ad-status-note"></p>
+      <div class="ad-status-actions" id="ad-status-actions"></div>
+    </div>
+
     <div class="ad-board">
       <div class="ad-board-fill">
         <span class="ad-board-num" id="ad-board-filled">—</span>
@@ -116,6 +134,92 @@
     Refreshes on its own every 30 seconds.<br>
     <button type="button" class="ad-link" id="ad-check-open">Check payment setup</button>
   </p>
+</div>
+
+<!-- --------------------------------------------------------- new event -->
+<div class="ad-sheet" id="ad-new" hidden>
+  <form class="ad-sheet-card" id="ad-new-form">
+    <div class="ad-sheet-head">
+      <h2>New event</h2>
+      <button type="button" class="ad-sheet-close" id="ad-new-close" aria-label="Close">&times;</button>
+    </div>
+
+    <label class="ad-label">Start from <span>optional</span></label>
+    <div class="ad-pick" id="ad-new-templates"></div>
+
+    <label class="ad-label" for="ad-new-name">Event name</label>
+    <input type="text" id="ad-new-name" name="eventname" class="ad-input"
+           placeholder="Auckland v Waikato" maxlength="120" required>
+
+    <div class="ad-sheet-row ad-row-wide-first">
+      <div>
+        <label class="ad-label" for="ad-new-date">Kickoff</label>
+        <input type="datetime-local" id="ad-new-date" name="kickoff" class="ad-input" required>
+      </div>
+      <div>
+        <label class="ad-label" for="ad-new-venue">Venue</label>
+        <input type="text" id="ad-new-venue" name="venue" class="ad-input"
+               value="Eden Park" maxlength="80">
+      </div>
+    </div>
+
+    <div class="ad-sheet-row">
+      <div>
+        <label class="ad-label" for="ad-new-status">Status</label>
+        <select id="ad-new-status" name="status" class="ad-select">
+          <option value="draft">Draft &mdash; hidden</option>
+          <option value="announced">Announced &mdash; no prices yet</option>
+          <option value="on_sale">On sale</option>
+          <option value="closed">Closed</option>
+        </select>
+      </div>
+      <div>
+        <label class="ad-label" for="ad-new-demand">Demand</label>
+        <select id="ad-new-demand" name="demand" class="ad-select">
+          <option value="low">Quiet</option>
+          <option value="standard" selected>Standard</option>
+          <option value="high">Busy</option>
+          <option value="premium">Big one</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="ad-new-property-row" hidden>
+      <label class="ad-label" for="ad-new-property">Spaces at</label>
+      <select id="ad-new-property" name="property" class="ad-select"></select>
+    </div>
+
+    <label class="ad-label">Timings <span>minutes before kickoff</span></label>
+    <div class="ad-sheet-row">
+      <div>
+        <label class="ad-label ad-label-sub" for="ad-new-gates">Gates open</label>
+        <input type="number" id="ad-new-gates" name="gates" class="ad-input"
+               inputmode="numeric" min="0" max="1440" step="5" value="150">
+      </div>
+      <div>
+        <label class="ad-label ad-label-sub" for="ad-new-stop">Online sales stop</label>
+        <input type="number" id="ad-new-stop" name="closes" class="ad-input"
+               inputmode="numeric" min="0" max="1440" step="5" value="45"
+               placeholder="never">
+      </div>
+    </div>
+    <p class="ad-hint">Leave &ldquo;online sales stop&rdquo; blank and the website keeps
+      selling right through the night. The gate always can.</p>
+
+    <label class="ad-label">What is on sale</label>
+    <div class="ad-tiers" id="ad-new-tiers"></div>
+    <button type="button" class="ad-tier-add" id="ad-new-tier-add">+ Another option</button>
+
+    <label class="ad-label" for="ad-new-template-name">Template name
+      <span>only if you are saving one</span></label>
+    <input type="text" id="ad-new-template-name" name="templatename" class="ad-input"
+           placeholder="Club rugby night" maxlength="80">
+
+    <p class="ad-sheet-error" id="ad-new-error" role="alert" hidden></p>
+
+    <button type="submit" class="btn btn-primary" id="ad-new-save">Save event</button>
+    <button type="button" class="btn btn-outline" id="ad-new-save-template">Save as template</button>
+  </form>
 </div>
 
 <!-- ------------------------------------------------------- walk-up sale -->

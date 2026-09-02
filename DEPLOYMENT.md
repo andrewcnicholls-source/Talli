@@ -263,6 +263,41 @@ migration ledger under-reports what has actually been applied there,
 and test carries schema production has never seen. Check the object
 itself before concluding a migration is missing.
 
+### What may never be deleted, on either project
+
+Test data is disposable and wiping it needs nobody's permission. The one
+rule that is not about the environment:
+
+> **An event is taken off sale. It is not deleted.**
+>
+> An `event` with paid bookings, unpaid holds, or registered interest
+> cannot be deleted at all — the database refuses it with
+> `EVENT_NOT_EMPTY` and names the counts. Set its status instead:
+> `cancelled` for a game that is off, `closed` for one that is over.
+> Both are reversible in a tap from the gate screen's Tonight tab; a
+> delete is reversible from nothing.
+>
+> An event nobody has touched still deletes cleanly, on either project.
+
+The reason it is a data rule rather than a production rule is that the
+guard then behaves identically in both places, so nothing about it is a
+surprise the first time it matters. The test reset still works because it
+clears bookings and interest before it clears events.
+
+Three files hold that line, and `scripts/check.sh` asserts all three are
+still there, because each is one careless edit from being gone:
+
+| Where | What it does |
+| --- | --- |
+| `supabase/migrations/20260902090000_…_event_deletion_guard.sql` | refuses the `DELETE` in the database, and pins `event_interest` to `ON DELETE RESTRICT` so the mailing list cannot be cascaded away |
+| `.claude/hooks/supabase-permissions.py` | makes an agent stop and ask before attempting one of these deletes on production, `WHERE` clause or not |
+| `supabase/test-only/reset-test-data.sql` | clears dependents before events, which is what keeps the same rule safe to apply on test |
+
+Registered interest is the half that was actually broken. It was
+`ON DELETE CASCADE` until 2 Sep 2026, so deleting a fixture silently
+deleted the list of people who had asked to be told when it went on sale
+— no error, no trace, nothing to restore from.
+
 ## 9. How are the payment credentials separated?
 
 Stripe keys are **not in this repository and not on Cloudflare.** The
@@ -435,11 +470,16 @@ happened while this document was being written.
 After this, PRs default to the integration branch and only a deliberate
 `staging → main` PR (or `/release-production`) reaches production.
 
-### 2. Protect `main`
+### 2. Protect `main` and `staging`
+
+Two rulesets, and `staging` matters as much as `main`. Staging is the
+device-test site and the only thing production is ever promoted from,
+so an unprotected `staging` means a red change can land in the very
+commit you are about to test and ship.
 
 **Settings → Rules → Rulesets → New branch ruleset**, targeting `main`:
 
-- ✅ Require status checks to pass → add **`check`**
+- ✅ Require status checks to pass → add **`check`** and **`typecheck`**
 - ✅ Block force pushes
 - ✅ Restrict deletions
 - ❌ Require a pull request — leave this **off**. `/release-production`
@@ -447,10 +487,28 @@ After this, PRs default to the integration branch and only a deliberate
   otherwise have to bypass the rule on every release, which is how
   protection ends up switched off altogether.
 
-Add **`typecheck`** to the required checks too, but only once you have
-seen it pass green on a PR — see `.github/workflows/ci.yml`.
+Then the same again targeting `staging`, with the force-push rule left
+off — a feature branch that needs re-basing is normal there.
 
-Worth protecting `staging` the same way, minus the force-push rule.
+Both required checks are jobs in `.github/workflows/ci.yml` and both
+are named by their job id, which is what GitHub matches on:
+
+| Required check | What it runs |
+| --- | --- |
+| `check` | `bash scripts/check.sh` — the same script you run locally |
+| `typecheck` | `deno check supabase/functions/*/index.ts` |
+
+`typecheck` ran `continue-on-error` from the day it was added until it
+had been green once, because gating on a check nobody had ever seen the
+output of would have blocked every PR on a guess. It went green on
+2 Sep 2026 and the flag came off, so it belongs in the required list
+now.
+
+A required check only satisfies a ruleset if it actually ran on the
+commit. The workflow triggers on **push** to `staging` and `main` as
+well as on pull requests, so any commit that reached staging already
+carries both runs — which is what lets `/release-production`
+fast-forward `main` to it without a PR.
 
 ### 3. Turn off GitHub Pages
 
@@ -475,7 +533,45 @@ goes through the staging gate. Both halves of the fix matter:
 - Attach `www.talli.co.nz` to the Pages project as a custom domain, so
   it serves the same deployment as the apex.
 
-### 4. Let web sessions reach the sites (optional)
+### 4. Disconnect Netlify
+
+Netlify still builds this repository. It is the host the site left, and
+nothing in the repo points at it any more — there is no `netlify.toml`,
+no `_redirects`, and `scripts/talli-env.sh` names Cloudflare Pages as
+the only deploy target. What is left is the connection in the other
+direction: a Netlify site called `talli-test` is still linked to this
+GitHub repo, so every pull request gets a Deploy Preview build that
+fails, plus three check runs that fail with it:
+
+```
+netlify/talli-test/deploy-preview   Deploy Preview failed
+Header rules - talli-test
+Pages changed - talli-test
+Redirect rules - talli-test
+```
+
+None of them are required, so they do not block a merge — the PR sits
+at `unstable` rather than `blocked`. They are noise, and the cost of
+noise on a checks list is that a real failure stops standing out.
+
+Two ways to stop it, either is enough:
+
+- **In Netlify** — Site configuration → Build & deploy → Continuous
+  deployment → **Unlink repository**, or delete the `talli-test` site
+  if nothing else uses it.
+- **In GitHub** — Settings → Integrations → Applications → Netlify →
+  Configure, and remove this repository from its access list.
+
+Prefer the Netlify side. Removing the app's repository access stops the
+checks but leaves a site in the account still expecting to build, which
+is the same untidiness one layer down.
+
+The DNS record at §10 is a separate thing: `talli.co.nz`'s legacy apex A
+record still points at Netlify's load balancer, and that one is a
+deliberate rollback path until the zone move is done. Do not remove it
+while cleaning this up.
+
+### 5. Let web sessions reach the sites (optional)
 
 A Claude Code session running on the web cannot fetch `talli.co.nz` or
 `staging.talli.pages.dev` — the environment's network policy refuses

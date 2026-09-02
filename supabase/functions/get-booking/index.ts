@@ -19,6 +19,14 @@ const db = createClient(
   { auth: { persistSession: false } },
 )
 
+// A row as PostgREST hands it back. The select strings in this file are
+// checked against a schema this project does not generate types for, so the
+// client's inference gives up and returns an error-shaped type instead of a
+// row. Saying "it is a row" once is honest about what is actually known;
+// the alternative is generated types for every table, which is a bigger
+// commitment than this function needs.
+type Row = Record<string, any>
+
 const ALLOWED_ORIGIN = Deno.env.get('ALLOWED_ORIGIN') ?? '*'
 
 const cors = {
@@ -49,7 +57,7 @@ Deno.serve(async (req) => {
     return json({ error: 'A Checkout Session id is required' }, 400)
   }
 
-  const { data: booking, error } = await db
+  const { data: bookingRow, error } = await db
     .from('booking')
     .select(
       'id, status, tier_code, customer_name, vehicle_rego, amount_cents, addons_cents, ' +
@@ -63,7 +71,8 @@ Deno.serve(async (req) => {
     console.error('booking lookup failed', error)
     return json({ error: 'Could not look that booking up' }, 500)
   }
-  if (!booking) return json({ error: 'No booking found for that session' }, 404)
+  if (!bookingRow) return json({ error: 'No booking found for that session' }, 404)
+  const booking = bookingRow as Row
 
   const [{ data: ev }, { data: property }, { data: tier }, { data: addons }] =
     await Promise.all([

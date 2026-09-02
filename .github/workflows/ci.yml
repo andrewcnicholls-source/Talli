@@ -41,19 +41,22 @@ jobs:
   # -------------------------------------------------------------------
   #  Edge function typechecking.
   #
-  #  Separate, and deliberately NOT required yet. `deno check` has never
-  #  been run against these functions — their imports (esm.sh, jsr.io)
-  #  are unreachable from the sandbox they were written in, so nobody
-  #  has seen the result. Wiring an unseen check into the required gate
-  #  would block every PR on a guess.
+  #  Separate from `check` because it needs the network: the functions
+  #  import Stripe from esm.sh and supabase-js from jsr.io, and a sandbox
+  #  that cannot reach those hosts gets an import failure rather than an
+  #  answer. GitHub's runners can reach them, so this is where the real
+  #  answer comes from.
   #
-  #  GitHub's runners can reach those hosts, so this job gets a real
-  #  answer. Once it has been green on a PR, delete `continue-on-error`
-  #  and add `typecheck` to the required checks in branch protection.
+  #  It ran `continue-on-error` until it had been green once, because
+  #  wiring an unseen check into the gate would have blocked every PR on
+  #  a guess. It went green on 2 Sep 2026, so it is a real check now.
+  #
+  #  STILL TO DO, and it cannot be done from here: add `typecheck` to
+  #  the required checks in branch protection for `staging` and `main`.
+  #  Until that happens a failure here is a red X, not a blocked merge.
   # -------------------------------------------------------------------
   typecheck:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 

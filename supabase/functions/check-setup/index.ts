@@ -143,7 +143,11 @@ Deno.serve(async (req) => {
   if (stripe) {
     try {
       const list = await stripe.webhookEndpoints.list({ limit: 100 })
-      const mine = list.data.filter((e) => (e.url ?? '').includes(WEBHOOK_PATH))
+      // Annotated because the Stripe types come over the wire from a CDN and
+      // the list's element type does not survive the trip. The url is all
+      // this reads.
+      const mine = list.data.filter((e: { url?: string | null }) =>
+        (e.url ?? '').includes(WEBHOOK_PATH))
 
       if (!mine.length) {
         checks.push({

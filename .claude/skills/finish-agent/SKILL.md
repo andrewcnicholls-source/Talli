@@ -101,6 +101,15 @@ build no-op, committed secrets, migration filenames. What it does
 **not** cover: anything about how the site behaves in a browser. Say
 both.
 
+**The TypeScript check is usually skipped locally, and that is not the
+same as passing.** `deno check` needs to reach esm.sh and jsr.io for
+the Stripe and supabase-js imports, and most sandboxes cannot, so
+`check.sh` reports it as a skip rather than pretending. CI runs it as
+a separate required job (`typecheck` in `.github/workflows/ci.yml`) on
+a runner that can reach both. If the local run skipped it, say so in
+the report and say that CI is where it gets checked — do not let a
+skip read as coverage.
+
 **Anywhere else**, find out what the repository actually has before
 running anything. Look, in this order, for what the project itself
 defines:
@@ -160,7 +169,8 @@ Branch:
 
 Validation:
   ✓ scripts/check.sh — 20 passed, 0 failed, 1 skipped
-    (skipped: edge function TypeScript — deno not installed)
+    (skipped: edge function TypeScript — deno cannot reach esm.sh
+     from here; CI's typecheck job is where that one runs)
 
   Not covered by any automated check:
   browser behaviour, booking flow, payment flow, layout on real devices.
@@ -182,7 +192,8 @@ Suggested PR
 
 Next:
   1. Open the PR against staging.
-  2. CI runs scripts/check.sh on it.
+  2. CI runs scripts/check.sh and the edge-function typecheck on it.
+     Both are required checks; the PR cannot merge until they pass.
   3. Merge when approved — that deploys to staging.talli.pages.dev.
   4. Test the staging site on real devices.
   5. Run /release-production to promote the tested commit to talli.co.nz.

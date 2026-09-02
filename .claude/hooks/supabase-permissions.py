@@ -7,6 +7,11 @@ Permission policy (see CLAUDE.md):
                          data-destroying SQL asks first
   * anything else     -> asks
 
+On production, "data-destroying" includes a DELETE from any table holding
+bookings, payments or registered interest, WHERE clause or not. Taking a
+fixture off sale is a status change and stays unprompted; removing the row
+is not the same act and does not.
+
 Emits a PreToolUse permissionDecision of "allow" (run silently) or "ask"
 (fall through to the normal prompt). It never emits "deny" -- the user can
 always approve at the prompt.
@@ -30,12 +35,34 @@ READ_ONLY = {
 # Tools that write SQL; gated by the destructive-statement check on prod.
 SQL_WRITE = {"execute_sql", "apply_migration"}
 
+# Tables whose rows are money taken, or a person who asked to be told
+# something. Deleting one of these on production is not recoverable from
+# anything this project keeps, so it asks even with a WHERE clause -- a
+# precise DELETE of the wrong row is still gone.
+#
+# The database refuses the worst of it on its own: an event with bookings
+# or registered interest cannot be deleted at all, only taken off sale
+# (20260902090000_talli_event_deletion_guard). This is the second lock,
+# on the other side of the door: it stops the attempt being made silently
+# rather than relying on the guard to catch it.
+PROTECTED_TABLES = (
+    "event", "event_interest", "booking", "booking_addon",
+    "bay_allocation", "booking_cancellation", "booking_transfer",
+)
+
 DESTRUCTIVE = [
     (re.compile(r"\bDROP\s+(TABLE|SCHEMA|DATABASE|VIEW|MATERIALIZED\s+VIEW|"
                 r"FUNCTION|TRIGGER|POLICY|INDEX|TYPE|EXTENSION|ROLE|"
                 r"PUBLICATION|SEQUENCE)\b", re.I), "DROP of a database object"),
     (re.compile(r"\bDROP\s+COLUMN\b", re.I), "DROP COLUMN"),
+    # Removing a constraint or switching a trigger off removes an invariant
+    # while leaving every row in place, so nothing looks wrong afterwards.
+    (re.compile(r"\bDROP\s+CONSTRAINT\b", re.I), "DROP CONSTRAINT"),
+    (re.compile(r"\bDISABLE\s+TRIGGER\b", re.I), "DISABLE TRIGGER"),
     (re.compile(r"\bTRUNCATE\b", re.I), "TRUNCATE"),
+    (re.compile(r"\bDELETE\s+FROM\s+(?:public\s*\.\s*)?\"?(?:"
+                + "|".join(PROTECTED_TABLES) + r")\"?(?![\w$])", re.I),
+     "DELETE from a table holding bookings, payments or registered interest"),
 ]
 
 

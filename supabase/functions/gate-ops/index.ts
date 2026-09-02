@@ -4,7 +4,9 @@
 //  Everything the person on the driveway needs: the arrivals list, ticking
 //  cars off as they turn in, handing over pre-purchased extras, selling a
 //  space to someone who just rolled up, moving a booked car out to overflow,
-//  and — new — keeping the night's capacity and prices honest as they move.
+//  keeping the night's capacity and prices honest as they move, and — new —
+//  making the event itself: a template to start from, the details edited on
+//  the phone, and the status moved from draft to on sale without a dashboard.
 //
 //  All of it writes, so all of it runs under the service role here rather
 //  than being exposed through RLS.
@@ -68,6 +70,16 @@ const named = (err: { message?: string }) => ({
   code: (err.message ?? '').split(':')[0].trim(),
 })
 
+// Minutes either side of kickoff, as the modal sends them. An absent field
+// falls back to the caller's default; an explicit null stays null, because
+// "online sales never close" is a decision and not a missing value.
+function minutes(v: unknown, fallback: number | null): number | null {
+  if (v === null) return null
+  if (v === undefined || v === '') return fallback
+  const n = Number(v)
+  return Number.isFinite(n) ? Math.round(n) : fallback
+}
+
 type Row = Record<string, any>
 
 // Everything the gate screen draws, from one round trip. On a phone at the
@@ -101,8 +113,8 @@ async function nightState(eventId: string) {
 
   // Not yet arrived first — that is the working list. Within each group,
   // earliest arrival window first.
-  const rows = (listRes.data ?? [])
-    .map((r: Row) => ({ ...r, surcharge_cents: surcharges.get(r.booking_id) ?? 0 }))
+  const rows = ((listRes.data ?? []) as Row[])
+    .map((r: Row): Row => ({ ...r, surcharge_cents: surcharges.get(r.booking_id) ?? 0 }))
     .sort((a, b) => {
       if (a.arrived !== b.arrived) return a.arrived ? 1 : -1
       return String(a.arrival_from ?? '').localeCompare(String(b.arrival_from ?? ''))
@@ -225,6 +237,94 @@ Deno.serve(async (req) => {
         ])
         if (error) throw error
         return json({ tiers: data, card_surcharge_bps: rate?.card_surcharge_bps ?? 0 })
+      }
+
+      // --------------------------------------------- making a new event
+
+      // Everything the "new event" modal needs to open, in one round trip:
+      // the templates to choose from, and the properties an event can be
+      // sold at. Neither list is long enough to be worth paging.
+      case 'event_form': {
+        const [tplRes, propRes] = await Promise.all([
+          db.from('event_template')
+            .select('id, name, event_name, venue, demand_tier, status, property_id, ' +
+                    'gates_open_minutes, expected_end_minutes, online_close_minutes, tiers')
+            .eq('active', true)
+            .order('sort_order', { ascending: true }),
+          db.from('property').select('id, name').eq('active', true)
+            .order('name', { ascending: true }),
+        ])
+        if (tplRes.error) throw tplRes.error
+        if (propRes.error) throw propRes.error
+
+        const { data: fallback } = await db.rpc('default_event_property')
+        return json({
+          templates: tplRes.data ?? [],
+          properties: propRes.data ?? [],
+          default_property_id: fallback ?? null,
+        })
+      }
+
+      // The date arrives as the wall clock someone typed plus the zone the
+      // phone is in, never as an instant. A staging session run from another
+      // timezone must not quietly book a 7:05pm kickoff for 7:05pm elsewhere.
+      case 'create_event': {
+        const { data, error } = await db.rpc('create_gate_event', {
+          p_name: String(body.name ?? ''),
+          p_starts_at_local: String(body.starts_at_local ?? ''),
+          p_venue: body.venue ? String(body.venue) : 'Eden Park',
+          p_status: String(body.status ?? 'draft'),
+          p_demand_tier: String(body.demand_tier ?? 'standard'),
+          p_property_id: body.property_id ? String(body.property_id) : null,
+          p_gates_open_minutes: minutes(body.gates_open_minutes, -150),
+          p_expected_end_minutes: minutes(body.expected_end_minutes, 150),
+          // Null here is a decision, not a missing value: online sales never
+          // close on their own and the gate keeps selling.
+          p_online_close_minutes: minutes(body.online_close_minutes, null),
+          p_tiers: Array.isArray(body.tiers) ? body.tiers : [],
+          p_timezone: body.timezone ? String(body.timezone) : 'Pacific/Auckland',
+        })
+        if (error) return json(named(error), 409)
+
+        const { data: made } = await db.from('event')
+          .select('id, name, venue, starts_at, status')
+          .eq('id', data)
+          .maybeSingle()
+        return json({ ok: true, event_id: data, event: made })
+      }
+
+      // The shape of a night, kept so it never has to be retyped. Saving
+      // under a name that already exists replaces it rather than making a
+      // second template nobody can tell apart.
+      case 'save_template': {
+        const { data, error } = await db.rpc('save_event_template', {
+          p_name: String(body.template_name ?? ''),
+          p_id: body.template_id ? String(body.template_id) : null,
+          p_event_name: body.name ? String(body.name) : null,
+          p_venue: body.venue ? String(body.venue) : 'Eden Park',
+          p_status: String(body.status ?? 'draft'),
+          p_demand_tier: String(body.demand_tier ?? 'standard'),
+          p_property_id: body.property_id ? String(body.property_id) : null,
+          p_gates_open_minutes: minutes(body.gates_open_minutes, -150),
+          p_expected_end_minutes: minutes(body.expected_end_minutes, 150),
+          p_online_close_minutes: minutes(body.online_close_minutes, null),
+          p_tiers: Array.isArray(body.tiers) ? body.tiers : [],
+        })
+        if (error) return json(named(error), 409)
+        return json({ ok: true, template_id: data })
+      }
+
+      // Draft, announced, on sale, closed, cancelled. This is the lever that
+      // decides whether the public site sells the night at all, so it belongs
+      // on the phone next to everything else that moves during an event.
+      case 'set_event_status': {
+        if (!eventId) return json({ error: 'event_id is required' }, 400)
+        const { data, error } = await db.rpc('set_event_status', {
+          p_event_id: eventId,
+          p_status: String(body.status ?? ''),
+        })
+        if (error) return json(named(error), 409)
+        return json({ ok: true, status: data })
       }
 
       case 'check_in': {

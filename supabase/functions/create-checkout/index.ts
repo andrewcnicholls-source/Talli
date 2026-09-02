@@ -53,6 +53,14 @@ const IS_TEST = (Deno.env.get('SUPABASE_URL') ?? '').includes(TEST_PROJECT_REF)
 
 const SITE_URL = Deno.env.get('SITE_URL') ??
   (IS_TEST ? 'https://staging.talli.pages.dev' : 'https://talli.co.nz')
+// A row as PostgREST hands it back. The select strings in this file are
+// checked against a schema this project does not generate types for, so the
+// client's inference gives up and returns an error-shaped type instead of a
+// row. Saying "it is a row" once is honest about what is actually known;
+// the alternative is generated types for every table, which is a bigger
+// commitment than this function needs.
+type Row = Record<string, any>
+
 const ALLOWED_ORIGIN = Deno.env.get('ALLOWED_ORIGIN') ?? '*'
 
 // Holds run slightly longer than the Stripe session so the sweeper can never
@@ -216,7 +224,7 @@ Deno.serve(async (req) => {
   // moves, so by the time this read runs it is already the surcharge on the
   // full order — bay and extras together. Reading it here rather than working
   // it out is the whole point: Stripe charges what the database decided.
-  const [{ data: booking, error: bErr }, { data: addonRows }] =
+  const [{ data: bookingRow, error: bErr }, { data: addonRows }] =
     await Promise.all([
       db.from('booking')
         .select('id, amount_cents, addons_cents, surcharge_cents, currency, ' +
@@ -229,10 +237,11 @@ Deno.serve(async (req) => {
         .order('code'),
     ])
 
-  if (bErr || !booking) {
+  if (bErr || !bookingRow) {
     await abandon()
     return json({ error: 'Could not read the booking back' }, 500)
   }
+  const booking = bookingRow as Row
 
   const [{ data: tier }, { data: property }] = await Promise.all([
     db.from('offer_tier').select('label, event_offer_id').eq('code', tierCode)

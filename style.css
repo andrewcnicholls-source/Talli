@@ -1078,6 +1078,9 @@ footer a { color: var(--blue); }
 }
 .ad-label span { text-transform: none; letter-spacing: 0.02em; opacity: 0.7; }
 .ad-sheet-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+/* A date-and-time input reports a wide intrinsic size. Without this the
+   column it is in refuses to shrink and squeezes whatever sits beside it. */
+.ad-sheet-row > div { min-width: 0; }
 .ad-check {
   display: flex;
   align-items: center;
@@ -1778,6 +1781,178 @@ footer a { color: var(--blue); }
   color: var(--ink);
   min-width: 0;
 }
+
+/* =====================================================================
+   Gate screen — making an event, and the status of the one on screen
+   ===================================================================== */
+
+/* The + sits against the event picker rather than in the row above it,
+   so the thing it makes and the thing it lands in are the same object. */
+.ad-event-row { display: flex; gap: 6px; align-items: stretch; }
+.ad-event-row .ad-select { flex: 1; min-width: 0; }
+.ad-event-new {
+  flex: none;
+  width: 46px;
+  font-family: var(--body);
+  font-size: 1.5rem;
+  line-height: 1;
+  color: var(--white);
+  background: rgba(255, 255, 255, 0.12);
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.ad-event-new:hover { background: rgba(255, 255, 255, 0.22); }
+
+/* ---------- Is this night actually on sale ----------
+
+   Top of Tonight, above the fill count, because a night that never went on
+   sale and a night nobody booked look identical from the numbers alone. */
+.ad-status {
+  background: var(--white);
+  border-bottom: 1px solid var(--line);
+  padding: 16px 16px 18px;
+}
+.ad-status-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.ad-status-name {
+  font-family: var(--display);
+  font-size: 1.35rem;
+  color: var(--blue-deep);
+  min-width: 0;
+}
+.ad-status-pill {
+  flex: none;
+  font-size: 0.72rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--offwhite);
+  color: var(--grey);
+  white-space: nowrap;
+}
+.ad-status-pill.is-on_sale {
+  background: #EAF3EE; border-color: #C4DDD0; color: #23503B;
+}
+.ad-status-pill.is-announced {
+  background: var(--blue-tint); border-color: #C8D6E8; color: var(--blue);
+}
+.ad-status-pill.is-cancelled,
+.ad-status-pill.is-closed {
+  background: #FFF4F0; border-color: #F3D9CF; color: var(--orange-flag);
+}
+.ad-status-when {
+  font-size: 0.84rem;
+  font-weight: 300;
+  color: var(--grey);
+  margin-top: 4px;
+}
+.ad-status-note {
+  font-size: 0.84rem;
+  font-weight: 300;
+  color: var(--ink);
+  margin: 8px 0 0;
+  max-width: none;
+}
+.ad-status-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+.ad-status-set {
+  flex: 1 1 auto;
+  font-family: var(--body);
+  font-size: 0.82rem;
+  color: var(--blue);
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 9px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.ad-status-set:hover:not(:disabled) { border-color: var(--blue); }
+/* The one it already is, shown as the answer rather than an option. */
+.ad-status-set.is-on {
+  background: var(--blue);
+  border-color: var(--blue);
+  color: var(--white);
+  cursor: default;
+}
+.ad-status-set:disabled:not(.is-on) { opacity: 0.45; cursor: default; }
+
+/* A date and a time need more room than a venue that is almost always the
+   same three syllables. */
+.ad-sheet-row.ad-row-wide-first { grid-template-columns: 1.7fr 1fr; }
+
+/* ---------- New event: the tier editor ---------- */
+.ad-label-sub {
+  margin-top: 0;
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+}
+.ad-hint {
+  font-size: 0.82rem;
+  font-weight: 300;
+  color: var(--grey);
+  margin: 8px 0 0;
+  max-width: none;
+}
+.ad-tiers { display: grid; gap: 10px; }
+.ad-tier {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 10px 12px 12px;
+  background: var(--offwhite);
+}
+.ad-tier-top { display: flex; gap: 8px; align-items: center; }
+.ad-tier-code {
+  flex: none;
+  width: 8.5em;
+  font-size: 0.86rem;
+  padding: 9px 10px;
+}
+.ad-tier-label { font-size: 0.9rem; padding: 9px 10px; margin-top: 8px; }
+.ad-tier-drop {
+  flex: none;
+  margin-left: auto;
+  width: 34px;
+  height: 34px;
+  font-size: 1.3rem;
+  line-height: 1;
+  color: var(--grey);
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  cursor: pointer;
+}
+.ad-tier-drop:hover { border-color: var(--orange-flag); color: var(--orange-flag); }
+.ad-tier .ad-price-entry { margin-top: 8px; }
+.ad-tier .ad-price-entry .ad-input { font-size: 1.05rem; }
+.ad-tier-add {
+  width: 100%;
+  font-family: var(--body);
+  font-size: 0.88rem;
+  color: var(--blue);
+  background: none;
+  border: 1px dashed var(--line);
+  border-radius: 4px;
+  padding: 11px;
+  margin-top: 10px;
+  cursor: pointer;
+}
+.ad-tier-add:hover { border-color: var(--blue); }
+
+/* Two ways out of this sheet, and they are not equals: one makes the night,
+   the other only remembers its shape. */
+.ad-sheet-card .btn + .btn { margin-top: 10px; }
 
 /* =====================================================================
    TEST ENVIRONMENT MARKING

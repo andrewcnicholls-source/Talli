@@ -114,8 +114,12 @@ Andrew's standing instruction, enforced by the `PreToolUse` hook at
    `apply_migration` against `oxzwfemyavznykqixhvk` run without asking.
    Don't ask him to confirm a migration he has already approved.
 3. **Destructive production SQL still asks.** `DROP` of any object,
-   `DROP COLUMN`, `TRUNCATE`, and `DELETE`/`UPDATE` with no `WHERE` clause
-   against production stop for confirmation.
+   `DROP COLUMN`, `DROP CONSTRAINT`, `DISABLE TRIGGER`, `TRUNCATE`, and
+   `DELETE`/`UPDATE` with no `WHERE` clause against production stop for
+   confirmation. So does **any `DELETE` from `event`, `event_interest`,
+   `booking`, `booking_addon`, `bay_allocation`, `booking_cancellation`
+   or `booking_transfer`** — with a `WHERE` clause or without one. A
+   precise delete of the wrong row is still gone.
 4. **Everything else asks.** Edge function deploys, project lifecycle
    (create/pause/restore), and branch operations against production are not
    pre-approved. Nor is any project ID the hook doesn't recognise.
@@ -129,6 +133,26 @@ Develop and iterate against **test**. Only touch production when Andrew has
 said the change is ready to promote. When promoting, prefer `apply_migration`
 over raw `execute_sql` for DDL so the change is recorded in the migration
 history.
+
+### An event is taken off sale, never deleted
+
+Wiping test data is fine and needs no permission. Production is different,
+and the difference is not the environment — it is whether anyone is
+attached to the night.
+
+An `event` with **paid bookings, unpaid holds, or registered interest**
+cannot be deleted at all. The database refuses it
+(`20260902090000_talli_event_deletion_guard`) and says so by name:
+`EVENT_NOT_EMPTY`. The right action is a status change — `cancelled` for
+a game that is off, `closed` for one that is over — which the gate
+screen does from the Tonight tab. Both are reversible; a delete is not.
+
+An event nobody has touched still deletes cleanly, on either project.
+
+This is why the rule can be identical on test and production: it is a
+property of the data. The test reset works because it clears bookings and
+interest before it clears events, and `scripts/check.sh` asserts that
+ordering still holds.
 
 ### Changing the policy
 

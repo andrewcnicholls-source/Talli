@@ -311,10 +311,26 @@ Three of the six functions deployed to a byte-identical bundle hash.
 
 ## Adding a real fixture to the test site
 
-The durable way is a row in `supabase/test-only/reset-test-data.sql`, so it
-survives the next reset. To add one by hand for a quick look, use the
-`TEST — ` prefix so it stays obvious — and know the next reset will remove
-it again:
+**For a quick look, do it on the gate screen.** `/admin.html` has a **+**
+beside the event picker: pick a template, edit the name, the date and the
+prices, and tap *Save event*. It writes the event, its offer against the
+property and its tiers in one transaction, so a half-made event with
+nothing on sale cannot happen. *Save as template* keeps the shape — the
+tier menu and the timings, never the date — for next time.
+
+Use the `TEST — ` prefix in the name so it stays obvious which site you
+are on. New events land as **draft**, which means hidden; the Tonight tab
+carries the status and the buttons that move it — draft, announced, on
+sale, closed, cancelled.
+
+**Nothing made that way survives a reset.** The modal writes to the test
+database, and `supabase/test-only/reset-test-data.sql` rebuilds it from
+scratch. So a fixture you want to keep belongs in that file, whether you
+first made it in the modal or not — see "Resetting the test data" above.
+
+### By hand, if you would rather
+
+The same thing in SQL, and the shape a row in the reset script takes:
 
 ```sql
 insert into event (name, starts_at, demand_tier, status)
@@ -350,7 +366,8 @@ where oe.name = 'TEST — Auckland v Counties Manukau (NPC)' and t.active;
 ```
 
 Anything else you add is a fourth option on the gate screen, which is
-the thing the three-tier change was for.
+the thing the three-tier change was for. The modal enforces the same
+thing loosely — it will let you add a fourth, and you will see it.
 
 ---
 
