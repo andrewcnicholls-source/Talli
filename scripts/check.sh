@@ -225,13 +225,27 @@ else
 fi
 
 # ---------------------------------------------------------------------
-head "Unavailable in this environment"
+head "Edge function TypeScript"
 # ---------------------------------------------------------------------
-command -v deno >/dev/null 2>&1 \
-  && { deno check supabase/functions/*/index.ts >/dev/null 2>&1 \
-       && pass "edge function TypeScript typechecks" \
-       || fail "edge function TypeScript does not typecheck"; } \
-  || skip "deno not installed — edge function TypeScript is NOT typechecked"
+# The functions import Stripe from esm.sh and supabase-js from jsr.io, so
+# `deno check` needs the network. A sandbox that cannot reach those hosts
+# gets an import failure, and reporting that as "does not typecheck" sends
+# someone hunting for a type error that is not there. Tell the two apart:
+# a failure that never got as far as checking is a skip, not a fail.
+if command -v deno >/dev/null 2>&1; then
+  if out=$(deno check supabase/functions/*/index.ts 2>&1); then
+    pass "edge function TypeScript typechecks"
+  elif printf '%s' "$out" | grep -qE "failed to load|Import '|error sending request|unsuccessful tunnel|403 Forbidden"; then
+    skip "deno cannot reach esm.sh or jsr.io from here — TypeScript is NOT typechecked"
+  else
+    fail "edge function TypeScript does not typecheck"
+    printf '%s\n' "$out" \
+      | grep -E "TS[0-9]+ \[ERROR\]|Found [0-9]+ error" \
+      | sed -n '1,20p' | sed 's/^/      /'
+  fi
+else
+  skip "deno not installed — edge function TypeScript is NOT typechecked"
+fi
 
 # ---------------------------------------------------------------------
 printf '\n\033[1mResult\033[0m\n'

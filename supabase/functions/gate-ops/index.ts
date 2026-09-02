@@ -113,8 +113,8 @@ async function nightState(eventId: string) {
 
   // Not yet arrived first — that is the working list. Within each group,
   // earliest arrival window first.
-  const rows = (listRes.data ?? [])
-    .map((r: Row) => ({ ...r, surcharge_cents: surcharges.get(r.booking_id) ?? 0 }))
+  const rows = ((listRes.data ?? []) as Row[])
+    .map((r: Row): Row => ({ ...r, surcharge_cents: surcharges.get(r.booking_id) ?? 0 }))
     .sort((a, b) => {
       if (a.arrived !== b.arrived) return a.arrived ? 1 : -1
       return String(a.arrival_from ?? '').localeCompare(String(b.arrival_from ?? ''))

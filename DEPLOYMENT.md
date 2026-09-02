@@ -470,7 +470,45 @@ goes through the staging gate. Both halves of the fix matter:
 - Attach `www.talli.co.nz` to the Pages project as a custom domain, so
   it serves the same deployment as the apex.
 
-### 4. Let web sessions reach the sites (optional)
+### 4. Disconnect Netlify
+
+Netlify still builds this repository. It is the host the site left, and
+nothing in the repo points at it any more — there is no `netlify.toml`,
+no `_redirects`, and `scripts/talli-env.sh` names Cloudflare Pages as
+the only deploy target. What is left is the connection in the other
+direction: a Netlify site called `talli-test` is still linked to this
+GitHub repo, so every pull request gets a Deploy Preview build that
+fails, plus three check runs that fail with it:
+
+```
+netlify/talli-test/deploy-preview   Deploy Preview failed
+Header rules - talli-test
+Pages changed - talli-test
+Redirect rules - talli-test
+```
+
+None of them are required, so they do not block a merge — the PR sits
+at `unstable` rather than `blocked`. They are noise, and the cost of
+noise on a checks list is that a real failure stops standing out.
+
+Two ways to stop it, either is enough:
+
+- **In Netlify** — Site configuration → Build & deploy → Continuous
+  deployment → **Unlink repository**, or delete the `talli-test` site
+  if nothing else uses it.
+- **In GitHub** — Settings → Integrations → Applications → Netlify →
+  Configure, and remove this repository from its access list.
+
+Prefer the Netlify side. Removing the app's repository access stops the
+checks but leaves a site in the account still expecting to build, which
+is the same untidiness one layer down.
+
+The DNS record at §10 is a separate thing: `talli.co.nz`'s legacy apex A
+record still points at Netlify's load balancer, and that one is a
+deliberate rollback path until the zone move is done. Do not remove it
+while cleaning this up.
+
+### 5. Let web sessions reach the sites (optional)
 
 A Claude Code session running on the web cannot fetch `talli.co.nz` or
 `staging.talli.pages.dev` — the environment's network policy refuses
