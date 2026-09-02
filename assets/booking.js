@@ -363,11 +363,11 @@
           headline = rest.splice(0, 3);
         }
 
-        headline.forEach(function (t) { primary.appendChild(tierCard(t)); });
+        headline.forEach(function (t) { addTier(primary, t); });
 
         if (rest.length) {
           el('bk-more-toggle').hidden = false;
-          rest.forEach(function (t) { extra.appendChild(tierCard(t)); });
+          rest.forEach(function (t) { addTier(extra, t); });
         }
       })
       .catch(function (err) {
@@ -382,6 +382,24 @@
   function splitLabel(label) {
     var parts = String(label || '').split(/\s+—\s+/);
     return { name: parts[0], detail: parts.slice(1).join(' — ') };
+  }
+
+  // A sold-out card is faded, and opacity carries to everything inside it —
+  // so the "still worth turning up" line goes in its own row underneath,
+  // where it stays readable. .bk-cards is a one-column grid, so the row sits
+  // directly under the option it is talking about.
+  function addTier(container, tier) {
+    container.appendChild(tierCard(tier));
+    if (tier.spots_left <= 0) {
+      container.appendChild(
+        make(
+          'p',
+          'bk-soldout-note',
+          'Sold out online — but there may still be space on the night. ' +
+          'Come to 86 Paice Ave and ask the marshal.'
+        )
+      );
+    }
   }
 
   function tierCard(tier) {

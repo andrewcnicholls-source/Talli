@@ -166,6 +166,7 @@
       hide(el('ad-lock'));
       show(el('ad-app'));
       loadCatalogue();
+      loadTemplates();
       renderEvents();
     }).catch(function (err) {
       state.pass = '';
@@ -174,6 +175,21 @@
       box.textContent = err.message;
       show(box);
     });
+  }
+
+  // The pricing templates, for the dropdown under Prices. The new-event
+  // modal fetches the same list when it opens; this is the copy the gate
+  // screen needs without opening anything. A failure here is quiet on
+  // purpose: it costs the dropdown, and nothing else on the night.
+  function loadTemplates() {
+    return call('event_form')
+      .then(function (data) {
+        state.templates = data.templates || [];
+        state.properties = data.properties || [];
+        state.defaultProperty = data.default_property_id || null;
+        renderPricePicker();
+      })
+      .catch(function () {});
   }
 
   // The extras catalogue is public — the same rows the booking page reads.
@@ -250,6 +266,7 @@
     renderBoard();
     renderZones();
     renderPrices();
+    renderPricePicker();
     renderExtras();
     renderMoney();
     measureHead();
@@ -563,6 +580,106 @@
     });
   }
 
+  // The dropdown under the price cards. It reads the same templates the
+  // new-event modal picks from, because they are the same list: what the
+  // roads are doing decides what a night is worth, whether the night is
+  // being made or re-priced an hour before kickoff.
+  function renderPricePicker() {
+    var box = el('ad-pricepick');
+    var sel = el('ad-pricepick-select');
+
+    // Nothing to pick from, or nothing to apply it to.
+    if (!state.templates.length || !state.tiers.length) {
+      box.hidden = true;
+      return;
+    }
+    box.hidden = false;
+
+    // Rebuilt on every refresh, which lands every 30 seconds — so put back
+    // whatever was chosen, or a half-made decision disappears mid-tap.
+    var chosen = sel.value;
+    sel.innerHTML = '';
+    sel.appendChild(new Option('Pick a template…', ''));
+    state.templates.forEach(function (t) {
+      sel.appendChild(new Option(t.name, t.id));
+    });
+    sel.value = chosen;
+    if (sel.value !== chosen) sel.value = '';
+
+    paintPricePick();
+  }
+
+  function pickedTemplate() {
+    var id = el('ad-pricepick-select').value;
+    if (!id) return null;
+    var found = null;
+    state.templates.forEach(function (t) { if (t.id === id) found = t; });
+    return found;
+  }
+
+  // What the template is about to make the sign say, spelled out before it
+  // says it. Only the tiers this night actually sells: a template naming a
+  // spot that is not on tonight would otherwise read as a promise to add it.
+  function pricePickSummary(tpl) {
+    var have = {};
+    state.tiers.forEach(function (t) { have[t.code] = t; });
+
+    var parts = [];
+    inGateOrder((tpl.tiers || []).slice()).forEach(function (item) {
+      var mine = have[String(item.code || '').toLowerCase()];
+      if (mine) parts.push(shortName(mine) + ' ' + money(item.price_cents));
+    });
+    return parts;
+  }
+
+  function paintPricePick() {
+    var note = el('ad-pricepick-note');
+    var go = el('ad-pricepick-apply');
+    var tpl = pickedTemplate();
+
+    if (!tpl) {
+      go.disabled = true;
+      hide(note);
+      return;
+    }
+
+    var parts = pricePickSummary(tpl);
+    go.disabled = !parts.length;
+    text(note, parts.length
+      ? parts.join(' · ')
+      : tpl.name + ' prices nothing this night sells.');
+    show(note);
+  }
+
+  function applyPricePick() {
+    var tpl = pickedTemplate();
+    if (!tpl) return;
+
+    var parts = pricePickSummary(tpl);
+    if (!parts.length) return;
+
+    // Every price on the night at once, on a phone, outdoors. Read the
+    // numbers back before moving any of them.
+    if (!window.confirm('Set the sign to ' + tpl.name + '?\n\n' + parts.join('\n'))) {
+      return;
+    }
+
+    var go = el('ad-pricepick-apply');
+    go.disabled = true;
+
+    call('apply_price_template', {
+      event_id: state.eventId,
+      template_id: tpl.id,
+    })
+      .then(function () {
+        toast(tpl.name + ' — ' + parts.join(', '), 'good');
+        el('ad-pricepick-select').value = '';
+        return loadList(true);
+      })
+      .catch(function (err) { toast(err.message, 'bad'); })
+      .finally(function () { paintPricePick(); });
+  }
+
   function setPrice(tier, cents) {
     call('set_price', {
       event_id: state.eventId,
@@ -762,6 +879,12 @@
   // the parts the form does not show — arrival windows, which zones can
   // fulfil it — so that editing a template's price does not quietly drop
   // the rest of what that template knew.
+  //
+  // An arrival window nobody set stays null rather than picking a number
+  // here. normalise_event_tiers fills it from the tier code — valet and
+  // priority up to kickoff, standard half an hour before — and the code is
+  // still being typed when this runs, so the database is the only place
+  // that can answer. Sending null asks it to.
   function tierDraft(t) {
     t = t || {};
     return {
@@ -771,8 +894,8 @@
       zone_codes: t.zone_codes || null,
       bay_kind: t.bay_kind || 'any',
       guarantees_clear_exit: !!t.guarantees_clear_exit,
-      arrival_from_minutes: t.arrival_from_minutes != null ? t.arrival_from_minutes : -150,
-      arrival_until_minutes: t.arrival_until_minutes != null ? t.arrival_until_minutes : -10,
+      arrival_from_minutes: t.arrival_from_minutes != null ? t.arrival_from_minutes : null,
+      arrival_until_minutes: t.arrival_until_minutes != null ? t.arrival_until_minutes : null,
       departure_by_minutes: t.departure_by_minutes != null ? t.departure_by_minutes : null,
     };
   }
@@ -1408,6 +1531,9 @@
     // Cash and card are different numbers. Switching the method has to move
     // the figure being read out, not just what gets recorded.
     el('ad-sell-payment').addEventListener('change', renderSellCharge);
+
+    el('ad-pricepick-select').addEventListener('change', paintPricePick);
+    el('ad-pricepick-apply').addEventListener('click', applyPricePick);
 
     el('ad-price-close').addEventListener('click', function () { hide(el('ad-price')); });
     el('ad-price-form').addEventListener('submit', submitPrice);

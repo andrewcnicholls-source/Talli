@@ -199,6 +199,10 @@ on conflict (event_id, property_id) do nothing;
 -- Rebuilt from scratch each run. Safe only because step 1 has already
 -- removed every booking: a live booking resolves the name of what it
 -- bought by looking its tier_code up in offer_tier.
+--
+-- The arrival windows match 20260902100000: valet and priority take a car
+-- right up to kickoff, standard closes half an hour before it, because
+-- standard is the one that gets double-parked into a stack.
 delete from offer_tier;
 
 with ladder(demand_tier, standard, priority, valet) as (values
@@ -220,11 +224,11 @@ select eo.id, v.code, v.label, v.price_cents, v.zone_codes, v.bay_kind,
   join ladder l on l.demand_tier = e.demand_tier
  cross join lateral (values
    ('valet',    'Valet — hand us your keys and we''ll park it for you',
-      l.valet,    array['valet'],             'any',      interval '-5 minutes',  1),
+      l.valet,    array['valet'],             'any',      interval '0 minutes',   1),
    ('priority', 'Priority exit — near the road, nobody parked in behind you',
-      l.priority, array['front_lawn','berm'], 'free_exit', interval '-10 minutes', 2),
+      l.priority, array['front_lawn','berm'], 'free_exit', interval '0 minutes',  2),
    ('standard', 'Standard — best value, expect to wait for the drive to clear',
-      l.standard, array['back_yard'],         'any',      interval '-10 minutes', 4)
+      l.standard, array['back_yard'],         'any',      interval '-30 minutes', 4)
  ) as v(code, label, price_cents, zone_codes, bay_kind, until_offset, sort_order);
 
 commit;
