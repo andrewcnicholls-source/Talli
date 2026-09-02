@@ -80,11 +80,21 @@ mainline branch. Inventoried against both databases on 26 Aug:
 | View | `v_overflow_site_status` | absent |
 | `v_gate_list` columns | `customer_email`, `in_consent_zone`, `refundable_by_card`, `transfer_site_id`, `transfer_site_name`, `transferred_at`, `transfer_refund_cents` | absent |
 
-None of it is in a migration file. None of it has a caller: `admin.js`
-calls eight gate-ops actions (`list`, `events`, `check_in`, `hand_over`,
-`sell`, `move_to_overflow`, `set_price`, `set_sold_out`, `adjust_capacity`)
-and `gate-ops` implements exactly those. Nothing anywhere reads one of the
-seven extra `v_gate_list` columns or calls one of the six functions.
+None of it is in a migration file. None of it had a caller when this was
+written: `admin.js` called eight gate-ops actions (`list`, `events`,
+`check_in`, `hand_over`, `sell`, `move_to_overflow`, `set_price`,
+`set_sold_out`, `adjust_capacity`) and `gate-ops` implemented exactly
+those. Nothing read one of the seven extra `v_gate_list` columns or
+called one of the six functions.
+
+**One of the six is no longer orphaned.** `set_event_status(uuid, text)`
+is now written down in `20260831120000_talli_event_templates_and_creation.sql`
+and called by the gate screen's Tonight tab, at the same signature the
+orphan already had — so on test that migration replaced an object that
+was there, and on production it creates one. It only ever writes
+`event.status`, which is why it was safe to adopt rather than leave
+sitting there. Everything else in the table above is still orphaned and
+still should not be promoted.
 
 What it *is*, read off the signatures: sending a car to a different site
 with recorded consent and a partial refund, admin cancellation with a

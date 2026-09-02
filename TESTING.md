@@ -279,7 +279,23 @@ Three of the six functions deployed to a byte-identical bundle hash.
 
 ## Adding a real fixture to the test site
 
-Nothing stops you. Use the `TEST — ` prefix so it stays obvious:
+**Do it on the gate screen.** `/admin.html` has a **+** beside the event
+picker: pick a template, edit the name, the date and the prices, and
+tap *Save event*. It writes the event, its offer against the property
+and its tiers in one transaction, so a half-made event with nothing on
+sale cannot happen. *Save as template* keeps the shape — the tier menu
+and the timings, never the date — for next time.
+
+Use the `TEST — ` prefix in the name so it stays obvious which site you
+are on.
+
+New events land as **draft**, which means hidden. The Tonight tab now
+carries the status and the buttons that move it: draft, announced, on
+sale, closed, cancelled.
+
+### By hand, if you would rather
+
+Nothing stops you doing it in SQL either:
 
 ```sql
 insert into event (name, starts_at, demand_tier, status)
@@ -315,7 +331,8 @@ where oe.name = 'TEST — Tomorrow Night (on sale)' and t.active;
 ```
 
 Anything else you add is a fourth option on the gate screen, which is
-the thing the three-tier change was for.
+the thing the three-tier change was for. The modal enforces the same
+thing loosely — it will let you add a fourth, and you will see it.
 
 ---
 
