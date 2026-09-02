@@ -762,6 +762,12 @@
   // the parts the form does not show — arrival windows, which zones can
   // fulfil it — so that editing a template's price does not quietly drop
   // the rest of what that template knew.
+  //
+  // An arrival window nobody set stays null rather than picking a number
+  // here. normalise_event_tiers fills it from the tier code — valet and
+  // priority up to kickoff, standard half an hour before — and the code is
+  // still being typed when this runs, so the database is the only place
+  // that can answer. Sending null asks it to.
   function tierDraft(t) {
     t = t || {};
     return {
@@ -771,8 +777,8 @@
       zone_codes: t.zone_codes || null,
       bay_kind: t.bay_kind || 'any',
       guarantees_clear_exit: !!t.guarantees_clear_exit,
-      arrival_from_minutes: t.arrival_from_minutes != null ? t.arrival_from_minutes : -150,
-      arrival_until_minutes: t.arrival_until_minutes != null ? t.arrival_until_minutes : -10,
+      arrival_from_minutes: t.arrival_from_minutes != null ? t.arrival_from_minutes : null,
+      arrival_until_minutes: t.arrival_until_minutes != null ? t.arrival_until_minutes : null,
       departure_by_minutes: t.departure_by_minutes != null ? t.departure_by_minutes : null,
     };
   }
