@@ -263,6 +263,41 @@ migration ledger under-reports what has actually been applied there,
 and test carries schema production has never seen. Check the object
 itself before concluding a migration is missing.
 
+### What may never be deleted, on either project
+
+Test data is disposable and wiping it needs nobody's permission. The one
+rule that is not about the environment:
+
+> **An event is taken off sale. It is not deleted.**
+>
+> An `event` with paid bookings, unpaid holds, or registered interest
+> cannot be deleted at all — the database refuses it with
+> `EVENT_NOT_EMPTY` and names the counts. Set its status instead:
+> `cancelled` for a game that is off, `closed` for one that is over.
+> Both are reversible in a tap from the gate screen's Tonight tab; a
+> delete is reversible from nothing.
+>
+> An event nobody has touched still deletes cleanly, on either project.
+
+The reason it is a data rule rather than a production rule is that the
+guard then behaves identically in both places, so nothing about it is a
+surprise the first time it matters. The test reset still works because it
+clears bookings and interest before it clears events.
+
+Three files hold that line, and `scripts/check.sh` asserts all three are
+still there, because each is one careless edit from being gone:
+
+| Where | What it does |
+| --- | --- |
+| `supabase/migrations/20260902090000_…_event_deletion_guard.sql` | refuses the `DELETE` in the database, and pins `event_interest` to `ON DELETE RESTRICT` so the mailing list cannot be cascaded away |
+| `.claude/hooks/supabase-permissions.py` | makes an agent stop and ask before attempting one of these deletes on production, `WHERE` clause or not |
+| `supabase/test-only/reset-test-data.sql` | clears dependents before events, which is what keeps the same rule safe to apply on test |
+
+Registered interest is the half that was actually broken. It was
+`ON DELETE CASCADE` until 2 Sep 2026, so deleting a fixture silently
+deleted the list of people who had asked to be told when it went on sale
+— no error, no trace, nothing to restore from.
+
 ## 9. How are the payment credentials separated?
 
 Stripe keys are **not in this repository and not on Cloudflare.** The

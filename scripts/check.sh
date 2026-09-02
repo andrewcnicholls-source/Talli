@@ -225,6 +225,88 @@ else
 fi
 
 # ---------------------------------------------------------------------
+head "An event with people attached cannot be deleted"
+# ---------------------------------------------------------------------
+# Taking a fixture off sale and deleting it are different acts and only
+# one is reversible. Three things hold that line, in three different
+# files, and each is one careless edit from being gone:
+#
+#   the migration   refuses the DELETE in the database
+#   the hook        makes an agent ask before trying it on production
+#   the reset order keeps the rule safe to apply on test as well
+#
+# None of this can be proven from the repository alone — the database is
+# the authority. What can be proven is that the three pieces are still
+# written down, which is what stops a rewrite dropping one silently.
+GUARD="supabase/migrations/20260902090000_talli_event_deletion_guard.sql"
+if [ ! -f "$GUARD" ]; then
+  fail "the event deletion guard migration is missing: $GUARD"
+else
+  if grep -q "create trigger event_deletion_guard" "$GUARD" \
+     && grep -q "before delete on event" "$GUARD"; then
+    pass "the guard trigger is still defined on event"
+  else
+    fail "$GUARD no longer creates a BEFORE DELETE trigger on event"
+  fi
+
+  if grep -q "event_interest_event_id_fkey" "$GUARD" \
+     && grep -q "on delete restrict" "$GUARD"; then
+    pass "registered interest still restricts, rather than cascading away"
+  else
+    fail "$GUARD no longer pins event_interest to ON DELETE RESTRICT"
+  fi
+fi
+
+# A later migration that sets the interest rows back to CASCADE would undo
+# the guard while every check above still passed, so look at all of them.
+recascade=$(grep -lE "event_interest.*on delete cascade" supabase/migrations/*.sql 2>/dev/null \
+  | grep -v '20260819122426' || true)
+if [ -z "$recascade" ]; then
+  pass "no later migration re-cascades event_interest"
+else
+  fail "a migration puts event_interest back on ON DELETE CASCADE"
+  printf '      %s\n' "$recascade"
+fi
+
+HOOK=".claude/hooks/supabase-permissions.py"
+if [ ! -f "$HOOK" ]; then
+  skip "no Supabase permission hook in this checkout"
+elif grep -q "PROTECTED_TABLES" "$HOOK" \
+     && grep -q "DELETE" "$HOOK"; then
+  missing=""
+  for t in event event_interest booking; do
+    grep -qE "\"$t\"" "$HOOK" || missing="$missing $t"
+  done
+  if [ -z "$missing" ]; then
+    pass "the permission hook still asks before deleting bookings or interest on production"
+  else
+    fail "the permission hook no longer protects:$missing"
+  fi
+else
+  fail "$HOOK has lost its protected-table DELETE rule"
+fi
+
+# The rule is data-shaped, not environment-shaped, which is the only
+# reason it can be identical on both projects. That holds ONLY while the
+# reset clears dependents before it clears events — otherwise wiping the
+# test database starts failing on its own guard.
+RESET="supabase/test-only/reset-test-data.sql"
+if [ ! -f "$RESET" ]; then
+  skip "no test reset script in this checkout"
+else
+  b=$(grep -nm1 "^delete from booking;" "$RESET" | cut -d: -f1)
+  i=$(grep -nm1 "^delete from event_interest;" "$RESET" | cut -d: -f1)
+  e=$(grep -nm1 "^delete from event " "$RESET" | cut -d: -f1)
+  if [ -n "$b" ] && [ -n "$i" ] && [ -n "$e" ] \
+     && [ "$b" -lt "$e" ] && [ "$i" -lt "$e" ]; then
+    pass "the test reset clears bookings and interest before events"
+  else
+    fail "the test reset would hit the deletion guard — clear bookings and interest before events"
+    printf '      booking:%s interest:%s event:%s\n' "${b:-none}" "${i:-none}" "${e:-none}"
+  fi
+fi
+
+# ---------------------------------------------------------------------
 head "Edge function TypeScript"
 # ---------------------------------------------------------------------
 # The functions import Stripe from esm.sh and supabase-js from jsr.io, so
