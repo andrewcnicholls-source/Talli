@@ -121,6 +121,21 @@
     </p>
     <div class="ad-prices" id="ad-prices"></div>
 
+    <!-- One decision for the night — what the roads are doing — instead of
+         three taps on three cards. Deliberately its own block below the
+         cards: it moves all of them at once. -->
+    <div class="ad-pricepick" id="ad-pricepick" hidden>
+      <label class="ad-label" for="ad-pricepick-select">Set them all from a template</label>
+      <div class="ad-pricepick-row">
+        <select class="ad-input ad-select" id="ad-pricepick-select">
+          <option value="">Pick a template…</option>
+        </select>
+        <button type="button" class="ad-pricepick-go"
+                id="ad-pricepick-apply" disabled>Apply</button>
+      </div>
+      <p class="ad-pricepick-note" id="ad-pricepick-note" hidden></p>
+    </div>
+
     <!-- ---------------------------------------------------------- extras -->
     <h2 class="ad-section">Extras to hand over</h2>
     <div class="ad-extras" id="ad-extras"></div>

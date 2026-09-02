@@ -503,6 +503,23 @@ Deno.serve(async (req) => {
         return json({ ok: true, price_cents: data })
       }
 
+      // The whole sign at once. What actually moves a Talli price is what
+      // the council has done to the roads, and that is one decision for the
+      // night, not three — so the templates are named for the road state and
+      // this sets every tier from the one that was picked.
+      case 'apply_price_template': {
+        if (!eventId) return json({ error: 'event_id is required' }, 400)
+        const { data, error } = await db.rpc('apply_price_template', {
+          p_event_id: eventId,
+          p_template_id: String(body.template_id ?? ''),
+          // Every property selling this night. The gate screen never
+          // mentions properties, so it must not have to name one here.
+          p_property_id: body.property_id ? String(body.property_id) : null,
+        })
+        if (error) return json(named(error), 409)
+        return json({ ok: true, applied: data })
+      }
+
       // "Standard's gone" — called by eye, ahead of the bay maths, and
       // reversible in one tap when a space comes back.
       case 'set_sold_out': {

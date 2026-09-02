@@ -1594,6 +1594,34 @@ footer a { color: var(--blue); }
   color: var(--white);
 }
 
+/* Below the cards, not among them: this one control moves every price on
+   the night, and it should not look like a fourth tier. */
+.ad-pricepick { padding: 4px 16px 0; }
+.ad-pricepick .ad-label { margin-top: 4px; }
+.ad-pricepick-row { display: flex; gap: 8px; align-items: stretch; }
+.ad-pricepick-row .ad-select { flex: 1; min-width: 0; }
+/* The gate screen's own button, not the website's full-width one: it sits
+   beside the select, so it may only take the width of its label. */
+.ad-pricepick-go {
+  flex: none;
+  font-family: var(--body);
+  font-size: 0.86rem;
+  color: var(--blue);
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0 20px;
+  cursor: pointer;
+}
+.ad-pricepick-go:hover:not(:disabled) { border-color: var(--blue); }
+.ad-pricepick-go:disabled { color: var(--grey); cursor: not-allowed; }
+.ad-pricepick-note {
+  font-size: 0.8rem;
+  font-weight: 300;
+  color: var(--grey);
+  margin: 7px 0 0;
+}
+
 .ad-price-entry {
   display: flex;
   align-items: center;
