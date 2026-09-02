@@ -238,17 +238,23 @@ run.
 
 | Fixture | Demand | Status |
 | --- | --- | --- |
-| `TEST — Father's Day Experience` — Sun 6 Sep 2026 | low | announced |
 | `TEST — Auckland v Counties Manukau (NPC)` — Sat 12 Sep 2026, 2.05pm | standard | on sale |
 | `TEST — Auckland v Manawatu (NPC)` — Fri 25 Sep 2026, 7.05pm | standard | on sale |
 | `TEST — All Blacks v Australia (Bledisloe Cup)` — Sat 10 Oct 2026, 7.10pm | premium | on sale |
 | `TEST — BLACKCAPS v India (T20)` — Fri 30 Oct 2026, 8.00pm | high | on sale |
 | `TEST — BLACKCAPS v India (ODI)` — Wed 4 Nov 2026, 3.00pm | high | on sale |
-| `TEST — Art in the Park` — Thu 12 to Sun 15 Nov 2026, four sessions | low | announced |
 | `TEST — Robbie Williams (BRITPOP World Tour)` — Tue 24 Nov 2026 | premium | on sale |
 | `TEST — Guns N' Roses (with Airbourne)` — Thu 17 Dec 2026 | premium | on sale |
 | `TEST — Bruno Mars (The Romantic Tour)` — Sat 13 and Sun 14 Mar 2027 | premium | announced |
+| `TEST — One NZ Warriors (Anzac Round)` — Sun 25 Apr 2027 | premium | announced |
+| `TEST — One NZ Warriors (Origin week)` — Sun 13 Jun 2027 | premium | announced |
 | `TEST — State of Origin Game 2` — Wed 16 Jun 2027 | premium | announced |
+
+A crowd, not a booking in the venue's diary. Under a couple of thousand
+people nobody walks to Paice Ave, so it is not a night the driveway sells and
+it does not belong in the picker. The NPC games are the floor — already
+marginal, listed because they are the smallest thing still worth a look.
+Eden Park's smaller diary entries are deliberately absent.
 
 The `TEST — ` prefix stays. It is the one thing that tells you at a glance,
 on a phone, that you are not on talli.co.nz — and it matters more now that

@@ -6,8 +6,8 @@
 --
 --  Re-runnable. Every run:
 --    * throws away all test bookings and interest registrations
---    * makes the event list exactly the known Eden Park schedule below
---      and nothing else — anything not on the list is deleted
+--    * makes the event list exactly the schedule below and nothing else
+--      — anything not on the list is deleted
 --    * re-derives gates, end time and the online cutoff from each
 --      fixture's start
 --    * rebuilds the three-tier price ladder for every fixture
@@ -23,6 +23,15 @@
 --  kept the dates fresh but meant device testing never looked like the
 --  real thing. This lists what Eden Park has actually announced, so the
 --  picker on a phone shows the season you would really be selling.
+--
+--  WHAT COUNTS AS AN EVENT HERE
+--  A crowd, not a booking in the venue's diary. Under a couple of
+--  thousand people nobody walks to Paice Ave, so it is not a night the
+--  driveway sells and it does not belong in the picker. The NPC games
+--  are the floor — already marginal, listed because they are the
+--  smallest thing still worth a look. Eden Park's smaller diary
+--  entries — the Father's Day experience, Art in the Park, function
+--  and tour bookings — are deliberately absent.
 --
 --  The `TEST — ` prefix stays on every name. It is the one thing that
 --  tells you at a glance, on a phone, that you are not on talli.co.nz.
@@ -47,11 +56,11 @@ delete from booking;
 delete from event_interest;
 delete from processed_webhook_event;
 
--- ---- 2. The known Eden Park schedule.
+-- ---- 2. The schedule.
 --
 -- status:      on_sale   — sells online now
 --              announced — listed, no prices, register-interest capture
--- demand_tier: drives the price ladder in step 6.
+-- demand_tier: drives the price ladder in step 7.
 -- runs_for:    how long the crowd is inside; sets expected_end_at.
 create temporary table known_event (
   id          uuid primary key,
@@ -64,73 +73,48 @@ create temporary table known_event (
 
 -- Local wall-clock times, converted by Postgres. Auckland goes to NZDT on
 -- 27 September 2026 and back to NZST on 4 April 2027, so writing the
--- offsets by hand would get two of these rows wrong.
+-- offsets by hand would get half of these rows wrong.
 insert into known_event (id, name, starts_at, demand_tier, status, runs_for) values
-  -- Sun 6 Sep 2026 — stadium experience, not a crowd event. Time TBC.
-  ('ede22026-0000-4000-8000-000000000001',
-   'TEST — Father''s Day Experience',
-   timestamp '2026-09-06 10:00' at time zone 'Pacific/Auckland',
-   'low', 'announced', interval '4 hours'),
-
   -- Sat 12 Sep 2026 — NPC, 2.05pm (FPC curtain-raiser 11.35am).
-  ('ede22026-0000-4000-8000-000000000002',
+  ('ede22026-0000-4000-8000-000000000001',
    'TEST — Auckland v Counties Manukau (NPC)',
    timestamp '2026-09-12 14:05' at time zone 'Pacific/Auckland',
    'standard', 'on_sale', interval '2 hours 30 minutes'),
 
   -- Fri 25 Sep 2026 — NPC. Kick-off TBC; 7.05pm is the Friday norm.
-  ('ede22026-0000-4000-8000-000000000003',
+  ('ede22026-0000-4000-8000-000000000002',
    'TEST — Auckland v Manawatu (NPC)',
    timestamp '2026-09-25 19:05' at time zone 'Pacific/Auckland',
    'standard', 'on_sale', interval '2 hours 30 minutes'),
 
   -- Sat 10 Oct 2026 — Bledisloe Cup test, 7.10pm. The biggest night here.
-  ('ede22026-0000-4000-8000-000000000004',
+  ('ede22026-0000-4000-8000-000000000003',
    'TEST — All Blacks v Australia (Bledisloe Cup)',
    timestamp '2026-10-10 19:10' at time zone 'Pacific/Auckland',
    'premium', 'on_sale', interval '2 hours 30 minutes'),
 
   -- Fri 30 Oct 2026 — T20, 8.00pm.
-  ('ede22026-0000-4000-8000-000000000005',
+  ('ede22026-0000-4000-8000-000000000004',
    'TEST — BLACKCAPS v India (T20)',
    timestamp '2026-10-30 20:00' at time zone 'Pacific/Auckland',
    'high', 'on_sale', interval '3 hours 30 minutes'),
 
-  -- Wed 4 Nov 2026 — ODI, 3.00pm. A day game: the yard turns over in
+  -- Wed 4 Nov 2026 — ODI, 3.00pm. A day game: the yard fills in
   -- daylight and empties after dark.
-  ('ede22026-0000-4000-8000-000000000006',
+  ('ede22026-0000-4000-8000-000000000005',
    'TEST — BLACKCAPS v India (ODI)',
    timestamp '2026-11-04 15:00' at time zone 'Pacific/Auckland',
    'high', 'on_sale', interval '8 hours'),
 
-  -- Thu 12 – Sun 15 Nov 2026 — Art in the Park, four sessions. An art
-  -- fair, not a full house: people trickle in and out all day.
-  ('ede22026-0000-4000-8000-000000000007',
-   'TEST — Art in the Park (Thursday)',
-   timestamp '2026-11-12 18:00' at time zone 'Pacific/Auckland',
-   'low', 'announced', interval '3 hours 30 minutes'),
-  ('ede22026-0000-4000-8000-000000000008',
-   'TEST — Art in the Park (Friday)',
-   timestamp '2026-11-13 10:00' at time zone 'Pacific/Auckland',
-   'low', 'announced', interval '9 hours 30 minutes'),
-  ('ede22026-0000-4000-8000-000000000009',
-   'TEST — Art in the Park (Saturday)',
-   timestamp '2026-11-14 09:30' at time zone 'Pacific/Auckland',
-   'low', 'announced', interval '9 hours'),
-  ('ede22026-0000-4000-8000-00000000000a',
-   'TEST — Art in the Park (Sunday)',
-   timestamp '2026-11-15 09:30' at time zone 'Pacific/Auckland',
-   'low', 'announced', interval '6 hours 30 minutes'),
-
   -- Tue 24 Nov 2026 — Robbie Williams, BRITPOP World Tour, with Drax
   -- Project. Doors 5.00pm; the headline set and gates are TBC.
-  ('ede22026-0000-4000-8000-00000000000b',
+  ('ede22026-0000-4000-8000-000000000006',
    'TEST — Robbie Williams (BRITPOP World Tour)',
    timestamp '2026-11-24 17:00' at time zone 'Pacific/Auckland',
    'premium', 'on_sale', interval '6 hours'),
 
   -- Thu 17 Dec 2026 — Guns N' Roses with Airbourne. Doors 5.00pm.
-  ('ede22026-0000-4000-8000-00000000000c',
+  ('ede22026-0000-4000-8000-000000000007',
    'TEST — Guns N'' Roses (with Airbourne)',
    timestamp '2026-12-17 17:00' at time zone 'Pacific/Auckland',
    'premium', 'on_sale', interval '6 hours'),
@@ -138,18 +122,33 @@ insert into known_event (id, name, starts_at, demand_tier, status, runs_for) val
   -- Sat 13 and Sun 14 Mar 2027 — Bruno Mars, The Romantic Tour. Two
   -- nights; the second was added on demand. Doors TBC, 5.00pm assumed.
   -- Far enough out that Talli has no prices for them yet.
-  ('ede22026-0000-4000-8000-00000000000d',
+  ('ede22026-0000-4000-8000-000000000008',
    'TEST — Bruno Mars (The Romantic Tour)',
    timestamp '2027-03-13 17:00' at time zone 'Pacific/Auckland',
    'premium', 'announced', interval '6 hours'),
-  ('ede22026-0000-4000-8000-00000000000e',
+  ('ede22026-0000-4000-8000-000000000009',
    'TEST — Bruno Mars (The Romantic Tour, second show)',
    timestamp '2027-03-14 17:00' at time zone 'Pacific/Auckland',
    'premium', 'announced', interval '6 hours'),
 
+  -- Sun 25 Apr 2027 — Anzac Round. The Warriors' first NRL match at
+  -- Eden Park in thirteen years. Opponent and kick-off wait on the 2027
+  -- NRL draw; 4.00pm is the Anzac Round norm in New Zealand.
+  ('ede22026-0000-4000-8000-00000000000a',
+   'TEST — One NZ Warriors (Anzac Round)',
+   timestamp '2027-04-25 16:00' at time zone 'Pacific/Auckland',
+   'premium', 'announced', interval '2 hours 30 minutes'),
+
+  -- Sun 13 Jun 2027 — the Warriors open Origin week, three days before
+  -- the Origin match itself. Opponent and kick-off TBC; afternoon.
+  ('ede22026-0000-4000-8000-00000000000b',
+   'TEST — One NZ Warriors (Origin week)',
+   timestamp '2027-06-13 16:00' at time zone 'Pacific/Auckland',
+   'premium', 'announced', interval '2 hours 30 minutes'),
+
   -- Wed 16 Jun 2027 — State of Origin Game 2, the first ever played in
-  -- New Zealand. Kick-off TBC; 8.00pm is the Origin norm in AEST terms.
-  ('ede22026-0000-4000-8000-00000000000f',
+  -- New Zealand. Kick-off TBC; 8.00pm is the Origin norm.
+  ('ede22026-0000-4000-8000-00000000000c',
    'TEST — State of Origin Game 2 (NSW Blues v QLD Maroons)',
    timestamp '2027-06-16 20:00' at time zone 'Pacific/Auckland',
    'premium', 'announced', interval '2 hours 30 minutes');
@@ -158,7 +157,7 @@ insert into known_event (id, name, starts_at, demand_tier, status, runs_for) val
 --
 -- This is the "only these" rule. event cascades to event_offer,
 -- offer_tier, event_interest, event_bay_status and event_overflow_limit,
--- so the old invented fixtures take their pricing with them.
+-- so a fixture that leaves the list takes its pricing with it.
 delete from event e
  where not exists (select 1 from known_event k where k.id = e.id);
 
