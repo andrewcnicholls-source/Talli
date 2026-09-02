@@ -430,11 +430,16 @@ happened while this document was being written.
 After this, PRs default to the integration branch and only a deliberate
 `staging → main` PR (or `/release-production`) reaches production.
 
-### 2. Protect `main`
+### 2. Protect `main` and `staging`
+
+Two rulesets, and `staging` matters as much as `main`. Staging is the
+device-test site and the only thing production is ever promoted from,
+so an unprotected `staging` means a red change can land in the very
+commit you are about to test and ship.
 
 **Settings → Rules → Rulesets → New branch ruleset**, targeting `main`:
 
-- ✅ Require status checks to pass → add **`check`**
+- ✅ Require status checks to pass → add **`check`** and **`typecheck`**
 - ✅ Block force pushes
 - ✅ Restrict deletions
 - ❌ Require a pull request — leave this **off**. `/release-production`
@@ -442,10 +447,28 @@ After this, PRs default to the integration branch and only a deliberate
   otherwise have to bypass the rule on every release, which is how
   protection ends up switched off altogether.
 
-Add **`typecheck`** to the required checks too, but only once you have
-seen it pass green on a PR — see `.github/workflows/ci.yml`.
+Then the same again targeting `staging`, with the force-push rule left
+off — a feature branch that needs re-basing is normal there.
 
-Worth protecting `staging` the same way, minus the force-push rule.
+Both required checks are jobs in `.github/workflows/ci.yml` and both
+are named by their job id, which is what GitHub matches on:
+
+| Required check | What it runs |
+| --- | --- |
+| `check` | `bash scripts/check.sh` — the same script you run locally |
+| `typecheck` | `deno check supabase/functions/*/index.ts` |
+
+`typecheck` ran `continue-on-error` from the day it was added until it
+had been green once, because gating on a check nobody had ever seen the
+output of would have blocked every PR on a guess. It went green on
+2 Sep 2026 and the flag came off, so it belongs in the required list
+now.
+
+A required check only satisfies a ruleset if it actually ran on the
+commit. The workflow triggers on **push** to `staging` and `main` as
+well as on pull requests, so any commit that reached staging already
+carries both runs — which is what lets `/release-production`
+fast-forward `main` to it without a PR.
 
 ### 3. Turn off GitHub Pages
 

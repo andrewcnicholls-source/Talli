@@ -173,6 +173,35 @@ git rev-parse "origin/$TALLI_PRODUCTION_BRANCH"                 # == P ?
 - **S == P** → production is already running this commit. Nothing to
   do. Say so and stop, cheerfully.
 
+### CI must have passed on S itself
+
+Branch protection on `main` will refuse a fast-forward to a commit whose
+required checks did not pass — but do not find that out by watching the
+push fail. Ask first, so the report says what is wrong rather than that
+something was rejected.
+
+Use the GitHub MCP server: `actions_list`, method `list_workflow_runs`,
+`resource_id: ci.yml`, filtered to `branch: staging`, `event: push`.
+Find the run whose `head_sha` is **S**.
+
+- **No run for S** — the commit never went through CI. That happens if
+  it was pushed while Actions was disabled, or it reached staging by a
+  route that does not trigger the workflow. STOP.
+- **`status` is not `completed`** — CI is still running on the commit
+  you are about to put in front of customers. Wait for it; do not
+  promote a commit whose checks are in flight.
+- **`conclusion` is not `success`** — STOP, and say which job failed.
+  Both `check` and `typecheck` are required, and a failing job now
+  fails the run: `typecheck` stopped being `continue-on-error` on
+  2 Sep 2026, so a green run before that date says nothing about the
+  edge function TypeScript.
+
+Running `bash scripts/check.sh` locally at the release commit — which
+§5 asks for, to verify the `IS_TEST` guards — is not a substitute. It
+skips the TypeScript check whenever `deno` is missing or the sandbox
+cannot reach esm.sh and jsr.io, which is most of the time in a Claude
+session. CI is where that check actually runs.
+
 Then try to reach the staging site:
 
 ```bash
