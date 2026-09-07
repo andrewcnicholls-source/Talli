@@ -1,7 +1,18 @@
-# Written at deploy time by scripts/build.sh, on non-production builds
-# only. Never committed: which one you get depends on the branch.
-/robots.txt
+# The TEST site's noindex header rules, written at deploy time by
+# scripts/build.sh on non-production builds only. Never committed —
+# it exists solely to keep staging out of Google.
 /_headers
+
+# robots.txt is NOT ignored, and the tracked copy is the production
+# one. scripts/build.sh overwrites it in the build workspace on every
+# non-production branch, so staging still gets "Disallow: /" while
+# talli.co.nz ships the file committed here.
+#
+# The hazard that used to justify ignoring it: run build.sh locally and
+# the working copy becomes the staging version, one `git add` away from
+# delisting the live site. scripts/check.sh now fails on exactly that,
+# which is a louder guard than an ignore rule — an ignored robots.txt
+# meant production simply had none.
 
 # Skill bundles built by scripts/package-skills.sh for upload to a
 # Claude account. Rebuildable; the SKILL.md files are the source.

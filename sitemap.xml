@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  talli.co.nz — the five public pages, and only those.
+
+  admin.html and booking-confirmed.html are deliberately absent: both
+  are noindex, one is the gate and the other is a per-booking receipt
+  that only means anything with a session_id on the end.
+
+  URLs are extensionless because that is what Cloudflare Pages serves —
+  /book.html redirects to /book — and each page's <link rel="canonical">
+  says the same thing. scripts/check.sh keeps the three in agreement, so
+  a new page that never made it into this file fails the build rather
+  than quietly going unindexed.
+
+  No <lastmod>, <changefreq> or <priority>. Google ignores the last two
+  outright and discounts lastmod unless it is reliably accurate; a
+  hand-edited date on a hand-edited file would not be.
+-->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://talli.co.nz/</loc></url>
+  <url><loc>https://talli.co.nz/getting-here</loc></url>
+  <url><loc>https://talli.co.nz/book</loc></url>
+  <url><loc>https://talli.co.nz/eden-park</loc></url>
+  <url><loc>https://talli.co.nz/terms</loc></url>
+</urlset>

@@ -61,6 +61,37 @@ This is also why promoting a commit is safe: the identical bytes are
 test on one hostname and production on another. Nothing is rebuilt
 differently for production.
 
+### What search engines are told
+
+The one exception to "nothing is substituted at deploy time", and it is
+deliberately small. `scripts/build.sh` runs on every Cloudflare Pages
+build and writes nothing at all on `main`; on any other branch it
+overwrites `robots.txt` with `Disallow: /` and adds `_headers` with
+`X-Robots-Tag: noindex`. Staging therefore cannot be indexed, and so
+cannot compete with the live site for the same searches.
+
+Production ships three things instead, all committed:
+
+| File | Says |
+| --- | --- |
+| `robots.txt` | crawl everything; the sitemap is over here |
+| `sitemap.xml` | the five public pages, as extensionless URLs |
+| `<link rel="canonical">` | this page's one true address on `talli.co.nz` |
+
+`robots.txt` is **tracked**, unlike `_headers`. Running `build.sh`
+locally therefore leaves the staging version sitting in your working
+copy, and committing that would delist talli.co.nz — so
+`scripts/check.sh` fails if the committed `robots.txt` blocks the site.
+It also fails if a page is missing from `sitemap.xml`, if a `noindex`
+page is listed in it, or if a canonical disagrees with the sitemap.
+Adding a page means adding it to `sitemap.xml` in the same commit.
+
+`admin.html` and `booking-confirmed.html` stay out of the sitemap and
+carry `<meta name="robots" content="noindex">`. Neither is disallowed
+in `robots.txt` — a blocked page cannot be crawled, so Google would
+never read the `noindex`, and listing the gate's path in a public file
+would only advertise it.
+
 ---
 
 ## 1. How does code get from a Claude worktree to git?
