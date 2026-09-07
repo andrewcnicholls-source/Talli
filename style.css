@@ -657,6 +657,31 @@ footer a { color: var(--blue); }
 .bk-field-row { display: grid; gap: 0 18px; }
 @media (min-width: 560px) { .bk-field-row { grid-template-columns: 1fr 1fr; } }
 
+/* A checkbox inside the form. The label wraps the input so the whole line is
+   the tap target — this gets answered one-handed, on a phone. The wrapper is
+   deliberately NOT .bk-field: that rule makes every label inside it uppercase
+   and block, and this is a sentence someone reads, not a field name to scan. */
+.bk-check-field { margin-bottom: 18px; }
+.bk-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-weight: 300;
+  line-height: 1.45;
+  color: var(--ink);
+  padding: 4px 0;
+}
+.bk-check input {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  accent-color: var(--blue);
+}
+.bk-check input:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.bk-check-field .bk-hint { margin-top: 4px; padding-left: 31px; }
 
 .bk-error {
   background: #FFF4F0;
@@ -995,6 +1020,10 @@ footer a { color: var(--blue); }
 }
 .ad-chip.is-warn { color: var(--orange-flag); background: #FFF4F0; border-color: #F3D9CF; }
 .ad-chip.is-cash { color: #8A5A12; background: #FBF3E4; border-color: #EBDCBE; }
+/* Blue, not orange: a lowered car is something to know, not something that
+   has gone wrong. It still has to be picked out of a list at night, so it
+   carries a fill rather than sitting in the plain-chip grey. */
+.ad-chip.is-low { color: var(--blue-deep); background: var(--blue-tint); border-color: #CBD8E8; }
 
 .ad-row-actions {
   flex: none;

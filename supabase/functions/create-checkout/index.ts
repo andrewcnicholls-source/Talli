@@ -189,6 +189,10 @@ Deno.serve(async (req) => {
     p_channel: 'online',
     p_accepts_street: false,
     p_payment_method: 'stripe',
+    // Advisory only — it changes no price and narrows no allocation. Coerced
+    // rather than passed through, so a stray string in the body cannot end up
+    // deciding what a boolean column says.
+    p_low_clearance: body.vehicle_low_clearance === true,
   })
 
   if (holdErr) {

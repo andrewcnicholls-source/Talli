@@ -60,7 +60,8 @@ Deno.serve(async (req) => {
   const { data: bookingRow, error } = await db
     .from('booking')
     .select(
-      'id, status, tier_code, customer_name, vehicle_rego, amount_cents, addons_cents, ' +
+      'id, status, tier_code, customer_name, vehicle_rego, vehicle_low_clearance, ' +
+      'amount_cents, addons_cents, ' +
       'surcharge_cents, currency, arrival_from, arrival_until, must_depart_by, ' +
       'event_id, property_id',
     )
@@ -91,6 +92,9 @@ Deno.serve(async (req) => {
     tier_label: tier?.label ?? booking.tier_code,
     customer_name: booking.customer_name,
     vehicle_rego: booking.vehicle_rego,
+    // Echoed back so the customer can see the note landed, and knows to say
+    // nothing further on the night.
+    vehicle_low_clearance: booking.vehicle_low_clearance === true,
     amount_cents: booking.amount_cents,
     addons_cents: booking.addons_cents ?? 0,
     // Itemised on the confirmation page for the same reason it is itemised at
