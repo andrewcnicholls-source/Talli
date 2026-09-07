@@ -95,11 +95,12 @@ async function nightState(eventId: string) {
     // The gate screen has to be able to say "charge them $46" before the sale
     // exists, so it needs the rate, not just the figure on a finished booking.
     db.from('payment_setting').select('card_surcharge_bps').maybeSingle(),
-    // Straight from booking rather than through v_gate_list. Adding a column
-    // to that view means restating all of it, and a restatement written
-    // against one branch drops whatever another branch added. This join costs
-    // one small query and cannot go stale.
-    db.from('booking').select('id, surcharge_cents').eq('event_id', eventId),
+    // The per-booking fields v_gate_list does not carry, taken straight from
+    // booking. Adding a column to that view means restating all of it, and a
+    // restatement written against one branch drops whatever another branch
+    // added. This join costs one small query and cannot go stale.
+    db.from('booking').select('id, surcharge_cents, vehicle_low_clearance')
+      .eq('event_id', eventId),
   ])
   if (listRes.error) throw listRes.error
   if (capRes.error) throw capRes.error
@@ -107,14 +108,20 @@ async function nightState(eventId: string) {
   if (chargeRes.error) throw chargeRes.error
 
   const surcharges = new Map<string, number>()
+  const lowCars = new Set<string>()
   for (const b of (chargeRes.data ?? []) as Row[]) {
     surcharges.set(String(b.id), b.surcharge_cents ?? 0)
+    if (b.vehicle_low_clearance) lowCars.add(String(b.id))
   }
 
   // Not yet arrived first — that is the working list. Within each group,
   // earliest arrival window first.
   const rows = ((listRes.data ?? []) as Row[])
-    .map((r: Row): Row => ({ ...r, surcharge_cents: surcharges.get(r.booking_id) ?? 0 }))
+    .map((r: Row): Row => ({
+      ...r,
+      surcharge_cents: surcharges.get(r.booking_id) ?? 0,
+      vehicle_low_clearance: lowCars.has(String(r.booking_id)),
+    }))
     .sort((a, b) => {
       if (a.arrived !== b.arrived) return a.arrived ? 1 : -1
       return String(a.arrival_from ?? '').localeCompare(String(b.arrival_from ?? ''))
@@ -430,6 +437,9 @@ Deno.serve(async (req) => {
           // the berm zones at all, and standing in the driveway telling
           // someone where to put their car IS the consent conversation.
           p_accepts_street: true,
+          // Ticked on the walk-up form when the car in front of you is
+          // obviously sitting low. Recorded so it survives the night.
+          p_low_clearance: body.vehicle_low_clearance === true,
         })
         if (error) return json(named(error), 409)
 
