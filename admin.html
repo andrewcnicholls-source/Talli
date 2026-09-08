@@ -13,19 +13,40 @@
      before anything paints, so the test styling is never a flash. -->
 <script src="assets/talli-config.js"></script>
 <script src="assets/talli-testgate.js"></script>
+<!-- Reads the tokens out of the URL fragment before anything paints, so a
+     screenshot of this screen never carries a live one. -->
+<script src="assets/talli-auth.js"></script>
 </head>
 <body class="ad-body">
 
-<!-- --------------------------------------------------------- passphrase -->
+<!-- ----------------------------------------------------------- sign in -->
+<!-- Starts on "checking", not on the button: most opens of this page are
+     by someone already signed in, and a sign-in card that flashes past
+     reads as having been signed out. -->
 <div class="ad-lock" id="ad-lock">
-  <form id="ad-unlock-form" class="ad-lock-card">
+  <div class="ad-lock-card">
     <h1>Talli Gate</h1>
-    <p>Enter the gate passphrase.</p>
-    <input type="password" id="ad-pass" autocomplete="current-password" placeholder="Passphrase"
-           autocapitalize="none" autocorrect="off" spellcheck="false" required>
-    <p class="ad-lock-error" id="ad-unlock-error" role="alert" hidden></p>
-    <button type="submit" class="btn btn-primary">Unlock</button>
-  </form>
+
+    <p class="ad-lock-wait" id="ad-lock-wait">Checking your session&hellip;</p>
+
+    <div id="ad-lock-signin" hidden>
+      <p>Sign in with the Google account registered as a Talli host.</p>
+      <p class="ad-lock-error" id="ad-lock-error" role="alert" hidden></p>
+      <button type="button" class="btn btn-google" id="ad-signin">
+        <svg class="ad-google-mark" viewBox="0 0 18 18" aria-hidden="true" focusable="false">
+          <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62z"/>
+          <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.33A9 9 0 0 0 9 18z"/>
+          <path fill="#FBBC05" d="M3.97 10.72a5.4 5.4 0 0 1 0-3.44V4.95H.96a9 9 0 0 0 0 8.1l3.01-2.33z"/>
+          <path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0A9 9 0 0 0 .96 4.95l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58z"/>
+        </svg>
+        Continue with Google
+      </button>
+      <!-- Only shown after Google said yes and Talli said no. -->
+      <p class="ad-lock-foot" id="ad-lock-swap" hidden>
+        <button type="button" class="ad-link">Sign in with a different Google account</button>
+      </p>
+    </div>
+  </div>
 </div>
 
 <!-- ---------------------------------------------------------- the screen -->
@@ -148,6 +169,8 @@
   <p class="ad-foot">
     Refreshes on its own every 30 seconds.<br>
     <button type="button" class="ad-link" id="ad-check-open">Check payment setup</button>
+    <span class="ad-foot-who" id="ad-who"></span>
+    <button type="button" class="ad-link" id="ad-signout">Sign out</button>
   </p>
 </div>
 

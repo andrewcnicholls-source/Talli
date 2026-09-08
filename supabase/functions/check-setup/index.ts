@@ -10,11 +10,19 @@
 //  test-mode webhook secret is the failure that looks like success:
 //  customers are charged and bookings never confirm.
 //
-//  Never returns a secret value. Presence, mode and validity only.
-//  Passphrase-protected because it describes your payment configuration.
+//  Never returns a secret value. Presence, mode and validity only. Even so
+//  it describes your payment configuration, so it is behind the same door
+//  as the gate screen: a signed-in host, checked the same way.
 // =====================================================================
 
 import Stripe from 'https://esm.sh/stripe@18?target=denonext'
+import { createClient } from 'jsr:@supabase/supabase-js@2'
+
+const db = createClient(
+  Deno.env.get('SUPABASE_URL')!,
+  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+  { auth: { persistSession: false } },
+)
 
 const ALLOWED_ORIGIN = Deno.env.get('ALLOWED_ORIGIN') ?? '*'
 
@@ -43,13 +51,45 @@ const json = (body: unknown, status = 200) =>
     headers: { ...cors, 'Content-Type': 'application/json' },
   })
 
-function sameSecret(a: string, b: string): boolean {
-  const ea = new TextEncoder().encode(a)
-  const eb = new TextEncoder().encode(b)
-  if (ea.length !== eb.length) return false
-  let diff = 0
-  for (let i = 0; i < ea.length; i++) diff |= ea[i] ^ eb[i]
-  return diff === 0
+// The same three steps as gate-ops: resolve the bearer token against the
+// auth server rather than decoding it — the anon key is a valid JWT and
+// would pass anything less — insist on a confirmed email, then ask the
+// database whether that email is a host. Returns null when it is.
+async function refuse(req: Request): Promise<Response | null> {
+  const token = (req.headers.get('Authorization') ?? '')
+    .replace(/^Bearer\s+/i, '')
+    .trim()
+  if (!token) {
+    return json({ error: 'Sign in to use the gate screen.', code: 'NO_SESSION' }, 401)
+  }
+
+  const { data, error } = await db.auth.getUser(token)
+  const user = data?.user
+  if (error || !user) {
+    return json({ error: 'Your session has expired. Sign in again.', code: 'NO_SESSION' }, 401)
+  }
+
+  const email = (user.email ?? '').trim()
+  if (!email || !user.email_confirmed_at) {
+    return json(
+      { error: 'That account has no confirmed email address.', code: 'EMAIL_UNCONFIRMED' },
+      403,
+    )
+  }
+
+  const { data: rows, error: accessError } = await db.rpc('host_access_for', {
+    p_user_id: user.id,
+    p_email: email,
+  })
+  if (accessError) {
+    console.error('host lookup failed', accessError)
+    return json({ error: 'Could not check who you are. Try again.' }, 503)
+  }
+  if (!rows || !(rows as unknown[]).length) {
+    return json({ error: `${email} is not set up as a Talli host.`, code: 'NOT_A_HOST' }, 403)
+  }
+
+  return null
 }
 
 const WEBHOOK_PATH = '/functions/v1/stripe-webhook'
@@ -67,19 +107,8 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
   if (req.method !== 'POST') return json({ error: 'Use POST' }, 405)
 
-  const expected = Deno.env.get('GATE_PASSPHRASE') ??
-    (IS_TEST ? 'talli-test' : null)
-  if (!expected) return json({ error: 'GATE_PASSPHRASE is not set.' }, 503)
-
-  let body: Record<string, unknown>
-  try {
-    body = await req.json()
-  } catch {
-    return json({ error: 'Body must be JSON' }, 400)
-  }
-  if (!sameSecret(String(body.passphrase ?? ''), expected)) {
-    return json({ error: 'Wrong passphrase.' }, 401)
-  }
+  const no = await refuse(req)
+  if (no) return no
 
   const checks: Array<{ name: string; ok: boolean | null; detail: string }> = []
 
