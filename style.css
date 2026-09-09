@@ -282,6 +282,8 @@ hr.thin {
   font-weight: 300;
   color: #3A3A36;
 }
+/* A list inside a prose box is usually followed by more prose. */
+.checklist + p { margin-top: 12px; }
 .checklist li::before {
   content: "";
   position: absolute;
