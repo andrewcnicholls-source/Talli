@@ -389,11 +389,30 @@ stopped working.
 
 ## What still needs a human
 
-- **Set Supabase secrets** — the tooling has no secrets API. Handled with
-  test-project-only fallbacks in the functions, keyed on the project ref, so
-  they are unreachable on production. Setting a real secret always wins.
-  The test project wants `SITE_URL` = `https://staging.talli.pages.dev`,
-  and an `ALLOWED_ORIGIN` that matches it.
+- **Set Supabase secrets** — the tooling has no secrets API, and the
+  dashboard is write-only: it will replace a value and never show you one.
+  Handled with test-project-only fallbacks in the functions, keyed on the
+  project ref, so they are unreachable on production. Setting a real secret
+  always wins.
+
+  `SITE_URL` no longer has to be right for the booking flow to work —
+  `create-checkout` prefers the Origin the browser started checkout from and
+  refuses one belonging to the other environment — but the gate screen's
+  **Check payment setup** now fails it when the host is wrong, and that is
+  the only way to read the value back. Leave `ALLOWED_ORIGIN` unset unless
+  you have a reason: it holds one origin, and both `talli.co.nz` and
+  `www.talli.co.nz` serve production.
+
+- **Set up Resend, for the confirmation email** — create the account, verify
+  `talli.co.nz` as a sending domain with the DNS records it asks for, then
+  put `RESEND_API_KEY` on both projects: a test key on the test project, the
+  live one on production. Until that exists no email is sent and nothing
+  fails, which is the safe state but not a working one.
+
+  To test it end to end, take a test-mode payment on staging — the stub
+  path in `create-checkout` (used only when there is no Stripe key at all)
+  confirms the booking without going through the webhook, so it does not
+  exercise the email. A real test-mode card does.
 - **DNS for `talli.co.nz`** — the zone lives at Crazy Domains and moves to
   Cloudflare as part of this migration. Nameserver changes and record
   verification are yours; a dropped MX record bounces mail silently, so the
