@@ -115,6 +115,9 @@
       ),
       row('Back by', b.must_depart_by ? asTime(b.must_depart_by) : null),
       row('Vehicle', b.vehicle_rego),
+      // Only appears if they told us. Saying it back is how they know the
+      // marshal already has it, without having to raise it on the night.
+      row('Low car', b.vehicle_low_clearance ? 'Noted — we’ll keep you off the steep entry' : null),
       // Named separately from the total, because a line the customer can see
       // on their bank statement should be a line they can see here.
       row('Card surcharge', b.surcharge_cents ? money(b.surcharge_cents) : null),

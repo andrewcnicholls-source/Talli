@@ -354,6 +354,11 @@
         r.payment_method.replace(/_/g, ' ') + ' ' +
         money((r.amount_cents || 0) + (r.addons_cents || 0) + (r.surcharge_cents || 0))));
     }
+    // Read before the car is waved past the crossing, not after it has
+    // grounded on it. Loud on purpose — it is a decision, not a detail.
+    if (r.vehicle_low_clearance) {
+      meta.appendChild(make('span', 'ad-chip is-low', 'low car'));
+    }
     if (r.status === 'held') meta.appendChild(make('span', 'ad-chip is-warn', 'unpaid hold'));
     if (meta.childNodes.length) main.appendChild(meta);
 
@@ -1394,6 +1399,7 @@
       vehicle_rego: form.rego.value.trim() || null,
       name: form.sellname.value.trim() || null,
       phone: form.sellphone.value.trim() || null,
+      vehicle_low_clearance: form.selllow.checked,
       addons: addons,
     })
       .then(function (data) {

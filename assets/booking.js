@@ -656,6 +656,9 @@
       email: form.email.value.trim(),
       phone: form.phone.value.trim() || null,
       vehicle_rego: form.rego.value.trim().toUpperCase(),
+      // Advisory, not a product choice: it buys no different spot and costs
+      // nothing. It exists so the marshal knows before waving the car in.
+      vehicle_low_clearance: form.low.checked,
       addons: pickedList().map(function (line) {
         return { code: line.item.code, qty: line.qty };
       }),

@@ -166,6 +166,129 @@ else
 fi
 
 # ---------------------------------------------------------------------
+head "Search engines are pointed at the right pages"
+# ---------------------------------------------------------------------
+# robots.txt and sitemap.xml only help while they agree with the pages
+# that actually exist. The failure is silent in both directions: a new
+# page nobody added to the sitemap just never gets indexed, and a page
+# that gained a noindex but stayed in the sitemap asks Google to crawl
+# something it is then told to drop.
+#
+# Note this checks the PRODUCTION robots.txt — the committed one. The
+# test site's is written at deploy time by scripts/build.sh and is
+# asserted separately, above.
+if command -v python3 >/dev/null 2>&1; then
+  results=$(python3 - "$TALLI_PRODUCTION_URL" <<'PY'
+import glob, os, re, sys, xml.etree.ElementTree as ET
+
+SITE = sys.argv[1].rstrip('/')
+out = []
+def ok(m):  out.append('OK ' + m)
+def bad(m): out.append('BAD ' + m)
+
+# --- robots.txt -----------------------------------------------------
+if not os.path.exists('robots.txt'):
+    bad('robots.txt is missing — production ships without one')
+else:
+    txt = open('robots.txt', encoding='utf-8').read()
+    live = [l.strip() for l in txt.splitlines() if l.strip() and not l.lstrip().startswith('#')]
+    if any(re.fullmatch(r'(?i)disallow:\s*/', l) for l in live):
+        bad('the committed robots.txt blocks the whole site — this is production, it would delist talli.co.nz')
+    else:
+        ok('the committed robots.txt does not block the live site')
+    if f'{SITE}/sitemap.xml' in txt:
+        ok('robots.txt points at the sitemap')
+    else:
+        bad(f'robots.txt does not name {SITE}/sitemap.xml')
+
+# --- which pages are meant to be indexed ----------------------------
+# A page is indexable unless it says otherwise. Same default-to-safe
+# posture as everywhere else here.
+pages, noindex = {}, set()
+for p in sorted(glob.glob('*.html')):
+    s = open(p, encoding='utf-8').read()
+    pages[p] = s
+    if re.search(r'<meta\s+name=["\']robots["\'][^>]*noindex', s, re.I):
+        noindex.add(p)
+
+# Cloudflare Pages serves foo.html at /foo, and index.html at /.
+def page_to_url(p):
+    return f'{SITE}/' if p == 'index.html' else f'{SITE}/' + p[:-5]
+
+if not os.path.exists('sitemap.xml'):
+    bad('sitemap.xml is missing')
+else:
+    try:
+        root = ET.parse('sitemap.xml').getroot()
+    except ET.ParseError as e:
+        bad(f'sitemap.xml is not well-formed XML: {e}')
+        root = None
+    if root is not None:
+        ns = {'s': 'http://www.sitemaps.org/schemas/sitemap/0.9'}
+        if not root.tag.endswith('urlset'):
+            bad('sitemap.xml root element is not <urlset>')
+        locs = [e.text.strip() for e in root.findall('s:url/s:loc', ns) if e.text]
+        if not locs:
+            bad('sitemap.xml lists no URLs — check the xmlns is the sitemaps.org one')
+        if len(locs) != len(set(locs)):
+            bad('sitemap.xml lists the same URL more than once')
+
+        listed = set(locs)
+        expected = {page_to_url(p) for p in pages if p not in noindex}
+
+        missing = sorted(expected - listed)
+        if missing:
+            bad('indexable pages absent from sitemap.xml: ' + ', '.join(missing))
+        else:
+            ok(f'every indexable page is in sitemap.xml ({len(expected)} of them)')
+
+        forbidden = sorted(listed & {page_to_url(p) for p in noindex})
+        if forbidden:
+            bad('sitemap.xml lists noindex pages: ' + ', '.join(forbidden))
+        else:
+            ok('no noindex page is advertised in sitemap.xml')
+
+        # Every URL must resolve to a file that is really here.
+        stray = sorted(u for u in listed if u not in {page_to_url(p) for p in pages})
+        if stray:
+            bad('sitemap.xml lists URLs with no page on disk: ' + ', '.join(stray))
+        else:
+            ok('every sitemap URL maps to a page in the repository')
+
+        # --- canonical tags ---------------------------------------------
+        # www and the apex both serve this site, so without these Google
+        # sees two copies of every page and picks one itself.
+        wrong = []
+        for p in sorted(pages):
+            if p in noindex:
+                continue
+            m = re.search(r'<link[^>]+rel=["\']canonical["\'][^>]*>', pages[p], re.I)
+            if not m:
+                wrong.append(f'{p} has no canonical')
+                continue
+            href = re.search(r'href=["\']([^"\']+)["\']', m.group(0), re.I)
+            got = href.group(1) if href else ''
+            if got != page_to_url(p):
+                wrong.append(f'{p} -> {got or "(no href)"}, expected {page_to_url(p)}')
+        if wrong:
+            bad('canonical tags disagree with the sitemap: ' + '; '.join(wrong))
+        else:
+            ok('every indexable page has a canonical matching its sitemap URL')
+
+print('\n'.join(out))
+PY
+)
+  while IFS= read -r line; do
+    case "$line" in
+      'OK '*)  pass "${line#OK }" ;;
+      'BAD '*) fail "${line#BAD }" ;;
+    esac
+  done <<< "$results"
+else
+  skip "python3 not installed — cannot check robots.txt and sitemap.xml"
+fi
+
+# ---------------------------------------------------------------------
 head "No secrets committed"
 # ---------------------------------------------------------------------
 # Stripe keys live in Supabase Edge Function secrets, per project, and

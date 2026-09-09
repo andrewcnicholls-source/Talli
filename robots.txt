@@ -1,0 +1,22 @@
+# =====================================================================
+#  talli.co.nz — the live site. This file is the PRODUCTION one.
+#
+#  The test site does not use it. scripts/build.sh overwrites this file
+#  on every non-production Cloudflare Pages build with a blanket
+#  "Disallow: /", so staging.talli.pages.dev stays out of Google. The
+#  production build is a no-op, which is why the copy committed here is
+#  the one that ships to talli.co.nz.
+#
+#  Nothing is disallowed below, on purpose. The two pages that must not
+#  be indexed — admin.html and booking-confirmed.html — carry
+#  <meta name="robots" content="noindex"> instead, and that is the
+#  stronger tool: a page blocked here cannot be crawled, so Google never
+#  reads its noindex and can still list the bare URL it found elsewhere.
+#  Listing /admin.html here would also publish the gate's address to
+#  anyone who reads robots.txt, which is the opposite of what it is for.
+# =====================================================================
+
+User-agent: *
+Allow: /
+
+Sitemap: https://talli.co.nz/sitemap.xml

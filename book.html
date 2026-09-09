@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Book &amp; Extras — Talli Parking</title>
 <meta name="description" content="Book and pay for your Talli Parking spot for the next Eden Park event, and see what's on offer on the night.">
+<link rel="canonical" href="https://talli.co.nz/book">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Poiret+One&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
@@ -127,6 +128,20 @@
             <input type="text" id="bk-rego" name="rego" autocapitalize="characters" spellcheck="false">
             <span class="bk-hint">Helps us find you fast. Add it later if you don't know it yet.</span>
           </div>
+        </div>
+
+        <!-- A few positions are reached over a steep crossing or a lip. The
+             marshal can work around it easily — but only if they know before
+             the car is committed to the entry. -->
+        <div class="bk-check-field">
+          <label class="bk-check" for="bk-low">
+            <input type="checkbox" id="bk-low" name="low">
+            <span>My car is lowered or sits low to the ground</span>
+          </label>
+          <span class="bk-hint">
+            Some spots have a steep entry. Tick this and the marshal will put you
+            somewhere flat &mdash; it costs nothing and doesn&rsquo;t change your spot.
+          </span>
         </div>
 
         <p class="bk-error" id="bk-error" role="alert" hidden></p>
