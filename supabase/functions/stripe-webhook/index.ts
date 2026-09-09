@@ -122,13 +122,6 @@ const esc = (s: unknown) =>
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;')
 
-// A line may mark one phrase for emphasis with **stars**. Plain text drops
-// the stars; HTML turns them into <strong> AFTER escaping, so the emphasis
-// is never a way to smuggle markup into the email.
-const plainLine = (line: string) => line.replace(/\*\*/g, '')
-const htmlLine = (line: string) =>
-  esc(line).replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-
 async function sendConfirmationEmail(bookingId: string): Promise<void> {
   const key = Deno.env.get('RESEND_API_KEY')
   if (!key) {
@@ -205,12 +198,14 @@ async function sendConfirmationEmail(bookingId: string): Promise<void> {
     ]
     const shown = rows.filter((r): r is [string, string] => Boolean(r[1]))
 
-    // Ordered the way the night actually goes. The plate line is dropped
-    // rather than softened when there is no rego on the booking: telling
-    // someone to have handy a thing they never gave us reads as a mistake,
-    // because it is one.
+    // The plate line is dropped rather than softened when there is no rego
+    // on the booking: telling someone to have handy a thing they never gave
+    // us reads as a mistake, because it is one.
+    //
+    // Nothing here names an arrival time. The booking's own window is in the
+    // table above, worked out from kick-off for this event, and a second
+    // instruction beside it could only ever agree with it by accident.
     const onTheNight = [
-      `We recommend arriving at **${address}** 1 hour before the event.`,
       'Please follow the marshal’s directions on where to park. We double-park ' +
         'to fit everyone in, and on a full night that can mean being parked in ' +
         'an overflow area.',
@@ -234,7 +229,7 @@ async function sendConfirmationEmail(bookingId: string): Promise<void> {
         '  Ask the marshal for these when you pull in.'] : []),
       '',
       'On the night',
-      ...onTheNight.map((l) => `- ${plainLine(l)}`),
+      ...onTheNight.map((l) => `- ${l}`),
       '',
       `Coming in a different car? Reply to this email with your reference and the`,
       `new plate before the night, so the marshal is looking for the right car.`,
@@ -262,7 +257,7 @@ async function sendConfirmationEmail(bookingId: string): Promise<void> {
   <p style="margin:0 0 20px;color:#666">Ask the marshal for these when you pull in.</p>` : ''}
   <h2 style="font-size:15px;margin:0 0 6px">On the night</h2>
   <ul style="margin:0 0 20px;padding-left:20px">
-    ${onTheNight.map((l) => `<li style="margin-bottom:4px">${htmlLine(l)}</li>`).join('')}
+    ${onTheNight.map((l) => `<li style="margin-bottom:4px">${esc(l)}</li>`).join('')}
   </ul>
   <p style="margin:0 0 20px;padding:12px 16px;background:#f4f2ee;border-radius:6px">
     <strong>Coming in a different car?</strong> Reply to this email with your
