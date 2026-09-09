@@ -31,6 +31,41 @@ const ALLOWED_ORIGIN = Deno.env.get('ALLOWED_ORIGIN') ?? '*'
 const TEST_PROJECT_REF = 'uhdoverwvlxvyyctskle'
 const IS_TEST = (Deno.env.get('SUPABASE_URL') ?? '').includes(TEST_PROJECT_REF)
 
+// The hosts assets/talli-config.js hands the PRODUCTION backend. Every other
+// host there loads the TEST config. The same list lives in create-checkout,
+// which is the function that acts on it; scripts/check.sh keeps them in step.
+const PRODUCTION_HOSTS = ['talli.co.nz', 'www.talli.co.nz']
+
+const DEFAULT_SITE_URL = IS_TEST
+  ? 'https://staging.talli.pages.dev'
+  : 'https://talli.co.nz'
+
+// Same rule as create-checkout's, and it has to stay the same rule: a return
+// address is safe only when the site there talks to THIS project. Returns the
+// normalised origin, or null when the address does not belong to this project.
+function returnBase(candidate: string): string | null {
+  let url: URL
+  try {
+    url = new URL(candidate)
+  } catch {
+    return null
+  }
+
+  const host = url.hostname.toLowerCase()
+  const isProductionHost = PRODUCTION_HOSTS.includes(host)
+
+  if (!IS_TEST) {
+    return url.protocol === 'https:' && isProductionHost ? url.origin : null
+  }
+
+  if (isProductionHost) return null
+  if (host === 'localhost' || host === '127.0.0.1') return url.origin
+  return url.protocol === 'https:' &&
+      (host === 'talli.pages.dev' || host.endsWith('.talli.pages.dev'))
+    ? url.origin
+    : null
+}
+
 const cors = {
   'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -194,25 +229,36 @@ Deno.serve(async (req) => {
   }
 
   // ------------------------------------------------------------ site url
-  // Unset is a genuine problem on production, where the return address should
-  // never be left to a default. On the test project it is the intended state:
-  // the fallback sits beside every other test fallback and is correct. Failing
-  // it there leaves this screen permanently showing one red line, which is the
-  // quickest way to teach someone to stop reading red lines — and the one
-  // thing this screen must catch is a live key on the test site.
+  // What this check used to do was report the SHAPE of the value — https,
+  // no trailing slash — and say nothing about where it pointed. On 8
+  // September 2026 production had SITE_URL set to the staging address, and
+  // this screen showed a green tick reading "Set to
+  // https://staging.talli.pages.dev" while the first real customer was
+  // being returned to the test site with an error. A check that passes
+  // during the exact failure it exists to catch is worse than no check, so
+  // it now judges the host rather than the punctuation.
+  //
+  // create-checkout now prefers the browser's own Origin over this value,
+  // so a wrong SITE_URL can no longer misroute anyone by itself. It is
+  // still the fallback for a request that arrives without an Origin, and a
+  // fallback pointing at the wrong site is still worth naming.
   const siteUrl = Deno.env.get('SITE_URL') ?? ''
+  const resolved = returnBase(siteUrl)
+  const where = IS_TEST ? 'test' : 'production'
+
   checks.push({
     name: 'Return address after payment',
-    ok: siteUrl
-      ? siteUrl.startsWith('https://') && !siteUrl.endsWith('/')
-      : IS_TEST,
+    ok: siteUrl ? resolved !== null : true,
     detail: !siteUrl
-      ? (IS_TEST
-        ? 'Not set, which is correct here — the test project falls back to https://staging.talli.pages.dev.'
-        : 'Not set. Defaults to https://talli.co.nz, which happens to be right — but set it explicitly.')
-      : siteUrl.endsWith('/')
-      ? `Set to ${siteUrl} — remove the trailing slash.`
-      : `Set to ${siteUrl}`,
+      ? `Not set. Customers are returned to the address they started from, ` +
+        `falling back to ${DEFAULT_SITE_URL}. That is correct here.`
+      : resolved
+      ? `Set to ${resolved} — a ${where} address, correct for this project. ` +
+        `Used only when a request arrives without an Origin.`
+      : `Set to "${siteUrl}", which is NOT a ${where} address. A customer ` +
+        `returned there lands on a site wired to the other database, which ` +
+        `cannot find the booking they just paid for. Set it to ` +
+        `${DEFAULT_SITE_URL} or remove it.`,
   })
 
   const failures = checks.filter((c) => c.ok === false).length
