@@ -7,9 +7,15 @@
    are really left, what the sign says, and what is still owed.
 
    All reads and writes go through the gate-ops edge function, which holds
-   the passphrase check and the service-role credentials. Nothing here can
-   reach the database on its own — except the extras catalogue, which is
-   public and read straight from PostgREST.
+   the service-role credentials and decides, on every request, whether the
+   person signed in is a host. Nothing here can reach the database on its
+   own — except the extras catalogue, which is public and read straight
+   from PostgREST.
+
+   Getting in is Google, via Supabase Auth. assets/talli-auth.js holds the
+   tokens; this file only ever asks it for a current one. Nothing on this
+   screen decides who is allowed in: a 401 or a 403 from the server is the
+   only thing that puts the sign-in card back up.
    ===================================================================== */
 (function () {
   'use strict';
@@ -18,7 +24,7 @@
   var FN = CFG.supabaseUrl + '/functions/v1/gate-ops';
   var REST = CFG.supabaseUrl + '/rest/v1';
   var TZ = 'Pacific/Auckland';
-  var KEY = 'talli.gate.pass';
+  var AUTH = window.TalliAuth;
   var REFRESH_MS = 30000;
   // The running order at the gate. Config can override it, but the default
   // lives here too: this branch and the test-environment branch each rewrote
@@ -27,7 +33,9 @@
   var GATE_ORDER = CFG.gateTierOrder || ['standard', 'priority', 'valet'];
 
   var state = {
-    pass: sessionStorage.getItem(KEY) || '',
+    // Who the server said we are, from the `session` action. Display only —
+    // every request is authorised again on its own.
+    who: null,
     events: [],
     eventId: null,
     tab: 'gate',
@@ -117,22 +125,49 @@
 
   /* ---------------------------------------------------------- transport */
 
+  // Every call carries the signed-in host's access token, refreshed first
+  // if it was about to expire. `apikey` is still the anon key — that is the
+  // project identifier Supabase's gateway wants, and is not what authorises
+  // anything.
   function call(action, params) {
-    var body = Object.assign({ passphrase: state.pass, action: action }, params || {});
-    return fetch(FN, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: CFG.anonKey,
-        Authorization: 'Bearer ' + CFG.anonKey,
-      },
-      body: JSON.stringify(body),
+    var body = Object.assign({ action: action }, params || {});
+    return post(FN, body);
+  }
+
+  function post(url, body) {
+    return AUTH.accessToken().then(function (token) {
+      // No token, or a refresh that came back refused. The server would
+      // say the same thing a round trip later; saying it here means a
+      // phone that lost its session mid-shift lands on the sign-in card
+      // rather than on a spinner it cannot get past.
+      if (!token) {
+        var out = new Error('Your session has expired. Sign in again.');
+        out.status = 401;
+        out.code = 'NO_SESSION';
+        fatal(out);
+        throw out;
+      }
+      return fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: CFG.anonKey,
+          Authorization: 'Bearer ' + token,
+        },
+        body: JSON.stringify(body),
+      });
     }).then(function (res) {
       return res.json().then(function (data) {
         if (!res.ok) {
           var err = new Error(data.error || ('Request failed (' + res.status + ')'));
           err.status = res.status;
           err.code = data.code;
+          // Handled once, here, rather than at each of the dozen call
+          // sites: whatever the screen was doing, a refused identity means
+          // the same thing and has the same answer. The error still throws
+          // so the caller stops; toast() knows to stay quiet behind the
+          // sign-in card.
+          fatal(err);
           throw err;
         }
         return data;
@@ -142,6 +177,9 @@
 
   function toast(message, kind) {
     var t = el('ad-toast');
+    // Nothing to say over the sign-in card: the message there is the one
+    // that matters, and a toast on top of it just covers the button.
+    if (!el('ad-lock').hidden) return;
     t.textContent = message;
     t.className = 'ad-toast' + (kind ? ' is-' + kind : '');
     show(t);
@@ -149,32 +187,79 @@
     toast._t = setTimeout(function () { hide(t); }, 3500);
   }
 
-  /* ------------------------------------------------------------- unlock */
+  /* ------------------------------------------------------------ sign in */
 
-  function unlock(e) {
-    e.preventDefault();
-    var input = el('ad-pass');
-    // Trimmed, because the server compares byte-for-byte in constant time
-    // and a passphrase pasted with a trailing space is indistinguishable
-    // from a wrong one. Every other field on this page already trims.
-    state.pass = input.value.trim();
-    el('ad-unlock-error').hidden = true;
-
-    call('events').then(function (data) {
-      sessionStorage.setItem(KEY, state.pass);
+  // Three states, and only the server moves us between them: checking,
+  // signed out, in. There is no client-side rule about who may be here —
+  // the `session` call either comes back with an identity or it does not.
+  function openSession() {
+    return call('session').then(function (data) {
+      state.who = data.who || null;
       state.events = data.events || [];
       hide(el('ad-lock'));
       show(el('ad-app'));
+      renderWho();
       loadCatalogue();
       loadTemplates();
       renderEvents();
-    }).catch(function (err) {
-      state.pass = '';
-      sessionStorage.removeItem(KEY);
-      var box = el('ad-unlock-error');
-      box.textContent = err.message;
-      show(box);
     });
+  }
+
+  // Shown when there is no usable session, and when the server turned one
+  // down. A refused token is not kept: leaving it in storage means every
+  // reload spends a round trip re-learning the same no.
+  function showSignIn(message, code) {
+    hide(el('ad-app'));
+    hide(el('ad-lock-wait'));
+    show(el('ad-lock'));
+    show(el('ad-lock-signin'));
+
+    var box = el('ad-lock-error');
+    if (message) {
+      box.textContent = message;
+      show(box);
+    } else {
+      hide(box);
+    }
+
+    // Signed in to Google, correctly, as somebody who is not a host. The
+    // ordinary button is a dead end here — Google skips its own picker
+    // when there is one session, so pressing it hands over the same
+    // refused account again. This is the way out.
+    var swap = el('ad-lock-swap');
+    if (code === 'NOT_A_HOST') show(swap); else hide(swap);
+  }
+
+  // A 401 means the session is gone or was never good; a 403 means it is a
+  // real Google account that is not a host. Both land back on the card, but
+  // the second one has to say so or the person just presses the same button
+  // again and gets the same silence.
+  function signedOut(err) {
+    AUTH.forget();
+    state.who = null;
+    // A half-finished walk-up sale behind the card is a walk-up sale
+    // somebody will try to submit again after signing back in.
+    ['ad-new', 'ad-sell', 'ad-price', 'ad-check'].forEach(function (id) {
+      hide(el(id));
+    });
+    showSignIn(err && err.message, err && err.code);
+  }
+
+  function renderWho() {
+    var node = el('ad-who');
+    if (!node) return;
+    text(node, state.who ? state.who.email : '');
+  }
+
+  // Any call, anywhere on the screen, can be the one that discovers the
+  // session died. Route those back to the card rather than letting them
+  // surface as a toast the person cannot act on.
+  function fatal(err) {
+    if (err && (err.status === 401 || err.status === 403)) {
+      signedOut(err);
+      return true;
+    }
+    return false;
   }
 
   // The pricing templates, for the dropdown under Prices. The new-event
@@ -1436,22 +1521,8 @@
     el('ad-check-summary').className = 'ad-check-summary';
     sheet.hidden = false;
 
-    fetch(CFG.supabaseUrl + '/functions/v1/check-setup', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: CFG.anonKey,
-        Authorization: 'Bearer ' + CFG.anonKey,
-      },
-      body: JSON.stringify({ passphrase: state.pass }),
-    })
-      .then(function (res) {
-        return res.json().then(function (d) { return { ok: res.ok, data: d }; });
-      })
-      .then(function (r) {
-        if (!r.ok) throw new Error(r.data.error || 'Could not run the check.');
-        var d = r.data;
-
+    post(CFG.supabaseUrl + '/functions/v1/check-setup', {})
+      .then(function (d) {
         var sum = el('ad-check-summary');
         text(sum, d.summary);
         sum.className = 'ad-check-summary ' + (d.ready ? 'is-good' : 'is-bad');
@@ -1503,7 +1574,20 @@
   /* ------------------------------------------------------------------ init */
 
   function init() {
-    el('ad-unlock-form').addEventListener('submit', unlock);
+    el('ad-signin').addEventListener('click', function () {
+      AUTH.signInWithGoogle();
+    });
+
+    el('ad-lock-swap').addEventListener('click', function () {
+      AUTH.signInWithGoogle({ chooseAccount: true });
+    });
+
+    el('ad-signout').addEventListener('click', function () {
+      AUTH.signOut().then(function () {
+        state.who = null;
+        window.location.reload();
+      });
+    });
 
     el('ad-event').addEventListener('change', function () {
       state.eventId = this.value;
@@ -1555,11 +1639,28 @@
       if (!document.hidden && state.eventId && el('ad-app').hidden === false) loadList(true);
     }, REFRESH_MS);
 
-    // A passphrase already in this tab's session gets straight back in.
-    if (state.pass) {
-      el('ad-pass').value = state.pass;
-      el('ad-unlock-form').dispatchEvent(new Event('submit', { cancelable: true }));
+    // Coming back from Google with the person having cancelled, or with a
+    // redirect URL the project does not allow: say what happened rather
+    // than showing the same button as if nothing had been pressed.
+    if (AUTH.landingError) {
+      showSignIn(AUTH.landingError);
+      return;
     }
+
+    // A session on this device gets straight back in — but only because
+    // the server said so. openSession() failing routes through post()'s
+    // 401/403 handling and puts the card up on its own; anything else
+    // (offline, Supabase down) says so and leaves the button there to
+    // press again.
+    if (!AUTH.hasSession()) {
+      showSignIn(null);
+      return;
+    }
+
+    openSession().catch(function (err) {
+      if (err && (err.status === 401 || err.status === 403)) return;
+      showSignIn(err.message, err.code);
+    });
   }
 
   if (document.readyState === 'loading') {

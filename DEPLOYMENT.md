@@ -175,6 +175,8 @@ Open https://staging.talli.pages.dev on the actual hardware.
 
 - Front-door passphrase: `talli-test` (see `TESTING.md` — it is a
   signpost, not security).
+- The gate screen is Google sign-in, per project: signing in on staging
+  does not sign you in on production, and both need a `host_user` row.
 - Every page carries a red *TEST SITE* bar; the gate screen turns red.
   Blue chrome means you are on the live site taking real money.
 - Test payments: card `4242 4242 4242 4242`, any future expiry, any
@@ -472,9 +474,10 @@ enable in production as a second small commit. Don't add a framework.
 Claude's GitHub access is deliberately scoped to code, issues and pull
 requests. Repository *administration* — default branch, branch
 protection, Pages — is blocked at the proxy, and the Cloudflare
-dashboard is outside it entirely. So these are yours. Each takes
-under a minute, and the two Cloudflare ones come first because their
-failure modes are the worst.
+dashboard is outside it entirely — and so is the Supabase Auth
+configuration. So these are yours. Each takes under a minute, and the
+two Cloudflare ones come first because their failure modes are the
+worst.
 
 ### 0a. Create a **Pages** project, not a Worker
 
@@ -529,6 +532,50 @@ site would look fine. That is the whole problem with it.
 
 So: fix the setting before attaching a domain, not after. Changing it
 does not relabel existing deployments — retrigger a build, or push.
+
+### 0c. Turn on Google sign-in, on **both** Supabase projects
+
+The gate screen is Google sign-in now, and the Supabase Auth settings
+that make it work are dashboard-only — no MCP tool reaches them. Until
+this is done on a project, `/admin.html` on that project's site comes
+back from Google with an error and nobody can get in, including you.
+**Do this before the front end that needs it is merged to `staging`,
+and again before it is promoted to `main`.**
+
+One Google OAuth client covers both, because Google keys on the redirect
+URI and Supabase's is per project.
+
+**In Google Cloud** (console.cloud.google.com → APIs & Services →
+Credentials → Create credentials → OAuth client ID → Web application):
+
+- Authorised redirect URIs — both, exactly:
+  - `https://uhdoverwvlxvyyctskle.supabase.co/auth/v1/callback`
+  - `https://oxzwfemyavznykqixhvk.supabase.co/auth/v1/callback`
+- Keep the client ID and secret; you need them twice.
+
+**In each Supabase project** (Authentication → Sign In / Providers →
+Google): enable it, paste the same client ID and secret.
+
+**In each Supabase project** (Authentication → URL Configuration): add
+the redirect URL the browser comes back to. Supabase refuses anything
+not on this list, which is the error you will see if you skip it.
+
+| Project | Site URL | Additional redirect URL |
+| --- | --- | --- |
+| `talli-test` | `https://staging.talli.pages.dev` | `https://staging.talli.pages.dev/admin.html` |
+| production | `https://talli.co.nz` | `https://talli.co.nz/admin.html` |
+
+Then check `host_user` on that project has a row for the Google account
+you are about to use. The migration seeds one for
+`andrew.c.nicholls@gmail.com`; anyone else is an `insert` away:
+
+```sql
+insert into host_user (host_id, email)
+select id, 'someone@example.com' from host where name = 'Talli Limited';
+```
+
+An unclaimed row is just an invitation — it becomes access the first
+time that person signs in, and never before.
 
 ### 1. Make `staging` the default branch
 

@@ -11,11 +11,18 @@
 //  All of it writes, so all of it runs under the service role here rather
 //  than being exposed through RLS.
 //
-//  Access is a shared passphrase held in the GATE_PASSPHRASE secret. That is
-//  a deliberate MVP choice for a single operator with a phone in the rain —
-//  no login flow, no email round-trip. It is checked in constant time, and
-//  the function refuses to run at all if the secret is unset, so there is no
-//  quiet default-open state.
+//  Access is an identity, not a secret. The caller sends the access token
+//  Supabase Auth issued them after signing in with Google; this function
+//  asks the auth server who that is, and then asks the database whether
+//  that verified email belongs to a host. Both questions have to come back
+//  yes, every request, before anything below runs.
+//
+//  The shared GATE_PASSPHRASE it replaced is gone rather than kept as a
+//  fallback. A secret anyone can pass on cannot say who took the money,
+//  cannot be withdrawn from one person, and cannot become the basis for
+//  showing one host their nights and not another host's — which is where
+//  Talli is going. Leaving it in as a second door would have kept every
+//  one of those problems.
 // =====================================================================
 
 import { createClient } from 'jsr:@supabase/supabase-js@2'
@@ -28,18 +35,11 @@ const db = createClient(
 
 const ALLOWED_ORIGIN = Deno.env.get('ALLOWED_ORIGIN') ?? '*'
 
-// ---------------------------------------------------------------------
-//  TEST-PROJECT FALLBACKS
-//
-//  The test Supabase project has no secrets of its own, so this block
-//  supplies workable defaults there and ONLY there. IS_TEST compares the
-//  project's own SUPABASE_URL — injected by Supabase, not settable by a
-//  caller — against the test project's ref. On production it is false and
-//  every fallback below is unreachable. A real secret always wins: these
-//  are fallbacks, never overrides.
-// ---------------------------------------------------------------------
-const TEST_PROJECT_REF = 'uhdoverwvlxvyyctskle'
-const IS_TEST = (Deno.env.get('SUPABASE_URL') ?? '').includes(TEST_PROJECT_REF)
+// This function has no TEST-PROJECT FALLBACKS block any more, and should
+// never grow one back. The only thing it used to fall back to was a known
+// gate passphrase on test; access is now a signed-in host on both projects,
+// which is the same code path in both places and therefore the one actually
+// exercised by device testing.
 
 const cors = {
   'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
@@ -53,15 +53,85 @@ const json = (body: unknown, status = 200) =>
     headers: { ...cors, 'Content-Type': 'application/json' },
   })
 
-// Compare without leaking length or position through timing.
-function sameSecret(a: string, b: string): boolean {
-  const ea = new TextEncoder().encode(a)
-  const eb = new TextEncoder().encode(b)
-  if (ea.length !== eb.length) return false
-  let diff = 0
-  for (let i = 0; i < ea.length; i++) diff |= ea[i] ^ eb[i]
-  return diff === 0
+// ---------------------------------------------------------------------
+//  WHO IS ASKING
+//
+//  Three steps, and the order is the whole point:
+//
+//    1. Ask Supabase Auth to resolve the bearer token. Not decode it —
+//       resolve it. The project's own anon key is a perfectly well-formed
+//       JWT signed by the same secret, so anything that merely parsed the
+//       token would hand the gate screen to the entire internet. The /user
+//       endpoint answers "no user" for an anon key, an expired token and a
+//       signed-out one alike.
+//
+//    2. Insist on a confirmed email. Google confirms one, so this only
+//       ever excludes an identity that arrived some other way.
+//
+//    3. Ask the database whether that email is a host, via
+//       host_access_for(). The email handed to it came out of step 1 and
+//       never out of the request body — that is the security boundary, and
+//       it is why the function is service-role only.
+// ---------------------------------------------------------------------
+type Caller = {
+  user_id: string
+  email: string
+  hosts: Array<{ host_id: string; host_name: string; role: string }>
 }
+
+type Denied = { status: number; error: string; code: string }
+
+async function callerFrom(req: Request): Promise<Caller | Denied> {
+  const token = (req.headers.get('Authorization') ?? '')
+    .replace(/^Bearer\s+/i, '')
+    .trim()
+  if (!token) {
+    return { status: 401, error: 'Sign in to use the gate screen.', code: 'NO_SESSION' }
+  }
+
+  const { data, error } = await db.auth.getUser(token)
+  const user = data?.user
+  if (error || !user) {
+    return { status: 401, error: 'Your session has expired. Sign in again.', code: 'NO_SESSION' }
+  }
+
+  const email = (user.email ?? '').trim()
+  if (!email || !user.email_confirmed_at) {
+    return {
+      status: 403,
+      error: 'That account has no confirmed email address.',
+      code: 'EMAIL_UNCONFIRMED',
+    }
+  }
+
+  const { data: rows, error: accessError } = await db.rpc('host_access_for', {
+    p_user_id: user.id,
+    p_email: email,
+  })
+  if (accessError) throw accessError
+
+  const hosts = (rows ?? []) as Array<Row>
+  if (!hosts.length) {
+    return {
+      status: 403,
+      error: `${email} is not set up as a Talli host.`,
+      code: 'NOT_A_HOST',
+    }
+  }
+
+  return {
+    user_id: user.id,
+    email,
+    hosts: hosts.map((r) => ({
+      host_id: String(r.host_id),
+      host_name: String(r.host_name),
+      role: String(r.role),
+    })),
+  }
+}
+
+const denied = (c: Caller | Denied): c is Denied =>
+  typeof (c as Denied).status === 'number'
 
 // The database raises named errors for the cases that mean something
 // specific. Pass the name through so the screen can say what happened.
@@ -190,14 +260,20 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
   if (req.method !== 'POST') return json({ error: 'Use POST' }, 405)
 
-  // Production refuses outright with no passphrase set, so there is never a
-  // quiet default-open state on the live site. The test project gets a known
-  // one instead, so the gate screen is usable without any secret setup.
-  const expected = Deno.env.get('GATE_PASSPHRASE') ??
-    (IS_TEST ? 'talli-test' : null)
-  if (!expected) {
-    console.error('GATE_PASSPHRASE is not set')
-    return json({ error: 'The gate screen is not configured yet.' }, 503)
+  // Identity first, before the body is even read. Nothing below this line
+  // runs for anyone who is not a signed-in host, and there is no branch —
+  // no test fallback, no configured-secret check — that can skip it. The
+  // test project is not a special case here: it has its own Supabase Auth
+  // and its own host_user rows.
+  let caller: Caller | Denied
+  try {
+    caller = await callerFrom(req)
+  } catch (err) {
+    console.error('host lookup failed', err)
+    return json({ error: 'Could not check who you are. Try again.' }, 503)
+  }
+  if (denied(caller)) {
+    return json({ error: caller.error, code: caller.code }, caller.status)
   }
 
   let body: Record<string, unknown>
@@ -207,15 +283,37 @@ Deno.serve(async (req) => {
     return json({ error: 'Body must be JSON' }, 400)
   }
 
-  if (!sameSecret(String(body.passphrase ?? ''), expected)) {
-    return json({ error: 'Wrong passphrase.' }, 401)
-  }
-
   const action = String(body.action ?? '')
   const eventId = String(body.event_id ?? '')
 
   try {
     switch (action) {
+      // What the screen needs to open: who it just let in, and the list to
+      // pick from. One round trip, because the alternative is a screen that
+      // can be signed in and empty at the same time.
+      //
+      // `events` is deliberately not filtered by host yet. There is one
+      // real host, and a filter written against a second host who does not
+      // exist is a filter nobody can prove is right. The identity is in the
+      // request now, which is the part that had to come first — `who.hosts`
+      // is what the filter will read when it is wanted.
+      case 'session': {
+        const { data, error } = await db
+          .from('event')
+          .select('id, name, venue, starts_at, status')
+          .order('starts_at', { ascending: true })
+        if (error) throw error
+        return json({
+          who: {
+            email: caller.email,
+            hosts: caller.hosts,
+            host_name: caller.hosts[0].host_name,
+            role: caller.hosts[0].role,
+          },
+          events: data,
+        })
+      }
+
       // Every event, not just the ones on sale — the gate needs drafts,
       // announced fixtures and closed ones too.
       case 'events': {

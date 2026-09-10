@@ -103,13 +103,12 @@ The default points away from real customer data on purpose.
 
 ---
 
-## Passphrases
+## Getting in
 
-| Where | Passphrase | Enforced |
+| Where | How | Enforced |
 | --- | --- | --- |
-| Test site front door | `talli-test` | in the browser |
-| Test gate screen (`/admin.html`) | `talli-test` | server-side |
-| Live gate screen | unchanged | server-side |
+| Test site front door | passphrase `talli-test` | in the browser |
+| Gate screen (`/admin.html`), either site | sign in with Google | server-side |
 
 **Be honest with yourself about the first one.** It is in `assets/talli-testgate.js`,
 which anyone can read. It exists to keep the test site out of Google and to
@@ -122,26 +121,42 @@ edge, before a byte of HTML is served, and it is free at this scale —
 which the Netlify equivalent was not. Zero Trust → Access → Applications,
 pointed at the staging hostname, then delete `assets/talli-testgate.js`.
 
-The gate screen passphrase on the test project is a fallback baked into the
-function, used only because the test project has no secrets set. Set
-`GATE_PASSPHRASE` in the test project's Edge Function secrets and it wins
-immediately.
+### The gate screen: a host, not a secret
 
-### If the gate screen rejects a passphrase you know is right
+The shared gate passphrase is gone. `/admin.html` now signs you in with
+Google through Supabase Auth, and `gate-ops` asks the database, on every
+single request, whether that verified email has a row in `host_user`. Being
+signed in to Google is not enough; being in that table is what counts.
 
-This happened on the first attempt, and it will happen again on a matchday if
-you do not know the trick. The field is an ordinary password input, so the
-browser will autofill a saved password into it — and every value looks like
-dots, so a wrong one looks exactly like the right one. You get
-`Wrong passphrase.` with nothing to suggest what went in.
+That is the change that makes other people hosting car parks possible at
+all. A shared secret cannot say who took the money, cannot be withdrawn
+from one person without changing it for everyone, and can never be the
+basis for showing one host their nights and not somebody else's.
 
-Open a private window and type it by hand. That clears autofill, a cached
-`admin.js`, and any stale `sessionStorage` in one go. If it works there, the
-passphrase was never wrong — delete the saved password for the site and it
-will stop.
+**Test and production are separate Supabase projects, so they are separate
+sign-ins.** Signing in on staging does not sign you in on `talli.co.nz`,
+and the `host_user` rows are per project. Both carry a seeded invitation
+for `andrew.c.nicholls@gmail.com`, claimed by the first sign-in with that
+Google account.
+
+### If the gate screen will not let you in
+
+Read which of the three it is — the screen says, and they need different
+things:
+
+| What it says | What it means | What to do |
+| --- | --- | --- |
+| *…is not set up as a Talli host* | Google worked. That email has no `host_user` row on **this project**. | Check you signed in with the right account, and that a row exists on the project this hostname talks to. |
+| *Your session has expired* | The token was refused or the refresh failed. | Press the button again. |
+| Google's own error, before coming back | Usually the redirect URL is not allow-listed on the project. | Add it, exactly, under Authentication → URL Configuration. |
+
+Being signed in to the *wrong* Google account is the common one, and it
+does not look like an account problem: Google skips its own picker when
+there is only one session, so pressing the button again just hands over
+the same refused account. The card offers **Sign in with a different
+Google account** when that is what happened — that forces the picker.
 
 Worth knowing before you are standing on the driveway with cars queuing.
-The same trap exists on the live gate screen.
 
 ---
 

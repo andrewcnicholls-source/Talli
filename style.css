@@ -282,6 +282,8 @@ hr.thin {
   font-weight: 300;
   color: #3A3A36;
 }
+/* A list inside a prose box is usually followed by more prose. */
+.checklist + p { margin-top: 12px; }
 .checklist li::before {
   content: "";
   position: absolute;
@@ -816,16 +818,31 @@ footer a { color: var(--blue); }
   margin-bottom: 6px;
 }
 .ad-lock-card p { font-size: 0.92rem; color: var(--grey); margin-bottom: 18px; }
-.ad-lock-card input {
-  width: 100%;
-  font-family: var(--body);
-  font-size: 1rem;
-  padding: 14px;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  margin-bottom: 16px;
+
+/* Shown until the server has answered. Most opens of this page are by
+   somebody already signed in, so this is the state the card is usually in
+   for the half second it exists. */
+.ad-lock-wait { font-style: italic; }
+
+.ad-lock-foot {
+  font-size: 0.8rem;
+  color: var(--grey);
+  margin: 14px 0 0;
 }
-.ad-lock-card input:focus { outline: none; border-color: var(--blue); }
+
+/* Google's button, at Google's colours rather than Talli's: this is the
+   one control on the site that is a promise about somebody else's login
+   screen, and it should look like the thing it is about to open. */
+.btn-google {
+  background: var(--white);
+  border-color: var(--line);
+  color: var(--ink);
+  width: 100%;
+}
+.btn-google:hover { border-color: var(--grey); }
+@media (min-width: 520px) { .btn-google { width: 100%; } }
+.ad-google-mark { width: 18px; height: 18px; flex: none; }
+
 .ad-lock-error {
   background: #FFF4F0;
   color: var(--orange-flag);
@@ -1069,6 +1086,16 @@ footer a { color: var(--blue); }
   color: var(--grey);
   padding-bottom: 24px;
 }
+/* Who this phone is signed in as. Quiet, but present: a shared secret
+   could not answer the question at all, and the answer matters on a screen
+   that takes money. Empty until the server says who, so it collapses
+   rather than reserving a gap. */
+.ad-foot-who {
+  display: block;
+  margin: 8px 0 2px;
+  word-break: break-all;
+}
+.ad-foot-who:empty { display: none; }
 
 /* ---------- Walk-up sheet ---------- */
 .ad-sheet {
@@ -2069,8 +2096,10 @@ footer a { color: var(--blue); }
 [data-talli-env="test"] .ad-head { padding-top: 12px; }
 [data-talli-env="test"] .talli-env-banner { padding-top: calc(7px + env(safe-area-inset-top)); }
 
-/* The lock card gets a matching accent so the passphrase screen is just as
-   obvious as the list behind it. */
+/* The sign-in card gets a matching accent, so it is as obvious as the list
+   behind it which project this phone is about to sign in to. Test and
+   production are separate Supabase projects, and therefore separate
+   sessions: signing in on one does not sign you in on the other. */
 [data-talli-env="test"] .ad-lock-card h1 { color: var(--test-red); }
 
 /* ---------- Test-site passphrase screen ---------- */
