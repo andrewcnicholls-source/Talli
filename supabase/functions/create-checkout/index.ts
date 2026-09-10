@@ -51,8 +51,90 @@ const db = createClient(
 const TEST_PROJECT_REF = 'uhdoverwvlxvyyctskle'
 const IS_TEST = (Deno.env.get('SUPABASE_URL') ?? '').includes(TEST_PROJECT_REF)
 
-const SITE_URL = Deno.env.get('SITE_URL') ??
-  (IS_TEST ? 'https://staging.talli.pages.dev' : 'https://talli.co.nz')
+// ---------------------------------------------------------------------
+//  WHERE STRIPE SENDS THE CUSTOMER BACK
+//
+//  Getting this wrong is not cosmetic. assets/talli-config.js picks its
+//  backend from the hostname, so a customer who paid on talli.co.nz and is
+//  returned to any other host lands on a page wired to the TEST database,
+//  which cannot find the booking they have just paid for. That happened
+//  on 8 September 2026: SITE_URL on the production project had been set by
+//  hand to the staging address, and the first real customer paid, was sent
+//  to the test site, and saw an error under a red TEST SITE banner.
+//
+//  So the return address is no longer taken on trust from a secret:
+//
+//    1. the Origin the browser actually started checkout from, if this
+//       project is allowed to return anyone there;
+//    2. SITE_URL, if it passes the same test;
+//    3. the built-in default for this project.
+//
+//  Origin first is what makes it self-correcting. A browser on talli.co.nz
+//  reached THIS function, so talli.co.nz is by definition both the right
+//  way back and a host that talks to this project. A wrong secret can no
+//  longer send anyone to the wrong site, because rule 2 has to pass the
+//  same test before it is used at all.
+// ---------------------------------------------------------------------
+
+// The hosts assets/talli-config.js hands the PRODUCTION backend. Every
+// other host there loads the TEST config. scripts/check.sh keeps this list
+// and that one in step.
+const PRODUCTION_HOSTS = ['talli.co.nz', 'www.talli.co.nz']
+
+const DEFAULT_SITE_URL = IS_TEST
+  ? 'https://staging.talli.pages.dev'
+  : 'https://talli.co.nz'
+
+const CONFIGURED_SITE_URL = Deno.env.get('SITE_URL') ?? ''
+
+// A return address is safe when the site there talks to THIS project. On
+// production that is exactly the production hosts; on test it is exactly
+// the hosts that are NOT production — the Pages domains and a local
+// checkout. Returns the normalised origin, so a trailing slash or a stray
+// path in a secret can no longer produce a broken URL.
+function returnBase(candidate: string): string | null {
+  let url: URL
+  try {
+    url = new URL(candidate)
+  } catch {
+    return null
+  }
+
+  const host = url.hostname.toLowerCase()
+  const isProductionHost = PRODUCTION_HOSTS.includes(host)
+
+  if (!IS_TEST) {
+    return url.protocol === 'https:' && isProductionHost ? url.origin : null
+  }
+
+  // The test project must never send anyone to the live site: they would
+  // arrive at a confirmation page querying production for a test booking.
+  if (isProductionHost) return null
+  if (host === 'localhost' || host === '127.0.0.1') return url.origin
+  return url.protocol === 'https:' &&
+      (host === 'talli.pages.dev' || host.endsWith('.talli.pages.dev'))
+    ? url.origin
+    : null
+}
+
+// Resolved per request, because rule 1 depends on who is asking.
+function siteUrlFor(req: Request): string {
+  const fromBrowser = returnBase(req.headers.get('Origin') ?? '')
+  if (fromBrowser) return fromBrowser
+
+  const fromSecret = returnBase(CONFIGURED_SITE_URL)
+  if (fromSecret) return fromSecret
+
+  // Loud, because it means a secret is wrong and only the default is
+  // saving the customer. Silence here is how the last one went unnoticed.
+  if (CONFIGURED_SITE_URL) {
+    console.error(
+      `SITE_URL is set to "${CONFIGURED_SITE_URL}", which this project must ` +
+      `not return customers to. Falling back to ${DEFAULT_SITE_URL}.`,
+    )
+  }
+  return DEFAULT_SITE_URL
+}
 // A row as PostgREST hands it back. The select strings in this file are
 // checked against a schema this project does not generate types for, so the
 // client's inference gives up and returns an error-shaped type instead of a
@@ -112,6 +194,10 @@ const SALE_ERRORS: Record<string, { status: number; message: string }> = {
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
   if (req.method !== 'POST') return json({ error: 'Use POST' }, 405)
+
+  // Where this customer gets sent back to. Decided from the request, not
+  // from a secret alone — see the block above.
+  const siteUrl = siteUrlFor(req)
 
   // With no key at all, production must refuse. The test project instead
   // falls through to the stub below, so the booking flow stays testable
@@ -343,7 +429,7 @@ Deno.serve(async (req) => {
     console.log('stubbed payment for booking', bookingId,
       'with', (addonRows ?? []).length, 'extras')
     return json({
-      url: `${SITE_URL}/booking-confirmed.html?session_id=${fakeSession}`,
+      url: `${siteUrl}/booking-confirmed.html?session_id=${fakeSession}`,
       booking_id: bookingId,
       stubbed_payment: true,
     })
@@ -369,8 +455,8 @@ Deno.serve(async (req) => {
       payment_intent_data: {
         metadata: { booking_id: String(bookingId) },
       },
-      success_url: `${SITE_URL}/booking-confirmed.html?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${SITE_URL}/?cancelled=1`,
+      success_url: `${siteUrl}/booking-confirmed.html?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${siteUrl}/?cancelled=1`,
     })
 
     await db.from('booking')

@@ -362,6 +362,47 @@ mode without revealing either. Use it on both sites.
 `scripts/check.sh` fails the build if anything resembling a Stripe key
 or a Supabase service-role JWT is committed.
 
+### The other secrets on those projects
+
+| Secret | Set on | What it does if wrong |
+| --- | --- | --- |
+| `SITE_URL` | both | Where Stripe returns a paying customer. **This is the one that broke on 8 Sep 2026.** It is now only a fallback — `create-checkout` prefers the Origin the browser started from, and rejects a `SITE_URL` whose host does not belong to that project — but a wrong value is still reported as a fault by **Check payment setup**. |
+| `ALLOWED_ORIGIN` | optional, both | The literal `Access-Control-Allow-Origin` the functions return. Unset means `*`. Because it holds exactly one value and **both** `talli.co.nz` and `www.talli.co.nz` serve production, setting it to a single origin stops the other one booking — silently, at the point of payment. Leave it unset until the functions take a list. You can read the live value without the dashboard: it is echoed as a response header on any function call. |
+| `GATE_PASSPHRASE` | both | Guards the gate screen and **Check payment setup**. The test project falls back to `talli-test`; production has no fallback. |
+| `RESEND_API_KEY` | both | Sends the booking confirmation email. **Absent, no email is sent and nothing fails** — the webhook logs it and moves on, which is deliberate, because a mail outage must never turn into a failed booking. |
+| `TALLI_FROM_EMAIL` | optional | Defaults to `Talli Parking <bookings@talli.co.nz>`. The domain has to be verified in Resend or the send is rejected. |
+| `TALLI_REPLY_TO` | optional | Defaults to `talli.parking@gmail.com`. Where a customer's reply lands — the confirmation email tells them to reply with a changed licence plate, so this needs to be somewhere read. |
+
+Supabase edge-function secrets are **write-only**: the dashboard will
+replace a value but never show you one. So the only way to read
+`SITE_URL` back is **Check payment setup** on the gate screen, which is
+why that check now judges the host rather than the punctuation.
+
+### The confirmation email
+
+Sent by `stripe-webhook` once a booking reaches `paid`, and never by
+anything else. Three properties, all of them about not making a paid
+booking worse:
+
+- **It cannot fail the webhook.** Stripe is being told whether the
+  payment is recorded, not whether the mail went. A throw here would
+  make Stripe retry a booking that is already confirmed.
+- **It cannot send twice.** Stripe re-delivers. The send is claimed in
+  the database first — `booking.confirmation_email_sent_at` is set only
+  where it is still null, and losing that race means another delivery
+  already owns the send.
+- **A failure is visible.** The claim is released and the reason is
+  written to the booking's notes, where the gate screen shows it, rather
+  than only into a log nobody reads.
+
+Gate sales are not emailed. The customer is standing in the driveway.
+
+**Before this works at all, someone has to:** create the Resend account,
+verify the sending domain (`talli.co.nz`) with the DNS records Resend
+asks for, and put `RESEND_API_KEY` on both Supabase projects — a test
+key on `uhdoverwvlxvyyctskle`, the live one on `oxzwfemyavznykqixhvk`.
+Until that happens the code is a no-op, which is the safe state.
+
 ---
 
 ## 10. Where does the domain point?

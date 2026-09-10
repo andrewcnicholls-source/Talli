@@ -239,6 +239,202 @@ else
 fi
 
 # ---------------------------------------------------------------------
+head "Stripe returns the customer to a site that talks to this project"
+# ---------------------------------------------------------------------
+# On 8 September 2026 the first real customer paid on talli.co.nz and was
+# returned to the staging site: SITE_URL on the production project had been
+# set by hand to the staging address. The confirmation page there reads the
+# TEST database, so it could not find the booking they had just paid for.
+#
+# create-checkout now takes the return address from the Origin the browser
+# started checkout from, and falls back to SITE_URL only when that address
+# is one this project is allowed to return anyone to. Two things have to
+# hold for that to keep working, and each is one careless edit from gone:
+#
+#   the host lists agree     three files name the production hosts
+#   the decision is right    production never returns anyone to a test host
+#
+# The second is not grepped. The real functions are lifted out of the real
+# source and run against a table of cases, so a rewrite that keeps the
+# shape but loses the rule fails here rather than at a customer.
+if command -v python3 >/dev/null 2>&1; then
+  gen=$(mktemp -d)
+  results=$(python3 - "$gen" <<'PY'
+import io, re, sys
+
+gen = sys.argv[1]
+out = []
+def ok(m):  out.append('OK ' + m)
+def bad(m): out.append('BAD ' + m)
+
+FILES = {
+    'assets/talli-config.js': 'the browser environment switch',
+    'supabase/functions/create-checkout/index.ts': 'the function that builds the return URL',
+    'supabase/functions/check-setup/index.ts': 'the screen that reports it',
+}
+
+# --- 1. the three host lists must agree -----------------------------
+lists, source = {}, {}
+for path, what in FILES.items():
+    try:
+        text = io.open(path, encoding='utf-8').read()
+    except OSError:
+        bad('%s is missing — %s' % (path, what))
+        continue
+    source[path] = text
+    m = re.search(r'PRODUCTION_HOSTS\s*=\s*\[(.*?)\]', text, re.S)
+    if not m:
+        bad('%s no longer declares PRODUCTION_HOSTS — %s' % (path, what))
+        continue
+    lists[path] = sorted(set(re.findall(r"['\"]([^'\"]+)['\"]", m.group(1))))
+
+if len(lists) == len(FILES):
+    distinct = {tuple(v) for v in lists.values()}
+    if len(distinct) == 1:
+        ok('all three files name the same production hosts: '
+           + ', '.join(next(iter(distinct))))
+    else:
+        bad('the production host lists have drifted apart: '
+            + '; '.join('%s = %s' % (p, v) for p, v in lists.items()))
+
+# --- 2. the decision itself -----------------------------------------
+cc = source.get('supabase/functions/create-checkout/index.ts', '')
+
+def grab(name):
+    i = cc.find('function %s(' % name)
+    if i < 0:
+        return None
+    depth, j, started = 0, i, False
+    while j < len(cc):
+        if cc[j] == '{':
+            depth += 1
+            started = True
+        elif cc[j] == '}':
+            depth -= 1
+            if started and depth == 0:
+                return cc[i:j + 1]
+        j += 1
+    return None
+
+bodies = {n: grab(n) for n in ('returnBase', 'siteUrlFor')}
+gone = [n for n, b in bodies.items() if not b]
+hosts_decl = re.search(r'const PRODUCTION_HOSTS = \[[^\]]*\]', cc)
+
+if gone or not hosts_decl:
+    bad('create-checkout no longer defines '
+        + ', '.join(gone + ([] if hosts_decl else ['PRODUCTION_HOSTS']))
+        + ' — the return address is decided somewhere else now and this check '
+          'cannot see it. Re-point the check, or restore the functions.')
+else:
+    # Node runs the real bodies, so only the type annotations come off.
+    def strip_types(js):
+        def sig(m):
+            name, args = m.group(1), m.group(2)
+            args = ', '.join(a.split(':')[0].strip()
+                             for a in args.split(',') if a.strip())
+            return 'function %s(%s) {' % (name, args)
+        js = re.sub(r'function (\w+)\(([^)]*)\)\s*:\s*[^{]+\{', sig, js)
+        return re.sub(r'^(\s*let \w+):\s*\w+\s*$', r'\1', js, flags=re.M)
+
+    CASES = r"""
+
+// env, Origin the browser sent, SITE_URL secret, where the customer must land
+const cases = [
+  // Production. The customer paid real money on the real site.
+  ['prod', 'https://talli.co.nz',             '',                                'https://talli.co.nz'],
+  ['prod', 'https://www.talli.co.nz',         '',                                'https://www.talli.co.nz'],
+  // 8 Sep 2026: the secret pointed at staging. The Origin must override it.
+  ['prod', 'https://talli.co.nz',             'https://staging.talli.pages.dev', 'https://talli.co.nz'],
+  // No Origin and a wrong secret: the default still has to be production.
+  ['prod', '',                                'https://staging.talli.pages.dev', 'https://talli.co.nz'],
+  ['prod', '',                                '',                                'https://talli.co.nz'],
+  ['prod', '',                                'https://talli.co.nz/',            'https://talli.co.nz'],
+  // Nobody gets to nominate their own return address.
+  ['prod', 'https://evil.example.com',        '',                                'https://talli.co.nz'],
+  ['prod', 'http://talli.co.nz',              '',                                'https://talli.co.nz'],
+  // Test. Previews and a local checkout are legitimate here.
+  ['test', 'https://staging.talli.pages.dev', '',                                'https://staging.talli.pages.dev'],
+  ['test', 'https://abc123.talli.pages.dev',  '',                                'https://abc123.talli.pages.dev'],
+  ['test', 'http://localhost:8080',           '',                                'http://localhost:8080'],
+  // And the mirror of the original fault: a test booking must never be
+  // sent to the live site, where the page would query production for it.
+  ['test', 'https://talli.co.nz',             '',                                'https://staging.talli.pages.dev'],
+  ['test', '',                                'https://talli.co.nz',             'https://staging.talli.pages.dev'],
+  ['test', 'https://evil.example.com',        '',                                'https://staging.talli.pages.dev'],
+]
+
+// The functions log to stderr when they reject a SITE_URL, which several of
+// these cases do on purpose. Quiet during the run so the output stays the
+// verdict rather than the noise.
+const quiet = console.error
+console.error = () => {}
+const failures = []
+for (const [env, origin, secret, expected] of cases) {
+  IS_TEST = env === 'test'
+  DEFAULT_SITE_URL = IS_TEST ? 'https://staging.talli.pages.dev' : 'https://talli.co.nz'
+  CONFIGURED_SITE_URL = secret
+  const headers = new Headers()
+  if (origin) headers.set('Origin', origin)
+  const got = siteUrlFor(new Request('https://fn.example/x', { method: 'POST', headers }))
+  if (got !== expected) {
+    failures.push(`${env}: Origin ${origin || '(none)'} + SITE_URL ${secret || '(unset)'} ` +
+                  `returned ${got}, expected ${expected}`)
+  }
+}
+console.error = quiet
+if (failures.length) {
+  console.log('BAD the return address is decided wrongly: ' + failures.join('; '))
+  process.exit(1)
+}
+console.log('OK production never returns a customer to a test site, and the test project never to the live one (' + cases.length + ' cases)')
+"""
+
+    io.open(gen + '/return-address.mjs', 'w', encoding='utf-8').write(
+        'let IS_TEST = false\n'
+        'let CONFIGURED_SITE_URL = ""\n'
+        'let DEFAULT_SITE_URL = ""\n'
+        + hosts_decl.group(0) + '\n\n'
+        + strip_types(bodies['returnBase']) + '\n\n'
+        + strip_types(bodies['siteUrlFor']) + '\n\n'
+        + CASES)
+    ok('the return-address functions are still where this check can run them')
+
+print('\n'.join(out))
+PY
+)
+  while IFS= read -r line; do
+    case "$line" in
+      'OK '*)  pass "${line#OK }" ;;
+      'BAD '*) fail "${line#BAD }" ;;
+    esac
+  done <<< "$results"
+
+  if [ -f "$gen/return-address.mjs" ]; then
+    if ! command -v node >/dev/null 2>&1; then
+      skip "node not installed — the return-address rules are NOT exercised"
+    elif err=$(node --check "$gen/return-address.mjs" 2>&1); then
+      run=$(node "$gen/return-address.mjs" 2>&1)
+      while IFS= read -r line; do
+        case "$line" in
+          'OK '*)  pass "${line#OK }" ;;
+          'BAD '*) fail "${line#BAD }" ;;
+          *)       [ -n "$line" ] && printf '      %s\n' "$line" ;;
+        esac
+      done <<< "$run"
+    else
+      # Loud on purpose. Skipping quietly here would turn the one check that
+      # proves the rule into a check that proves nothing.
+      fail "could not run the return-address rules — the extraction needs updating"
+      printf '      %s\n' "$err"
+    fi
+  fi
+
+  rm -rf "$gen"
+else
+  skip "python3 not installed — cannot check the return address"
+fi
+
+# ---------------------------------------------------------------------
 head "Production build stays a no-op"
 # ---------------------------------------------------------------------
 # scripts/build.sh runs on every Cloudflare Pages build, production
