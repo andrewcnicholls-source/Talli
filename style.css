@@ -15,6 +15,13 @@
   --grey: #7A7A74;
   --orange-flag: #B5502E; /* used once, only for the return-promptly notice */
 
+  /* Parking tiers, used wherever a tier has to be picked out at a glance:
+     the chip on a gate row and the arrivals split under the headline. */
+  --tier-red: #B3261E;
+  --tier-red-tint: #FCEEEC;
+  --tier-purple: #5B3A97;
+  --tier-purple-tint: #F2EEFA;
+
 --display: 'Poiret One', sans-serif;
   --body: 'Jost', 'Work Sans', Arial, sans-serif;
 }
@@ -908,6 +915,62 @@ footer a { color: var(--blue); }
   margin-top: 3px;
 }
 
+/* ---------- Arrivals split ---------- */
+/* The headline says 6/10 in. It does not say which four you are still
+   standing there waiting for, and the answer changes what you do: four
+   Standard is a queue that will sort itself out, four Valet is four sets of
+   keys and four drivers you have to find room for. Sits directly under the
+   headline because it is read in the same glance. */
+.ad-split {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  background: var(--white);
+  border-bottom: 1px solid var(--line);
+  padding: 10px 12px;
+}
+.ad-split-item {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  flex: 1 1 auto;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: var(--offwhite);
+  padding: 5px 9px;
+}
+.ad-split-num {
+  font-family: var(--display);
+  font-size: 1.05rem;
+  line-height: 1;
+  color: var(--blue-deep);
+}
+.ad-split-key {
+  font-size: 0.66rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--grey);
+}
+/* Same two colours as the chips on the rows, for the same reason. */
+.ad-split-item.is-tier-priority {
+  background: var(--tier-red-tint);
+  border-color: #EFC9C7;
+}
+.ad-split-item.is-tier-priority .ad-split-num,
+.ad-split-item.is-tier-priority .ad-split-key { color: var(--tier-red); }
+.ad-split-item.is-tier-valet {
+  background: var(--tier-purple-tint);
+  border-color: #D9CEEC;
+}
+.ad-split-item.is-tier-valet .ad-split-num,
+.ad-split-item.is-tier-valet .ad-split-key { color: var(--tier-purple); }
+/* Everyone in for this tier — nothing left to wait for. */
+.ad-split-item.is-done .ad-split-num::after {
+  content: ' ✓';
+  font-size: 0.7em;
+}
+
 .ad-holds {
   background: #FBF3E4;
   color: #8A5A12;
@@ -1024,6 +1087,17 @@ footer a { color: var(--blue); }
    has gone wrong. It still has to be picked out of a list at night, so it
    carries a fill rather than sitting in the plain-chip grey. */
 .ad-chip.is-low { color: var(--blue-deep); background: var(--blue-tint); border-color: #CBD8E8; }
+
+/* The tier is the one thing on a row you look for before you have read the
+   plate: a Valet car wants a set of keys taken off the driver, a Priority car
+   wants waving through, and at night in a queue that decision is made on
+   colour. Standard stays plain grey — it is the default, and colouring
+   everything colours nothing.
+
+   The reds here are deliberately not --test-red: that one means "this is not
+   the live site" and must not start meaning "priority" as well. */
+.ad-chip.is-tier-priority { color: var(--tier-red); background: var(--tier-red-tint); border-color: #EFC9C7; }
+.ad-chip.is-tier-valet { color: var(--tier-purple); background: var(--tier-purple-tint); border-color: #D9CEEC; }
 
 .ad-row-actions {
   flex: none;

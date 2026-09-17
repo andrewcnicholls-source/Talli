@@ -261,6 +261,7 @@
 
   function renderAll() {
     renderStats();
+    renderSplit();
     renderList();
     renderStatus();
     renderBoard();
@@ -295,6 +296,61 @@
     } else {
       hide(holds);
     }
+  }
+
+  // The tier as a class, so a Priority row and the Priority tally are the
+  // same colour without either of them naming it.
+  function tierClass(code) {
+    return code ? ' is-tier-' + String(code).replace(/[^a-z0-9]+/gi, '-').toLowerCase() : '';
+  }
+
+  // Arrived over booked, per tier. The headline already says 6/10; what it
+  // cannot say is that the four still out are all Valet, which is the
+  // difference between a queue that clears itself and four sets of keys
+  // arriving at once. Counted off the rows rather than asked of the server,
+  // so it stays true between refreshes and always adds up to the headline —
+  // unpaid holds included, exactly as the headline counts them.
+  function renderSplit() {
+    var wrap = el('ad-split');
+    wrap.innerHTML = '';
+
+    var seen = {};
+    var codes = [];
+    state.rows.forEach(function (r) {
+      var code = r.tier_code || 'other';
+      if (!seen[code]) { seen[code] = { arrived: 0, total: 0 }; codes.push(code); }
+      seen[code].total += 1;
+      if (r.arrived) seen[code].arrived += 1;
+    });
+
+    if (!codes.length) {
+      hide(wrap);
+      return;
+    }
+
+    // Gate order, same as everywhere else. Anything the fixture sells that
+    // the running order does not name falls in behind, alphabetically.
+    codes.sort(function (a, b) {
+      var ai = GATE_ORDER.indexOf(a);
+      var bi = GATE_ORDER.indexOf(b);
+      if (ai === -1 && bi === -1) return a.localeCompare(b);
+      if (ai === -1) return 1;
+      if (bi === -1) return -1;
+      return ai - bi;
+    });
+
+    codes.forEach(function (code) {
+      var n = seen[code];
+      var done = n.arrived === n.total;
+      var item = make('div', 'ad-split-item' + tierClass(code) + (done ? ' is-done' : ''));
+      item.appendChild(make('span', 'ad-split-num', n.arrived + '/' + n.total));
+      item.appendChild(make('span', 'ad-split-key', code.replace(/_/g, ' ')));
+      item.title = n.arrived + ' of ' + n.total + ' ' + code.replace(/_/g, ' ') +
+        ' in' + (done ? '' : ', ' + (n.total - n.arrived) + ' still to come');
+      wrap.appendChild(item);
+    });
+
+    show(wrap);
   }
 
   /* --------------------------------------------------------- the list */
@@ -339,7 +395,10 @@
     if (who) main.appendChild(make('div', 'ad-who', who));
 
     var meta = make('div', 'ad-meta');
-    if (r.tier_code) meta.appendChild(make('span', 'ad-chip', r.tier_code.replace(/_/g, ' ')));
+    if (r.tier_code) {
+      meta.appendChild(make('span', 'ad-chip' + tierClass(r.tier_code),
+        r.tier_code.replace(/_/g, ' ')));
+    }
     if (r.arrival_from && r.arrival_until) {
       meta.appendChild(make('span', 'ad-chip', asTime(r.arrival_from) + '–' + asTime(r.arrival_until)));
     }
