@@ -369,7 +369,7 @@ or a Supabase service-role JWT is committed.
 | `GATE_PASSPHRASE` | both | Guards the gate screen and **Check payment setup**. The test project falls back to `talli-test`; production has no fallback. |
 | `RESEND_API_KEY` | both | Sends the booking confirmation email. **Absent, no email is sent and nothing fails** — the webhook logs it and moves on, which is deliberate, because a mail outage must never turn into a failed booking. |
 | `TALLI_FROM_EMAIL` | optional | Defaults to `Talli Parking <bookings@talli.co.nz>`. The domain has to be verified in Resend or the send is rejected. |
-| `TALLI_REPLY_TO` | optional | Defaults to `talli.parking@gmail.com`. Where a customer's reply lands — the confirmation email tells them to reply with a changed licence plate, so this needs to be somewhere read. |
+| `TALLI_REPLY_TO` | optional | Defaults to `bookings@talli.co.nz`, the same address the site now shows everywhere. Where a customer's reply lands — the confirmation email tells them to reply with a changed licence plate, so this needs to be somewhere read. Receiving is Resend inbound, forwarded into Gmail; a **set** secret still wins, so check whether either project carries an older value. |
 
 Supabase edge-function secrets are **write-only**: the dashboard will
 replace a value but never show you one. So the only way to read
@@ -415,6 +415,14 @@ The whole zone is two records, and **no mail runs on this domain** — no
 MX, no SPF, no DKIM, no DMARC. That is the fact that makes the
 nameserver change cheap. Confirm it is still true before moving; the
 usual way this goes wrong is a record nobody remembered.
+
+> **No longer true, and that is fine.** `bookings@talli.co.nz` now both
+> sends and receives, through Resend, forwarded into Gmail — so the zone
+> carries mail records today. The paragraph above describes the state at
+> the time of the nameserver move and is kept because it is the reason
+> that move was cheap. Anyone exporting the zone now is exporting mail
+> records too, and a rollback that drops them takes the booking address
+> with it.
 
 Before the migration:
 

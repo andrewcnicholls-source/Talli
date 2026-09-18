@@ -97,7 +97,7 @@ const TZ = 'Pacific/Auckland'
 
 const FROM_EMAIL = Deno.env.get('TALLI_FROM_EMAIL') ??
   'Talli Parking <bookings@talli.co.nz>'
-const REPLY_TO = Deno.env.get('TALLI_REPLY_TO') ?? 'talli.parking@gmail.com'
+const REPLY_TO = Deno.env.get('TALLI_REPLY_TO') ?? 'bookings@talli.co.nz'
 
 const money = (cents: number) =>
   '$' + (cents % 100 === 0 ? (cents / 100).toFixed(0) : (cents / 100).toFixed(2))
