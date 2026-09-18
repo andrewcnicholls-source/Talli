@@ -1019,6 +1019,53 @@ footer a { color: var(--blue); }
 .ad-list { padding: 0 16px 24px; }
 .ad-list[aria-busy="true"] { opacity: 0.5; }
 
+/* ---------- Tier sections in the arrivals list ---------- */
+/* Sticky, because the point of grouping is knowing which block you are in
+   halfway down it. Kept light: it is a divider, not a card — the rows under
+   it are what gets tapped. */
+.ad-group {
+  position: sticky;
+  /* Under the search bar, which is itself parked under the header. Both are
+     measured at runtime for the same reason. */
+  top: calc(var(--ad-head-h, 150px) + var(--ad-tools-h, 72px));
+  z-index: 5;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 18px -16px 8px;
+  padding: 7px 16px;
+  background: var(--offwhite);
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.ad-list > .ad-group:first-child { margin-top: 4px; }
+.ad-group-name {
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--grey);
+}
+.ad-group-count {
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  color: var(--grey);
+  font-variant-numeric: tabular-nums;
+}
+/* The same two colours as the chips and the tallies above. */
+.ad-group.is-tier-priority {
+  background: var(--tier-red-tint);
+  border-color: #EFC9C7;
+}
+.ad-group.is-tier-priority .ad-group-name,
+.ad-group.is-tier-priority .ad-group-count { color: var(--tier-red); }
+.ad-group.is-tier-valet {
+  background: var(--tier-purple-tint);
+  border-color: #D9CEEC;
+}
+.ad-group.is-tier-valet .ad-group-name,
+.ad-group.is-tier-valet .ad-group-count { color: var(--tier-purple); }
+
 .ad-empty {
   color: var(--grey);
   font-size: 0.92rem;

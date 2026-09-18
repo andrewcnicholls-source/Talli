@@ -26,6 +26,13 @@
   // form still has to come up on Standard.
   var GATE_ORDER = CFG.gateTierOrder || ['standard', 'priority', 'valet'];
 
+  // The order the arrivals side reads in, which is not the order you sell in.
+  // Selling goes cheapest first — hold the quick exits back. Working the gate
+  // goes the other way: Priority and Valet are the cars that need something
+  // done to them the moment they appear, so they come first and Standard,
+  // which mostly just parks itself, comes last.
+  var ARRIVAL_ORDER = CFG.arrivalTierOrder || ['priority', 'valet', 'standard'];
+
   var state = {
     pass: sessionStorage.getItem(KEY) || '',
     events: [],
@@ -304,6 +311,36 @@
     return code ? ' is-tier-' + String(code).replace(/[^a-z0-9]+/gi, '-').toLowerCase() : '';
   }
 
+  // Where a tier sits in the arrivals running order. Anything the fixture
+  // sells that the order does not name falls in behind, alphabetically.
+  function byArrivalOrder(a, b) {
+    var ai = ARRIVAL_ORDER.indexOf(a);
+    var bi = ARRIVAL_ORDER.indexOf(b);
+    if (ai === -1 && bi === -1) return a.localeCompare(b);
+    if (ai === -1) return 1;
+    if (bi === -1) return -1;
+    return ai - bi;
+  }
+
+  // Bookings in tier order, each tier's rows left in the order the server
+  // sent them — not arrived first, then earliest arrival window. Grouping
+  // reorders the sections, never the queue inside one.
+  function byTier(rows) {
+    var seen = {};
+    var groups = [];
+    rows.forEach(function (r) {
+      var code = r.tier_code || 'other';
+      if (!seen[code]) {
+        seen[code] = { code: code, rows: [], arrived: 0 };
+        groups.push(seen[code]);
+      }
+      seen[code].rows.push(r);
+      if (r.arrived) seen[code].arrived += 1;
+    });
+    groups.sort(function (x, y) { return byArrivalOrder(x.code, y.code); });
+    return groups;
+  }
+
   // Arrived over booked, per tier. The headline already says 6/10; what it
   // cannot say is that the four still out are all Valet, which is the
   // difference between a queue that clears itself and four sets of keys
@@ -328,16 +365,9 @@
       return;
     }
 
-    // Gate order, same as everywhere else. Anything the fixture sells that
-    // the running order does not name falls in behind, alphabetically.
-    codes.sort(function (a, b) {
-      var ai = GATE_ORDER.indexOf(a);
-      var bi = GATE_ORDER.indexOf(b);
-      if (ai === -1 && bi === -1) return a.localeCompare(b);
-      if (ai === -1) return 1;
-      if (bi === -1) return -1;
-      return ai - bi;
-    });
+    // Left to right in the order the list below is grouped, so the chip and
+    // the section it summarises are never in different places.
+    codes.sort(byArrivalOrder);
 
     codes.forEach(function (code) {
       var n = seen[code];
@@ -374,7 +404,22 @@
       return;
     }
 
-    rows.forEach(function (r) { list.appendChild(rowCard(r)); });
+    // One section per tier. The heading repeats the chip's count on purpose:
+    // by the time you have scrolled to the Standard block the chips are off
+    // the top of the screen, and "2/7 in" is the thing you came down here to
+    // check.
+    byTier(rows).forEach(function (g) {
+      list.appendChild(groupHead(g));
+      g.rows.forEach(function (r) { list.appendChild(rowCard(r)); });
+    });
+  }
+
+  function groupHead(g) {
+    var head = make('div', 'ad-group' + tierClass(g.code));
+    head.appendChild(make('span', 'ad-group-name', g.code.replace(/_/g, ' ')));
+    head.appendChild(make('span', 'ad-group-count',
+      g.arrived + '/' + g.rows.length + ' in'));
+    return head;
   }
 
   function rowCard(r) {
@@ -1600,11 +1645,19 @@
   // The sticky search bar has to sit directly under the header, whose height
   // depends on the safe-area inset and the length of the event name. Measure
   // it rather than hard-coding a number that is wrong on half the phones.
+  // The tier headings then park under the search bar, so measure that too —
+  // its height moves with the font size the phone is set to.
   function measureHead() {
     var head = el('ad-head') || document.querySelector('.ad-head');
-    if (!head) return;
-    document.documentElement.style.setProperty(
-      '--ad-head-h', head.offsetHeight + 'px');
+    if (head) {
+      document.documentElement.style.setProperty(
+        '--ad-head-h', head.offsetHeight + 'px');
+    }
+    var tools = document.querySelector('#ad-pane-gate .ad-tools');
+    if (tools) {
+      document.documentElement.style.setProperty(
+        '--ad-tools-h', tools.offsetHeight + 'px');
+    }
   }
 
   /* ---------------------------------------------------------------- tabs */
