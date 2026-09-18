@@ -28,18 +28,20 @@ that link changes, and every card in the box goes in the bin with it.
 `review.html` is `noindex`, so it stays out of Google's index and out of
 `sitemap.xml` — `scripts/check.sh` enforces the pairing.
 
-## Setting the destination — the one thing still to do
+## Changing the destination
 
-`review.html` has a single empty constant near the bottom:
+`review.html` has a single constant near the bottom, and it is the only
+thing that decides where a scanned card ends up:
 
 ```js
-var GOOGLE_REVIEW_URL = '';
+var GOOGLE_REVIEW_URL = 'https://g.page/r/CW5D_AL_8pSwECE/review';
 ```
 
-Until it is filled in, `/review` shows a short "search us in Google Maps"
-fallback instead of forwarding anywhere. Fill it in **before printing**.
+Empty it and `/review` stops forwarding, showing its "search us in Google
+Maps" fallback instead — which is also what a phone with JavaScript off
+sees, so the page is never a dead end.
 
-### Getting the link
+### Getting the link again
 
 Signed in to the Google account that owns the Talli Business Profile:
 
@@ -62,14 +64,6 @@ https://search.google.com/local/writereview?placeid=ChIJ…
 ```
 
 Either form works in the same constant.
-
-### If there is no Business Profile yet
-
-There is nothing to review against until one exists and is verified —
-create it at [google.com/business](https://www.google.com/business/).
-Verification is usually a postcard or a video call and takes a few days.
-The cards can be printed in the meantime; `/review` will start forwarding
-the moment the link is set.
 
 ## Printing
 

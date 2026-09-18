@@ -34,11 +34,14 @@
     </a>
   </div>
 
-  <!-- Shown only while GOOGLE_REVIEW_URL below is still empty, so a card
-       printed early lands on something sensible rather than a dead end. -->
-  <div class="box" id="review-pending">
-    <h3>Our review link isn't live yet</h3>
-    <p>Search <strong>Talli Parking, Sandringham</strong> in Google Maps and leave a review there — or email us and we'll pass it on.</p>
+  <!-- The state this page is in before the script runs, and the state it
+       stays in if the script cannot run at all: no JavaScript, a blocked
+       redirect, or GOOGLE_REVIEW_URL emptied out. Worded to be true in
+       every one of those, since a QR code gets scanned on whatever phone
+       the customer happens to have. -->
+  <div class="box" id="review-fallback">
+    <h3>If Google didn't open</h3>
+    <p>Search <strong>Talli Parking, Sandringham</strong> in Google Maps and leave the review there — or email it to us and we'll be just as glad to get it.</p>
     <p><a href="mailto:talli.parking@gmail.com">talli.parking@gmail.com</a></p>
   </div>
 
@@ -62,26 +65,27 @@
   /* ===================================================================
      THE ONE LINE TO EDIT.
 
-     Paste the review link from your Google Business Profile between the
-     quotes — profile → Ask for reviews, which gives a link shaped like
+     The review link from the Talli Google Business Profile — profile →
+     Ask for reviews, which gives a link shaped like
      https://g.page/r/XXXXXXXXXXXX/review
 
      A Place ID works too, as:
      https://search.google.com/local/writereview?placeid=ChIJ...
 
-     Leave it empty and this page shows the fallback above instead of
-     sending anyone to a broken link. The printed QR codes point at
-     /review, never at Google directly, so changing this line is the
-     whole job — nothing has to be reprinted.
+     Empty it and this page shows the fallback above instead of sending
+     anyone to a broken link. The printed QR codes point at /review,
+     never at Google directly, so changing this line is the whole job —
+     nothing has to be reprinted.
      =================================================================== */
-  var GOOGLE_REVIEW_URL = '';
+  var GOOGLE_REVIEW_URL = 'https://g.page/r/CW5D_AL_8pSwECE/review';
 
   if (!GOOGLE_REVIEW_URL) return;
 
-  var link = document.getElementById('review-link');
-  link.href = GOOGLE_REVIEW_URL;
+  /* The button is revealed before the redirect, not instead of it: if a
+     browser refuses the automatic hop — some in-app browsers do — the
+     customer is left looking at something they can tap. */
+  document.getElementById('review-link').href = GOOGLE_REVIEW_URL;
   document.getElementById('review-action').hidden = false;
-  document.getElementById('review-pending').hidden = true;
 
   /* Straight through to Google. replace() rather than assign() so the
      back button returns them to wherever they came from, not to this
