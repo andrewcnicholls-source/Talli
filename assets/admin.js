@@ -540,9 +540,17 @@
     btn.disabled = true;
 
     call(action, { booking_id: r.booking_id })
-      .then(function () {
+      .then(function (data) {
         r.arrived = !r.arrived;
-        toast((r.vehicle_rego || 'Booking') + (r.arrived ? ' ticked in' : ' un-ticked'), 'good');
+        var who = r.vehicle_rego || 'Booking';
+        // Ticking in is also when the space is chosen, so the toast says
+        // where to send them. It is the one thing wanted in that second,
+        // and the row underneath has just moved.
+        if (r.arrived && data && data.bay_label) {
+          toast(who + ' → ' + data.bay_label, 'good');
+        } else {
+          toast(who + (r.arrived ? ' ticked in' : ' un-ticked'), 'good');
+        }
         return loadList(true);
       })
       .catch(function (err) { toast(err.message, 'bad'); })
