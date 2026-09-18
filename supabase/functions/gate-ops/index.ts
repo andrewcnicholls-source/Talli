@@ -334,12 +334,23 @@ Deno.serve(async (req) => {
         return json({ ok: true, status: data })
       }
 
+      // Ticking a car in is also when its space is chosen, so hand the bay
+      // back: the marshal is standing at the window and needs to say where
+      // to go, not go looking for it on a row that has just re-sorted.
       case 'check_in': {
         const id = String(body.booking_id ?? '')
         if (!id) return json({ error: 'booking_id is required' }, 400)
         const { error } = await db.rpc('check_in_booking', { p_booking_id: id })
         if (error) throw error
-        return json({ ok: true })
+
+        const { data: placed } = await db
+          .from('bay_allocation')
+          .select('bay:bay_id (label)')
+          .eq('booking_id', id)
+          .eq('role', 'occupied')
+          .maybeSingle()
+
+        return json({ ok: true, bay_label: (placed as Row | null)?.bay?.label ?? null })
       }
 
       // Mis-taps happen, and happen most when it is busy.
