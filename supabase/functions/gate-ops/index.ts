@@ -343,14 +343,16 @@ Deno.serve(async (req) => {
         const { error } = await db.rpc('check_in_booking', { p_booking_id: id })
         if (error) throw error
 
+        // Read it back off the same view the list is drawn from, rather
+        // than joining bay through bay_allocation here. One less shape to
+        // be wrong about, and it is the label the row will show anyway.
         const { data: placed } = await db
-          .from('bay_allocation')
-          .select('bay:bay_id (label)')
+          .from('v_gate_list')
+          .select('bay_label')
           .eq('booking_id', id)
-          .eq('role', 'occupied')
           .maybeSingle()
 
-        return json({ ok: true, bay_label: (placed as Row | null)?.bay?.label ?? null })
+        return json({ ok: true, bay_label: placed?.bay_label ?? null })
       }
 
       // Mis-taps happen, and happen most when it is busy.
