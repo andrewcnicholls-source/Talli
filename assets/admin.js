@@ -26,6 +26,13 @@
   // form still has to come up on Standard.
   var GATE_ORDER = CFG.gateTierOrder || ['standard', 'priority', 'valet'];
 
+  // The order the arrivals side reads in, which is not the order you sell in.
+  // Selling goes cheapest first — hold the quick exits back. Working the gate
+  // goes the other way: Priority and Valet are the cars that need something
+  // done to them the moment they appear, so they come first and Standard,
+  // which mostly just parks itself, comes last.
+  var ARRIVAL_ORDER = CFG.arrivalTierOrder || ['priority', 'valet', 'standard'];
+
   var state = {
     pass: sessionStorage.getItem(KEY) || '',
     events: [],
@@ -261,6 +268,7 @@
 
   function renderAll() {
     renderStats();
+    renderSplit();
     renderList();
     renderStatus();
     renderBoard();
@@ -297,6 +305,84 @@
     }
   }
 
+  // The tier as a class, so a Priority row and the Priority tally are the
+  // same colour without either of them naming it.
+  function tierClass(code) {
+    return code ? ' is-tier-' + String(code).replace(/[^a-z0-9]+/gi, '-').toLowerCase() : '';
+  }
+
+  // Where a tier sits in the arrivals running order. Anything the fixture
+  // sells that the order does not name falls in behind, alphabetically.
+  function byArrivalOrder(a, b) {
+    var ai = ARRIVAL_ORDER.indexOf(a);
+    var bi = ARRIVAL_ORDER.indexOf(b);
+    if (ai === -1 && bi === -1) return a.localeCompare(b);
+    if (ai === -1) return 1;
+    if (bi === -1) return -1;
+    return ai - bi;
+  }
+
+  // Bookings in tier order, each tier's rows left in the order the server
+  // sent them — not arrived first, then earliest arrival window. Grouping
+  // reorders the sections, never the queue inside one.
+  function byTier(rows) {
+    var seen = {};
+    var groups = [];
+    rows.forEach(function (r) {
+      var code = r.tier_code || 'other';
+      if (!seen[code]) {
+        seen[code] = { code: code, rows: [], arrived: 0 };
+        groups.push(seen[code]);
+      }
+      seen[code].rows.push(r);
+      if (r.arrived) seen[code].arrived += 1;
+    });
+    groups.sort(function (x, y) { return byArrivalOrder(x.code, y.code); });
+    return groups;
+  }
+
+  // Arrived over booked, per tier. The headline already says 6/10; what it
+  // cannot say is that the four still out are all Valet, which is the
+  // difference between a queue that clears itself and four sets of keys
+  // arriving at once. Counted off the rows rather than asked of the server,
+  // so it stays true between refreshes and always adds up to the headline —
+  // unpaid holds included, exactly as the headline counts them.
+  function renderSplit() {
+    var wrap = el('ad-split');
+    wrap.innerHTML = '';
+
+    var seen = {};
+    var codes = [];
+    state.rows.forEach(function (r) {
+      var code = r.tier_code || 'other';
+      if (!seen[code]) { seen[code] = { arrived: 0, total: 0 }; codes.push(code); }
+      seen[code].total += 1;
+      if (r.arrived) seen[code].arrived += 1;
+    });
+
+    if (!codes.length) {
+      hide(wrap);
+      return;
+    }
+
+    // Left to right in the order the list below is grouped, so the chip and
+    // the section it summarises are never in different places.
+    codes.sort(byArrivalOrder);
+
+    codes.forEach(function (code) {
+      var n = seen[code];
+      var done = n.arrived === n.total;
+      var item = make('div', 'ad-split-item' + tierClass(code) + (done ? ' is-done' : ''));
+      item.appendChild(make('span', 'ad-split-num', n.arrived + '/' + n.total));
+      item.appendChild(make('span', 'ad-split-key', code.replace(/_/g, ' ')));
+      item.title = n.arrived + ' of ' + n.total + ' ' + code.replace(/_/g, ' ') +
+        ' in' + (done ? '' : ', ' + (n.total - n.arrived) + ' still to come');
+      wrap.appendChild(item);
+    });
+
+    show(wrap);
+  }
+
   /* --------------------------------------------------------- the list */
 
   function matches(row) {
@@ -318,7 +404,22 @@
       return;
     }
 
-    rows.forEach(function (r) { list.appendChild(rowCard(r)); });
+    // One section per tier. The heading repeats the chip's count on purpose:
+    // by the time you have scrolled to the Standard block the chips are off
+    // the top of the screen, and "2/7 in" is the thing you came down here to
+    // check.
+    byTier(rows).forEach(function (g) {
+      list.appendChild(groupHead(g));
+      g.rows.forEach(function (r) { list.appendChild(rowCard(r)); });
+    });
+  }
+
+  function groupHead(g) {
+    var head = make('div', 'ad-group' + tierClass(g.code));
+    head.appendChild(make('span', 'ad-group-name', g.code.replace(/_/g, ' ')));
+    head.appendChild(make('span', 'ad-group-count',
+      g.arrived + '/' + g.rows.length + ' in'));
+    return head;
   }
 
   function rowCard(r) {
@@ -339,7 +440,10 @@
     if (who) main.appendChild(make('div', 'ad-who', who));
 
     var meta = make('div', 'ad-meta');
-    if (r.tier_code) meta.appendChild(make('span', 'ad-chip', r.tier_code.replace(/_/g, ' ')));
+    if (r.tier_code) {
+      meta.appendChild(make('span', 'ad-chip' + tierClass(r.tier_code),
+        r.tier_code.replace(/_/g, ' ')));
+    }
     if (r.arrival_from && r.arrival_until) {
       meta.appendChild(make('span', 'ad-chip', asTime(r.arrival_from) + '–' + asTime(r.arrival_until)));
     }
@@ -494,7 +598,6 @@
       var notes = [];
       if (z.lost) notes.push(z.lost + ' lost');
       if (z.opened) notes.push(z.opened + ' extra');
-      if (z.gate_reserve) notes.push(z.gate_reserve + ' held for walk-ups');
       if (!z.reservable_in_advance) notes.push('gate only');
       notes.push(z.spare_left + ' spare' + (z.spare_left === 1 ? '' : 's') + ' in reserve');
       card.appendChild(make('div', 'ad-zone-note', notes.join(' · ')));
@@ -560,6 +663,15 @@
           ? 'Marked sold out'
           : t.spots_left_gate + ' left at the gate · ' + t.spots_left + ' online'));
 
+      // The one case where those two numbers disagree for a reason nobody
+      // can see: there is space in the yard, and the hold is what is stopping
+      // the website selling it. Say so, next to the button that changes it.
+      if (!t.manually_sold_out && t.spots_left === 0 && t.spots_left_gate > 0 &&
+          t.gate_reserve > 0) {
+        card.appendChild(make('div', 'ad-price-held',
+          'Online is shut by the hold, not by the yard.'));
+      }
+
       // The number above is what goes on the sign, and it is what a cash
       // customer hands over. Card is that plus the surcharge, so say both
       // rather than making anyone work it out at the driver's window.
@@ -581,8 +693,62 @@
         function () { toggleSoldOut(t); }));
       card.appendChild(row);
 
+      card.appendChild(reserveRow(t));
+
       wrap.appendChild(card);
     });
+  }
+
+  // Spaces of this tier the website may not sell down into, for tonight and
+  // tonight only. Two taps, the same − / + as the zone counts, because it is
+  // the same kind of decision made at the same moment: one more, one fewer.
+  //
+  // "Release" rather than "−" in words, because that is what lowering it
+  // does — Standard nearly gone an hour before kickoff is the reason this
+  // control exists, and the answer is to put two of the held spaces back on
+  // the website rather than to stand at the gate hoping.
+  function reserveRow(t) {
+    var row = make('div', 'ad-reserve');
+
+    row.appendChild(make('span', 'ad-reserve-key', 'held for walk-ups'));
+
+    var down = button('ad-count-btn', '−', function () {
+      setReserve(t, t.gate_reserve - 1);
+    });
+    down.disabled = t.gate_reserve <= 0;
+    down.title = 'Release one to the website';
+    row.appendChild(down);
+
+    row.appendChild(make('span', 'ad-reserve-num', String(t.gate_reserve)));
+
+    var up = button('ad-count-btn', '+', function () {
+      setReserve(t, t.gate_reserve + 1);
+    });
+    up.disabled = t.gate_reserve >= 200;
+    up.title = 'Hold one more back from the website';
+    row.appendChild(up);
+
+    return row;
+  }
+
+  function setReserve(tier, reserve) {
+    var want = Math.max(0, Math.min(200, Math.round(reserve)));
+    if (want === tier.gate_reserve) return;
+
+    call('set_reserve', {
+      event_id: state.eventId,
+      property_id: tier.property_id,
+      tier_code: tier.code,
+      reserve: want,
+    })
+      .then(function (data) {
+        var n = data.reserve;
+        toast(shortName(tier) + ': ' +
+          (n === 0 ? 'nothing held back now' :
+            n + ' held for walk-ups'), 'good');
+        return loadList(true);
+      })
+      .catch(function (err) { toast(err.message, 'bad'); });
   }
 
   // The dropdown under the price cards. It reads the same templates the
@@ -1479,11 +1645,19 @@
   // The sticky search bar has to sit directly under the header, whose height
   // depends on the safe-area inset and the length of the event name. Measure
   // it rather than hard-coding a number that is wrong on half the phones.
+  // The tier headings then park under the search bar, so measure that too —
+  // its height moves with the font size the phone is set to.
   function measureHead() {
     var head = el('ad-head') || document.querySelector('.ad-head');
-    if (!head) return;
-    document.documentElement.style.setProperty(
-      '--ad-head-h', head.offsetHeight + 'px');
+    if (head) {
+      document.documentElement.style.setProperty(
+        '--ad-head-h', head.offsetHeight + 'px');
+    }
+    var tools = document.querySelector('#ad-pane-gate .ad-tools');
+    if (tools) {
+      document.documentElement.style.setProperty(
+        '--ad-tools-h', tools.offsetHeight + 'px');
+    }
   }
 
   /* ---------------------------------------------------------------- tabs */

@@ -15,6 +15,13 @@
   --grey: #7A7A74;
   --orange-flag: #B5502E; /* used once, only for the return-promptly notice */
 
+  /* Parking tiers, used wherever a tier has to be picked out at a glance:
+     the chip on a gate row and the arrivals split under the headline. */
+  --tier-red: #B3261E;
+  --tier-red-tint: #FCEEEC;
+  --tier-purple: #5B3A97;
+  --tier-purple-tint: #F2EEFA;
+
 --display: 'Poiret One', sans-serif;
   --body: 'Jost', 'Work Sans', Arial, sans-serif;
 }
@@ -908,6 +915,62 @@ footer a { color: var(--blue); }
   margin-top: 3px;
 }
 
+/* ---------- Arrivals split ---------- */
+/* The headline says 6/10 in. It does not say which four you are still
+   standing there waiting for, and the answer changes what you do: four
+   Standard is a queue that will sort itself out, four Valet is four sets of
+   keys and four drivers you have to find room for. Sits directly under the
+   headline because it is read in the same glance. */
+.ad-split {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  background: var(--white);
+  border-bottom: 1px solid var(--line);
+  padding: 10px 12px;
+}
+.ad-split-item {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  flex: 1 1 auto;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: var(--offwhite);
+  padding: 5px 9px;
+}
+.ad-split-num {
+  font-family: var(--display);
+  font-size: 1.05rem;
+  line-height: 1;
+  color: var(--blue-deep);
+}
+.ad-split-key {
+  font-size: 0.66rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--grey);
+}
+/* Same two colours as the chips on the rows, for the same reason. */
+.ad-split-item.is-tier-priority {
+  background: var(--tier-red-tint);
+  border-color: #EFC9C7;
+}
+.ad-split-item.is-tier-priority .ad-split-num,
+.ad-split-item.is-tier-priority .ad-split-key { color: var(--tier-red); }
+.ad-split-item.is-tier-valet {
+  background: var(--tier-purple-tint);
+  border-color: #D9CEEC;
+}
+.ad-split-item.is-tier-valet .ad-split-num,
+.ad-split-item.is-tier-valet .ad-split-key { color: var(--tier-purple); }
+/* Everyone in for this tier — nothing left to wait for. */
+.ad-split-item.is-done .ad-split-num::after {
+  content: ' ✓';
+  font-size: 0.7em;
+}
+
 .ad-holds {
   background: #FBF3E4;
   color: #8A5A12;
@@ -955,6 +1018,53 @@ footer a { color: var(--blue); }
 /* ---------- The list ---------- */
 .ad-list { padding: 0 16px 24px; }
 .ad-list[aria-busy="true"] { opacity: 0.5; }
+
+/* ---------- Tier sections in the arrivals list ---------- */
+/* Sticky, because the point of grouping is knowing which block you are in
+   halfway down it. Kept light: it is a divider, not a card — the rows under
+   it are what gets tapped. */
+.ad-group {
+  position: sticky;
+  /* Under the search bar, which is itself parked under the header. Both are
+     measured at runtime for the same reason. */
+  top: calc(var(--ad-head-h, 150px) + var(--ad-tools-h, 72px));
+  z-index: 5;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 18px -16px 8px;
+  padding: 7px 16px;
+  background: var(--offwhite);
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.ad-list > .ad-group:first-child { margin-top: 4px; }
+.ad-group-name {
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--grey);
+}
+.ad-group-count {
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  color: var(--grey);
+  font-variant-numeric: tabular-nums;
+}
+/* The same two colours as the chips and the tallies above. */
+.ad-group.is-tier-priority {
+  background: var(--tier-red-tint);
+  border-color: #EFC9C7;
+}
+.ad-group.is-tier-priority .ad-group-name,
+.ad-group.is-tier-priority .ad-group-count { color: var(--tier-red); }
+.ad-group.is-tier-valet {
+  background: var(--tier-purple-tint);
+  border-color: #D9CEEC;
+}
+.ad-group.is-tier-valet .ad-group-name,
+.ad-group.is-tier-valet .ad-group-count { color: var(--tier-purple); }
 
 .ad-empty {
   color: var(--grey);
@@ -1024,6 +1134,17 @@ footer a { color: var(--blue); }
    has gone wrong. It still has to be picked out of a list at night, so it
    carries a fill rather than sitting in the plain-chip grey. */
 .ad-chip.is-low { color: var(--blue-deep); background: var(--blue-tint); border-color: #CBD8E8; }
+
+/* The tier is the one thing on a row you look for before you have read the
+   plate: a Valet car wants a set of keys taken off the driver, a Priority car
+   wants waving through, and at night in a queue that decision is made on
+   colour. Standard stays plain grey — it is the default, and colouring
+   everything colours nothing.
+
+   The reds here are deliberately not --test-red: that one means "this is not
+   the live site" and must not start meaning "priority" as well. */
+.ad-chip.is-tier-priority { color: var(--tier-red); background: var(--tier-red-tint); border-color: #EFC9C7; }
+.ad-chip.is-tier-valet { color: var(--tier-purple); background: var(--tier-purple-tint); border-color: #D9CEEC; }
 
 .ad-row-actions {
   flex: none;
@@ -1767,6 +1888,45 @@ footer a { color: var(--blue); }
   font-size: 0.78rem;
   font-weight: 300;
   color: var(--grey);
+  margin-top: 3px;
+}
+
+/* ---------- The walk-up reserve ---------- */
+/* Under the price actions rather than beside them: setting a price and
+   holding a space back are different decisions, and the second one is the
+   quieter of the two. Same − / + as the zone counts, because it is the same
+   move — one more, one fewer, now. */
+.ad-reserve {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.ad-reserve-key {
+  flex: 1;
+  font-size: 0.8rem;
+  font-weight: 300;
+  color: var(--grey);
+  min-width: 0;
+}
+.ad-reserve-num {
+  flex: none;
+  min-width: 1.6em;
+  text-align: center;
+  font-family: var(--display);
+  font-size: 1.25rem;
+  line-height: 1;
+  color: var(--blue-deep);
+  font-variant-numeric: tabular-nums;
+}
+/* The yard has room and the website is still shut. That is this screen's
+   doing, so it says so where the control to undo it is. */
+.ad-price-held {
+  font-size: 0.8rem;
+  font-weight: 300;
+  color: var(--orange-flag);
   margin-top: 3px;
 }
 
