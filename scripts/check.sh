@@ -646,43 +646,68 @@ head "Spaces held for walk-ups are never sold online"
 #
 # The database is the authority and cannot be proven from here. What can
 # be proven is that all three are still written down.
-COUNT_MIG="$(ls -1 supabase/migrations/*_talli_tiers_are_counts.sql 2>/dev/null | tail -1)"
+# Each of these looks at the LAST migration to define the thing, not at a
+# migration named here. Naming one is how the checks this replaced went
+# quietly green: they kept passing off a file that a later migration had
+# already superseded. Filenames start with a timestamp, so lexical order
+# is chronological.
+latest_defining() { grep -rl "$1" supabase/migrations/*.sql 2>/dev/null | sort | tail -1; }
 
-if [ -n "$COUNT_MIG" ] && grep -q "HELD_FOR_GATE" "$COUNT_MIG" \
-   && grep -q "p_channel <> 'gate'" "$COUNT_MIG"; then
+HOLD_MIG="$(latest_defining 'function hold_booking')"
+VIEW_MIG="$(latest_defining 'view v_tier_availability')"
+CAP_MIG="$(latest_defining 'function adjust_tier_capacity')"
+NORM_MIG="$(latest_defining 'function normalise_event_tiers')"
+
+if [ -n "$HOLD_MIG" ] && grep -q "HELD_FOR_GATE" "$HOLD_MIG" \
+   && grep -q "p_channel <> 'gate'" "$HOLD_MIG"; then
   pass "hold_booking still refuses a non-gate sale into the reserve"
 else
   fail "hold_booking no longer keeps the walk-up reserve off the website"
-  printf '      checked: %s\n' "${COUNT_MIG:-no counts migration found}"
+  printf '      checked: %s\n' "${HOLD_MIG:-no hold_booking migration found}"
 fi
 
-if [ -n "$COUNT_MIG" ] && grep -q -- "- t.gate_reserve" "$COUNT_MIG"; then
+if [ -n "$VIEW_MIG" ] && grep -q -- "- t.gate_reserve" "$VIEW_MIG"; then
   pass "the online count still subtracts the walk-up reserve"
 else
   fail "v_tier_availability's online count no longer subtracts gate_reserve"
-  printf '      checked: %s\n' "${COUNT_MIG:-no counts migration found}"
+  printf '      checked: %s\n' "${VIEW_MIG:-no availability migration found}"
 fi
 
 # A reserve nobody remembered to set is the same as no reserve at all, so
 # the defaults matter as much as the mechanism. These are the numbers
 # Andrew gave: 10/16/6 spaces, 6/3/3 of them online.
-if [ -n "$COUNT_MIG" ] \
-   && grep -qE "when 'standard' then 4" "$COUNT_MIG" \
-   && grep -qE "when 'priority' then 13" "$COUNT_MIG" \
-   && grep -qE "when 'valet'    then 3" "$COUNT_MIG"; then
+if [ -n "$NORM_MIG" ] \
+   && grep -qE "when 'standard' then 4" "$NORM_MIG" \
+   && grep -qE "when 'priority' then 13" "$NORM_MIG" \
+   && grep -qE "when 'valet'    then 3" "$NORM_MIG"; then
   pass "a new night starts with the walk-up reserve already set"
 else
   fail "normalise_event_tiers no longer gives a new night a walk-up reserve"
-  printf '      checked: %s\n' "${COUNT_MIG:-no counts migration found}"
+  printf '      checked: %s\n' "${NORM_MIG:-no tier-defaults migration found}"
 fi
 
 # Taking the count below what is already sold would claim spaces that
 # have people attached to them.
-if [ -n "$COUNT_MIG" ] && grep -q "ALREADY_SOLD" "$COUNT_MIG"; then
+if [ -n "$CAP_MIG" ] && grep -q "ALREADY_SOLD" "$CAP_MIG"; then
   pass "the spaces count cannot be dropped below what is already sold"
 else
   fail "adjust_tier_capacity no longer refuses to drop below the bookings taken"
-  printf '      checked: %s\n' "${COUNT_MIG:-no counts migration found}"
+  printf '      checked: %s\n' "${CAP_MIG:-no capacity migration found}"
+fi
+
+# The count the booking page reads comes from a SECURITY DEFINER function,
+# because the view runs as its reader and anon cannot see booking. Everything
+# in `public` is an API endpoint, so that function must not live there —
+# it would be callable at /rest/v1/rpc/tier_sold by anyone. The migration
+# that defines it LAST is the one that decides; earlier ones are history.
+TS_MIG="$(latest_defining 'function .*tier_sold(')"
+if [ -n "$TS_MIG" ] \
+   && grep -q "function private\.tier_sold(" "$TS_MIG" \
+   && ! grep -qE "^create (or replace )?function tier_sold\(" "$TS_MIG"; then
+  pass "the count function is out of the schema PostgREST serves"
+else
+  fail "tier_sold is defined in public — a SECURITY DEFINER count with a URL of its own"
+  printf '      checked: %s\n' "${TS_MIG:-no tier_sold migration found}"
 fi
 
 # ---------------------------------------------------------------------
