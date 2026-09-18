@@ -430,12 +430,6 @@
         make('span', 'bk-fact', 'Arrive ' + asTime(tier.arrival_from) + '–' + asTime(tier.arrival_until))
       );
     }
-    // Not "leave by". Nobody leaves an event early — but the car at the front
-    // of a stack blocks the one behind it, so it has to be back promptly.
-    if (tier.departure_by) {
-      facts.appendChild(make('span', 'bk-fact bk-fact-warn',
-        'Back at your car by ' + asTime(tier.departure_by)));
-    }
     if (soldOut) {
       facts.appendChild(make('span', 'bk-fact bk-fact-warn', 'Sold out online'));
     } else if (tier.spots_left <= 3) {
@@ -621,10 +615,8 @@
 
     var arrival = el('bk-summary-arrival');
     if (tier.arrival_from && tier.arrival_until) {
-      text(arrival, 'Arrive between ' + asTime(tier.arrival_from) + ' and ' + asTime(tier.arrival_until) +
-        (tier.departure_by
-          ? ', and back at your car by ' + asTime(tier.departure_by)
-          : ''));
+      text(arrival, 'Arrive between ' + asTime(tier.arrival_from) +
+        ' and ' + asTime(tier.arrival_until));
       arrival.hidden = false;
     } else {
       arrival.hidden = true;

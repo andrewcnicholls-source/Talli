@@ -189,7 +189,6 @@ async function sendConfirmationEmail(bookingId: string): Promise<void> {
       ['Date', ev?.starts_at ? `${onDate(ev.starts_at)}, ${atTime(ev.starts_at)}` : null],
       ['Where', address],
       ['Arrive', arrival],
-      ['Back at your car by', atTime(b.must_depart_by)],
       ['Spot', spot],
       ['Vehicle', b.vehicle_rego ?? null],
       ['Low car', b.vehicle_low_clearance ? 'Noted — we will keep you off the steep entry' : null],
