@@ -626,6 +626,65 @@ else
 fi
 
 # ---------------------------------------------------------------------
+head "The overflow is sold on the night, never online"
+# ---------------------------------------------------------------------
+# Andrew's rule, stated plainly: the verges are a decision made at the
+# window, with the car in front of you and the neighbours in mind. They
+# are never on the website.
+#
+# Three things hold that line and each is one careless edit from gone:
+#
+#   the zone flag     reservable_in_advance = false on both verge zones
+#   the allocator     hold_booking only reaches them for p_channel 'gate'
+#   the online count  v_tier_availability's spots_left filters on the flag
+#
+# The database is the authority and cannot be proven from here. What can
+# be proven is that all three are still written down — which is what
+# stops a rewrite quietly putting the verge on sale.
+RESERVE_MIG="supabase/migrations/20260821091000_night_capacity.sql"
+ONLINE_MIG="$(ls -1 supabase/migrations/*_talli_standard_takes_the_lawn_and_the_stack.sql 2>/dev/null | tail -1)"
+ALLOC_MIG="$(ls -1 supabase/migrations/*hold_booking* \
+                   supabase/migrations/*_talli_fill_order_as_the_yard_is_worked.sql \
+                   2>/dev/null | tail -1)"
+
+# The verge zones are seeded gate-only. Any migration may set the flag;
+# what must never appear is one turning it back on.
+if grep -rqiE "reservable_in_advance[[:space:]]*=[[:space:]]*true" \
+     --include='*.sql' supabase/migrations/ \
+   && grep -rliE "reservable_in_advance[[:space:]]*=[[:space:]]*true" \
+        --include='*.sql' supabase/migrations/ | grep -q .; then
+  # Only a problem if it is aimed at a verge zone in the same statement.
+  if grep -rqiE "berm" \
+       $(grep -rliE "reservable_in_advance[[:space:]]*=[[:space:]]*true" \
+           --include='*.sql' supabase/migrations/); then
+    fail "a migration sets reservable_in_advance = true near a berm zone — the verge would go on sale online"
+  else
+    pass "no migration puts a verge zone on sale in advance"
+  fi
+else
+  pass "no migration puts a verge zone on sale in advance"
+fi
+
+# The allocator only reaches a non-reservable bay for a gate sale.
+if [ -n "$ALLOC_MIG" ] && \
+   grep -q "p_channel = 'gate' or i.reservable_in_advance" "$ALLOC_MIG"; then
+  pass "hold_booking still reaches gate-only bays for gate sales alone"
+else
+  fail "hold_booking no longer gates non-reservable bays on p_channel — online could take the verge"
+  printf '      checked: %s\n' "${ALLOC_MIG:-no hold_booking migration found}"
+fi
+
+# The number the booking page renders excludes them too, or the site
+# would offer a space the allocator then refuses.
+if [ -n "$ONLINE_MIG" ] && \
+   grep -q "i.reservable_in_advance" "$ONLINE_MIG"; then
+  pass "the online count still excludes gate-only bays"
+else
+  fail "v_tier_availability's online count no longer filters on reservable_in_advance"
+  printf '      checked: %s\n' "${ONLINE_MIG:-no availability migration found}"
+fi
+
+# ---------------------------------------------------------------------
 head "Edge function TypeScript"
 # ---------------------------------------------------------------------
 # The functions import Stripe from esm.sh and supabase-js from jsr.io, so
