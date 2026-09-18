@@ -530,6 +530,20 @@ Deno.serve(async (req) => {
         return json({ ok: true, applied: data })
       }
 
+      // How many of this tier online may not sell down into, tonight only.
+      // Lowering it is releasing spaces to the website; raising it is taking
+      // them back for the people who will drive up with cash.
+      case 'set_reserve': {
+        const { data, error } = await db.rpc('set_tier_reserve', {
+          p_event_id: eventId,
+          p_property_id: String(body.property_id ?? ''),
+          p_tier_code: String(body.tier_code ?? ''),
+          p_reserve: Number(body.reserve ?? 0),
+        })
+        if (error) return json(named(error), 409)
+        return json({ ok: true, reserve: data })
+      }
+
       // "Standard's gone" — called by eye, ahead of the bay maths, and
       // reversible in one tap when a space comes back.
       case 'set_sold_out': {

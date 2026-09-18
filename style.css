@@ -1844,6 +1844,45 @@ footer a { color: var(--blue); }
   margin-top: 3px;
 }
 
+/* ---------- The walk-up reserve ---------- */
+/* Under the price actions rather than beside them: setting a price and
+   holding a space back are different decisions, and the second one is the
+   quieter of the two. Same − / + as the zone counts, because it is the same
+   move — one more, one fewer, now. */
+.ad-reserve {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.ad-reserve-key {
+  flex: 1;
+  font-size: 0.8rem;
+  font-weight: 300;
+  color: var(--grey);
+  min-width: 0;
+}
+.ad-reserve-num {
+  flex: none;
+  min-width: 1.6em;
+  text-align: center;
+  font-family: var(--display);
+  font-size: 1.25rem;
+  line-height: 1;
+  color: var(--blue-deep);
+  font-variant-numeric: tabular-nums;
+}
+/* The yard has room and the website is still shut. That is this screen's
+   doing, so it says so where the control to undo it is. */
+.ad-price-held {
+  font-size: 0.8rem;
+  font-weight: 300;
+  color: var(--orange-flag);
+  margin-top: 3px;
+}
+
 /* ---------- What the sign price becomes on a card ---------- */
 .ad-price-card {
   font-size: 0.82rem;

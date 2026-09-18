@@ -553,7 +553,6 @@
       var notes = [];
       if (z.lost) notes.push(z.lost + ' lost');
       if (z.opened) notes.push(z.opened + ' extra');
-      if (z.gate_reserve) notes.push(z.gate_reserve + ' held for walk-ups');
       if (!z.reservable_in_advance) notes.push('gate only');
       notes.push(z.spare_left + ' spare' + (z.spare_left === 1 ? '' : 's') + ' in reserve');
       card.appendChild(make('div', 'ad-zone-note', notes.join(' · ')));
@@ -619,6 +618,15 @@
           ? 'Marked sold out'
           : t.spots_left_gate + ' left at the gate · ' + t.spots_left + ' online'));
 
+      // The one case where those two numbers disagree for a reason nobody
+      // can see: there is space in the yard, and the hold is what is stopping
+      // the website selling it. Say so, next to the button that changes it.
+      if (!t.manually_sold_out && t.spots_left === 0 && t.spots_left_gate > 0 &&
+          t.gate_reserve > 0) {
+        card.appendChild(make('div', 'ad-price-held',
+          'Online is shut by the hold, not by the yard.'));
+      }
+
       // The number above is what goes on the sign, and it is what a cash
       // customer hands over. Card is that plus the surcharge, so say both
       // rather than making anyone work it out at the driver's window.
@@ -640,8 +648,62 @@
         function () { toggleSoldOut(t); }));
       card.appendChild(row);
 
+      card.appendChild(reserveRow(t));
+
       wrap.appendChild(card);
     });
+  }
+
+  // Spaces of this tier the website may not sell down into, for tonight and
+  // tonight only. Two taps, the same − / + as the zone counts, because it is
+  // the same kind of decision made at the same moment: one more, one fewer.
+  //
+  // "Release" rather than "−" in words, because that is what lowering it
+  // does — Standard nearly gone an hour before kickoff is the reason this
+  // control exists, and the answer is to put two of the held spaces back on
+  // the website rather than to stand at the gate hoping.
+  function reserveRow(t) {
+    var row = make('div', 'ad-reserve');
+
+    row.appendChild(make('span', 'ad-reserve-key', 'held for walk-ups'));
+
+    var down = button('ad-count-btn', '−', function () {
+      setReserve(t, t.gate_reserve - 1);
+    });
+    down.disabled = t.gate_reserve <= 0;
+    down.title = 'Release one to the website';
+    row.appendChild(down);
+
+    row.appendChild(make('span', 'ad-reserve-num', String(t.gate_reserve)));
+
+    var up = button('ad-count-btn', '+', function () {
+      setReserve(t, t.gate_reserve + 1);
+    });
+    up.disabled = t.gate_reserve >= 200;
+    up.title = 'Hold one more back from the website';
+    row.appendChild(up);
+
+    return row;
+  }
+
+  function setReserve(tier, reserve) {
+    var want = Math.max(0, Math.min(200, Math.round(reserve)));
+    if (want === tier.gate_reserve) return;
+
+    call('set_reserve', {
+      event_id: state.eventId,
+      property_id: tier.property_id,
+      tier_code: tier.code,
+      reserve: want,
+    })
+      .then(function (data) {
+        var n = data.reserve;
+        toast(shortName(tier) + ': ' +
+          (n === 0 ? 'nothing held back now' :
+            n + ' held for walk-ups'), 'good');
+        return loadList(true);
+      })
+      .catch(function (err) { toast(err.message, 'bad'); });
   }
 
   // The dropdown under the price cards. It reads the same templates the
