@@ -693,7 +693,8 @@
         function () { toggleSoldOut(t); }));
       card.appendChild(row);
 
-      card.appendChild(reserveRow(t));
+      var reserve = reserveRow(t);
+      if (reserve) card.appendChild(reserve);
 
       wrap.appendChild(card);
     });
@@ -708,38 +709,44 @@
   // control exists, and the answer is to put two of the held spaces back on
   // the website rather than to stand at the gate hoping.
   function reserveRow(t) {
+    // No reserve in the payload means the backend predates it: an older
+    // gate-ops, or a database without the column. Drawing a 0 there would
+    // be a claim about the night that nothing has told us, so draw nothing.
+    if (typeof t.gate_reserve !== 'number') return null;
+
     var row = make('div', 'ad-reserve');
 
     row.appendChild(make('span', 'ad-reserve-key', 'held for walk-ups'));
 
     var down = button('ad-count-btn', '−', function () {
-      setReserve(t, t.gate_reserve - 1);
+      nudgeReserve(t, -1);
     });
-    down.disabled = t.gate_reserve <= 0;
+    // Not disabled at zero. The number beside it is thirty seconds old at
+    // worst and may be another phone's work at best; the database clamps,
+    // and a button that refuses to press is worse than one that no-ops.
     down.title = 'Release one to the website';
     row.appendChild(down);
 
     row.appendChild(make('span', 'ad-reserve-num', String(t.gate_reserve)));
 
     var up = button('ad-count-btn', '+', function () {
-      setReserve(t, t.gate_reserve + 1);
+      nudgeReserve(t, 1);
     });
-    up.disabled = t.gate_reserve >= 200;
     up.title = 'Hold one more back from the website';
     row.appendChild(up);
 
     return row;
   }
 
-  function setReserve(tier, reserve) {
-    var want = Math.max(0, Math.min(200, Math.round(reserve)));
-    if (want === tier.gate_reserve) return;
-
+  // One more, one fewer — never "set it to this". What the screen is showing
+  // can be stale, and a tap must move the reserve the way it was meant
+  // rather than write back the figure that happened to be on the glass.
+  function nudgeReserve(tier, delta) {
     call('set_reserve', {
       event_id: state.eventId,
       property_id: tier.property_id,
       tier_code: tier.code,
-      reserve: want,
+      delta: delta,
     })
       .then(function (data) {
         var n = data.reserve;

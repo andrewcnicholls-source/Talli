@@ -533,7 +533,28 @@ Deno.serve(async (req) => {
       // How many of this tier online may not sell down into, tonight only.
       // Lowering it is releasing spaces to the website; raising it is taking
       // them back for the people who will drive up with cash.
+      //
+      // The screen sends a delta — one more, one fewer — and the database
+      // applies it to whatever the row actually holds. A phone showing a
+      // stale reserve then still moves it the way the operator meant, rather
+      // than writing back the number it happened to be displaying. An
+      // explicit `reserve` still sets an exact figure, for a typed-in number.
       case 'set_reserve': {
+        const delta = body.delta === undefined ? null : Number(body.delta)
+        if (delta !== null) {
+          if (!Number.isInteger(delta) || delta === 0 || Math.abs(delta) > 10) {
+            return json({ error: 'delta must be a whole number between -10 and 10' }, 400)
+          }
+          const { data, error } = await db.rpc('adjust_tier_reserve', {
+            p_event_id: eventId,
+            p_property_id: String(body.property_id ?? ''),
+            p_tier_code: String(body.tier_code ?? ''),
+            p_delta: delta,
+          })
+          if (error) return json(named(error), 409)
+          return json({ ok: true, reserve: data })
+        }
+
         const { data, error } = await db.rpc('set_tier_reserve', {
           p_event_id: eventId,
           p_property_id: String(body.property_id ?? ''),
