@@ -154,7 +154,7 @@ any future expiry, any CVC. No real money moves.
 
 If `STRIPE_SECRET_KEY` is ever removed from the test project, the code falls
 back to **faking** the payment rather than breaking: you go straight to the
-confirmation page with a real booking and a real bay allocation, no card
+confirmation page with a real booking counted against the tier, no card
 involved. Fake sessions are recognisable — they start `cs_test_stub_`, where
 real test ones are just `cs_test_`.
 
@@ -351,12 +351,12 @@ retired:
 insert into offer_tier
   (event_offer_id, code, label, price_cents, zone_codes, bay_kind,
    guarantees_clear_exit, arrival_from, arrival_until, departure_by,
-   sort_order, active)
+   sort_order, active, capacity, gate_reserve)
 select neo.id, t.code, t.label, t.price_cents, t.zone_codes, t.bay_kind,
        t.guarantees_clear_exit,
        ne.starts_at + (t.arrival_from  - oe.starts_at),
        ne.starts_at + (t.arrival_until - oe.starts_at),
-       null, t.sort_order, true
+       null, t.sort_order, true, t.capacity, t.gate_reserve
 from offer_tier  t
 join event_offer oo  on oo.id = t.event_offer_id
 join event       oe  on oe.id = oo.event_id
@@ -364,6 +364,12 @@ join event       ne  on ne.name  = 'TEST — Blues v Crusaders'
 join event_offer neo on neo.event_id = ne.id
 where oe.name = 'TEST — Auckland v Counties Manukau (NPC)' and t.active;
 ```
+
+`capacity` and `gate_reserve` are not optional. A tier is a number of
+spaces now — how many there are, and how many of those are held back for
+walk-ups — and a tier copied without them cannot be sold at all:
+`hold_booking` raises `NO_CAPACITY`. The defaults a new event gets are
+Standard 10 spaces (4 held), Priority 16 (13 held), Valet 6 (3 held).
 
 Anything else you add is a fourth option on the gate screen, which is
 the thing the three-tier change was for. The modal enforces the same

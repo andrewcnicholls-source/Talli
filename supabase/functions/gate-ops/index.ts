@@ -3,10 +3,10 @@
 //
 //  Everything the person on the driveway needs: the arrivals list, ticking
 //  cars off as they turn in, handing over pre-purchased extras, selling a
-//  space to someone who just rolled up, moving a booked car out to overflow,
-//  keeping the night's capacity and prices honest as they move, and — new —
-//  making the event itself: a template to start from, the details edited on
-//  the phone, and the status moved from draft to on sale without a dashboard.
+//  space to someone who just rolled up, keeping the night's counts and
+//  prices honest as they move, and making the event itself: a template to
+//  start from, the details edited on the phone, and the status moved from
+//  draft to on sale without a dashboard.
 //
 //  All of it writes, so all of it runs under the service role here rather
 //  than being exposed through RLS.
@@ -86,10 +86,8 @@ type Row = Record<string, any>
 // end of a driveway, one request that sometimes carries a little too much
 // beats four that each might not arrive.
 async function nightState(eventId: string) {
-  const [listRes, capRes, tierRes, rateRes, chargeRes] = await Promise.all([
+  const [listRes, tierRes, rateRes, chargeRes] = await Promise.all([
     db.from('v_gate_list').select('*').eq('event_id', eventId),
-    db.from('v_night_capacity').select('*').eq('event_id', eventId)
-      .order('exit_rank', { ascending: true }),
     db.from('v_tier_availability').select('*').eq('event_id', eventId)
       .order('sort_order', { ascending: true }),
     // The gate screen has to be able to say "charge them $46" before the sale
@@ -103,7 +101,6 @@ async function nightState(eventId: string) {
       .eq('event_id', eventId),
   ])
   if (listRes.error) throw listRes.error
-  if (capRes.error) throw capRes.error
   if (tierRes.error) throw tierRes.error
   if (chargeRes.error) throw chargeRes.error
 
@@ -127,7 +124,7 @@ async function nightState(eventId: string) {
       return String(a.arrival_from ?? '').localeCompare(String(b.arrival_from ?? ''))
     })
 
-  const zones = capRes.data ?? []
+  const tiers = (tierRes.data ?? []) as Row[]
   const paid = rows.filter((r: Row) => r.status === 'paid')
   // What the car is worth to the till: the space, the extras, and the card
   // surcharge if they paid by card. A cash sale carries no surcharge, so this
@@ -149,25 +146,25 @@ async function nightState(eventId: string) {
     }
   }
 
-  const capacity = zones.reduce((n: number, z: Row) => n + z.capacity, 0)
-  const filled = zones.reduce((n: number, z: Row) => n + z.filled, 0)
+  // The night's total is the three tier counts added up. It used to be the
+  // bays in the yard; it is now the number Andrew set for each type, which
+  // is the same figure he is looking at on the card above it.
+  const capacity = tiers.reduce((n: number, t: Row) => n + (t.capacity ?? 0), 0)
+  const filled = tiers.reduce((n: number, t: Row) => n + (t.sold ?? 0), 0)
 
   return {
     rows,
-    zones,
-    tiers: tierRes.data ?? [],
+    tiers,
     card_surcharge_bps: rateRes.data?.card_surcharge_bps ?? 0,
     extras: [...extras.values()].sort((a, b) => a.name.localeCompare(b.name)),
     summary: {
       total: rows.length,
       arrived: rows.filter((r: Row) => r.arrived).length,
       unpaid_holds: rows.filter((r: Row) => r.status === 'held').length,
-      // Spaces, not bookings. A valet car and a berm car both take one.
+      // Spaces, not bookings. A valet car and a standard car both take one.
       capacity,
       filled,
       free: capacity - filled,
-      lost: zones.reduce((n: number, z: Row) => n + z.lost, 0),
-      opened: zones.reduce((n: number, z: Row) => n + z.opened, 0),
       cash_due_cents: rows
         .filter((r: Row) => r.payment_method !== 'stripe' && !r.arrived)
         .reduce((sum: number, r: Row) => sum + value(r), 0),
@@ -334,25 +331,15 @@ Deno.serve(async (req) => {
         return json({ ok: true, status: data })
       }
 
-      // Ticking a car in is also when its space is chosen, so hand the bay
-      // back: the marshal is standing at the window and needs to say where
-      // to go, not go looking for it on a row that has just re-sorted.
+      // Ticking a car in records that it turned up, and nothing else. Where
+      // it actually goes is the marshal's call standing in the driveway —
+      // the database has no bays to have an opinion about.
       case 'check_in': {
         const id = String(body.booking_id ?? '')
         if (!id) return json({ error: 'booking_id is required' }, 400)
         const { error } = await db.rpc('check_in_booking', { p_booking_id: id })
         if (error) throw error
-
-        // Read it back off the same view the list is drawn from, rather
-        // than joining bay through bay_allocation here. One less shape to
-        // be wrong about, and it is the label the row will show anyway.
-        const { data: placed } = await db
-          .from('v_gate_list')
-          .select('bay_label')
-          .eq('booking_id', id)
-          .maybeSingle()
-
-        return json({ ok: true, bay_label: placed?.bay_label ?? null })
+        return json({ ok: true })
       }
 
       // Mis-taps happen, and happen most when it is busy.
@@ -380,62 +367,6 @@ Deno.serve(async (req) => {
         return json({ ok: true, lines: data })
       }
 
-      // Shift a booked car out to overflow. The bay it was holding goes back
-      // on sale, which is the whole point: a prepaid Standard sitting in the
-      // back yard is worth more to you parked on the verge when there is a
-      // queue at the gate.
-      //
-      // Nobody is asked to agree to this in advance any more, so nobody is
-      // asked to confirm it here either. Standing in the driveway telling
-      // someone where to put their car IS the conversation.
-      case 'move_to_overflow': {
-        const id = String(body.booking_id ?? '')
-        if (!id) return json({ error: 'booking_id is required' }, 400)
-
-        const { data: booking, error: bErr } = await db
-          .from('booking')
-          .select('id, event_id, accepts_street_parking, vehicle_rego')
-          .eq('id', id)
-          .maybeSingle()
-        if (bErr) throw bErr
-        if (!booking) return json({ error: 'No such booking' }, 404)
-
-        // reassign_booking refuses to place someone whose row does not say
-        // they will go on the verge. Record the decision that was just made
-        // out loud, then move them.
-        if (!booking.accepts_street_parking) {
-          const { error: cErr } = await db
-            .from('booking')
-            .update({ accepts_street_parking: true })
-            .eq('id', id)
-          if (cErr) throw cErr
-        }
-
-        // First free overflow bay for this event. Ordered so the property's
-        // own verge fills before the neighbour's.
-        const { data: free, error: fErr } = await db
-          .from('v_bay_inventory')
-          .select('bay_id, bay_label, zone_code')
-          .eq('event_id', booking.event_id)
-          .eq('available', true)
-          .eq('requires_consent', true)
-          .order('zone_code', { ascending: true })
-          .order('bay_label', { ascending: true })
-          .limit(1)
-        if (fErr) throw fErr
-        if (!free || !free.length) {
-          return json({ error: 'Overflow is full.', code: 'OVERFLOW_FULL' }, 409)
-        }
-
-        const { error: rErr } = await db.rpc('reassign_booking', {
-          p_booking_id: id,
-          p_target_bay_id: free[0].bay_id,
-        })
-        if (rErr) return json(named(rErr), 409)
-
-        return json({ ok: true, moved_to: free[0].bay_label })
-      }
-
       case 'sell': {
         const { data, error } = await db.rpc('sell_at_gate', {
           p_event_id: eventId,
@@ -446,9 +377,10 @@ Deno.serve(async (req) => {
           p_name: body.name ? String(body.name) : null,
           p_phone: body.phone ? String(body.phone) : null,
           p_email: body.email ? String(body.email) : null,
-          // Always true at the gate. This flag is what lets sell_at_gate reach
-          // the berm zones at all, and standing in the driveway telling
-          // someone where to put their car IS the consent conversation.
+          // Always true at the gate. It no longer decides anything about the
+          // sale — nothing is refused for want of consent any more — but it
+          // is still the honest record: standing in the driveway telling
+          // someone where to put their car IS the conversation.
           p_accepts_street: true,
           // Ticked on the walk-up form when the car in front of you is
           // obviously sitting low. Recorded so it survives the night.
@@ -494,20 +426,22 @@ Deno.serve(async (req) => {
       // ------------------------------------------------ the night's levers
 
       // A space lost to a bad park, or found because a hatchback fitted where
-      // an SUV would not. Always ±1 from the screen; the function picks which
-      // bay so nobody has to think about bay labels in the rain.
-      case 'adjust_capacity': {
-        const zoneId = String(body.zone_id ?? '')
+      // an SUV would not. Always ±1 from the screen, against the type rather
+      // than the corner of the yard: Andrew knows which bays are which, so
+      // losing one in the back yard is one fewer Standard.
+      //
+      // A delta, never "set it to this". The number on the glass is thirty
+      // seconds old at worst and another phone's work at best.
+      case 'set_capacity': {
         const delta = Number(body.delta ?? 0)
-        if (!eventId || !zoneId) return json({ error: 'event_id and zone_id are required' }, 400)
         if (!Number.isInteger(delta) || delta === 0 || Math.abs(delta) > 10) {
           return json({ error: 'delta must be a whole number between -10 and 10' }, 400)
         }
-        const { data, error } = await db.rpc('adjust_zone_capacity', {
+        const { data, error } = await db.rpc('adjust_tier_capacity', {
           p_event_id: eventId,
-          p_zone_id: zoneId,
+          p_property_id: String(body.property_id ?? ''),
+          p_tier_code: String(body.tier_code ?? ''),
           p_delta: delta,
-          p_note: body.note ? String(body.note) : null,
         })
         if (error) return json(named(error), 409)
         return json({ ok: true, capacity: data })
@@ -576,19 +510,6 @@ Deno.serve(async (req) => {
         })
         if (error) return json(named(error), 409)
         return json({ ok: true, reserve: data })
-      }
-
-      // "Standard's gone" — called by eye, ahead of the bay maths, and
-      // reversible in one tap when a space comes back.
-      case 'set_sold_out': {
-        const { data, error } = await db.rpc('set_tier_sold_out', {
-          p_event_id: eventId,
-          p_property_id: String(body.property_id ?? ''),
-          p_tier_code: String(body.tier_code ?? ''),
-          p_sold_out: body.sold_out === true,
-        })
-        if (error) return json(named(error), 409)
-        return json({ ok: true, sold_out: data })
       }
 
       default:

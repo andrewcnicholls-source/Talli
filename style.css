@@ -1095,15 +1095,6 @@ footer a { color: var(--blue); }
   letter-spacing: 0.06em;
   color: var(--ink);
 }
-.ad-bay {
-  font-size: 0.75rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--blue);
-  background: var(--blue-tint);
-  border-radius: 2px;
-  padding: 3px 7px;
-}
 .ad-who {
   font-size: 0.86rem;
   font-weight: 300;
@@ -1149,20 +1140,6 @@ footer a { color: var(--blue); }
   gap: 6px;
   width: 96px;
 }
-
-.ad-move {
-  border: 1px solid var(--line);
-  background: var(--white);
-  color: var(--grey);
-  border-radius: 4px;
-  font-family: var(--body);
-  font-size: 0.74rem;
-  letter-spacing: 0.04em;
-  padding: 7px 4px;
-  cursor: pointer;
-}
-.ad-move:hover { border-color: #C9942A; color: #8A5A12; background: #FBF3E4; }
-.ad-move:disabled { opacity: 0.5; }
 
 .ad-tick {
   flex: none;
@@ -1664,46 +1641,41 @@ footer a { color: var(--blue); }
 }
 
 /* ---------- Spaces, zone by zone ---------- */
-.ad-zones, .ad-prices, .ad-extras, .ad-money { padding: 12px 16px 0; }
+.ad-prices, .ad-extras, .ad-money { padding: 12px 16px 0; }
 
-.ad-zone, .ad-price {
+.ad-price {
   background: var(--white);
   border: 1px solid var(--line);
   border-radius: 4px;
   padding: 13px 14px;
   margin-bottom: 8px;
 }
-.ad-zone-head, .ad-price-head {
+.ad-price-head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
 }
-.ad-zone-name, .ad-price-name {
+.ad-price-name {
   font-weight: 500;
   color: var(--blue-deep);
   min-width: 0;
 }
-.ad-zone-count {
-  flex: none;
-  font-family: var(--display);
-  font-size: 1.3rem;
-  line-height: 1;
-  color: var(--blue-deep);
-  font-variant-numeric: tabular-nums;
-}
-.ad-zone-note, .ad-price-left {
+/* The line the two count rows add up to, and the last thing on the card:
+   how many have gone, and whether the website can still sell one. */
+.ad-price-left {
   font-size: 0.8rem;
   font-weight: 300;
   color: var(--grey);
-  margin-top: 4px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
 }
-.ad-zone-actions, .ad-price-actions {
+.ad-price-actions {
   display: flex;
   gap: 8px;
   margin-top: 11px;
 }
-.ad-zone-actions .ad-count-btn { flex: 1; }
 
 /* ---------- Prices ---------- */
 .ad-price.is-gone { background: var(--offwhite); }
@@ -1721,7 +1693,7 @@ footer a { color: var(--blue); }
   padding: 0 2px 2px;
   cursor: pointer;
 }
-.ad-nudge, .ad-soldout, .ad-hand {
+.ad-nudge, .ad-hand {
   font-family: var(--body);
   font-size: 0.86rem;
   color: var(--blue);
@@ -1731,14 +1703,8 @@ footer a { color: var(--blue); }
   padding: 10px 12px;
   cursor: pointer;
 }
-.ad-nudge { flex: none; min-width: 60px; }
-.ad-soldout { flex: 1; }
-.ad-nudge:hover, .ad-soldout:hover { border-color: var(--blue); }
-.ad-soldout.is-on {
-  background: var(--blue);
-  border-color: var(--blue);
-  color: var(--white);
-}
+.ad-nudge { flex: 1; }
+.ad-nudge:hover { border-color: var(--blue); }
 
 /* Below the cards, not among them: this one control moves every price on
    the night, and it should not look like a fourth tier. */
@@ -1887,12 +1853,11 @@ footer a { color: var(--blue); }
   margin-top: 3px;
 }
 
-/* ---------- The walk-up reserve ---------- */
-/* Under the price actions rather than beside them: setting a price and
-   holding a space back are different decisions, and the second one is the
-   quieter of the two. Same − / + as the zone counts, because it is the same
-   move — one more, one fewer, now. */
-.ad-reserve {
+/* ---------- How many there are, and how many are held back ---------- */
+/* Two rows of the same shape under the price actions, because they are the
+   same kind of decision made the same way: one more, one fewer, now. Setting
+   a price is a different decision and sits above them. */
+.ad-tally, .ad-reserve {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1900,14 +1865,14 @@ footer a { color: var(--blue); }
   padding-top: 10px;
   border-top: 1px solid var(--line);
 }
-.ad-reserve-key {
+.ad-tally-key, .ad-reserve-key {
   flex: 1;
   font-size: 0.8rem;
   font-weight: 300;
   color: var(--grey);
   min-width: 0;
 }
-.ad-reserve-num {
+.ad-tally-num, .ad-reserve-num {
   flex: none;
   min-width: 1.6em;
   text-align: center;
@@ -1916,14 +1881,6 @@ footer a { color: var(--blue); }
   line-height: 1;
   color: var(--blue-deep);
   font-variant-numeric: tabular-nums;
-}
-/* The yard has room and the website is still shut. That is this screen's
-   doing, so it says so where the control to undo it is. */
-.ad-price-held {
-  font-size: 0.8rem;
-  font-weight: 300;
-  color: var(--orange-flag);
-  margin-top: 3px;
 }
 
 /* ---------- What the sign price becomes on a card ---------- */

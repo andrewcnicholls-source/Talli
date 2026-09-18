@@ -211,25 +211,38 @@ with ladder(demand_tier, standard, priority, valet) as (values
   ('high',     2700, 3600, 3600),
   ('premium',  3000, 4000, 4000)
 )
+--
+-- capacity and gate_reserve are the whole inventory model since
+-- "a tier is a number of spaces, not a set of bays". A tier without a
+-- capacity cannot be sold at all — hold_booking raises NO_CAPACITY —
+-- so these two numbers are not optional decoration on a fixture. They
+-- are the figures Andrew gave: 10/16/6 spaces, 6/3/3 of them online.
+--
+-- zone_codes and bay_kind are still written because the columns are
+-- still there and still carry what a tier once meant. Nothing reads
+-- them to decide a sale.
 insert into offer_tier
   (event_offer_id, code, label, price_cents, zone_codes, bay_kind,
-   guarantees_clear_exit, arrival_from, arrival_until, sort_order, active)
+   guarantees_clear_exit, arrival_from, arrival_until, sort_order, active,
+   capacity, gate_reserve)
 select eo.id, v.code, v.label, v.price_cents, v.zone_codes, v.bay_kind,
        false,
        e.starts_at - interval '150 minutes',
        e.starts_at + v.until_offset,
-       v.sort_order, true
+       v.sort_order, true,
+       v.capacity, v.gate_reserve
   from event_offer eo
   join event  e on e.id = eo.event_id
   join ladder l on l.demand_tier = e.demand_tier
  cross join lateral (values
    ('valet',    'Valet — hand us your keys and we''ll park it for you',
-      l.valet,    array['valet'],             'any',      interval '0 minutes',   1),
+      l.valet,    array['valet'],             'any',      interval '0 minutes',   1,  6,  3),
    ('priority', 'Priority exit — near the road, nobody parked in behind you',
-      l.priority, array['front_lawn','berm'], 'free_exit', interval '0 minutes',  2),
+      l.priority, array['front_lawn','berm'], 'free_exit', interval '0 minutes',  2, 16, 13),
    ('standard', 'Standard — best value, expect to wait for the drive to clear',
-      l.standard, array['back_yard'],         'any',      interval '-30 minutes', 4)
- ) as v(code, label, price_cents, zone_codes, bay_kind, until_offset, sort_order);
+      l.standard, array['back_yard'],         'any',      interval '-30 minutes', 4, 10,  4)
+ ) as v(code, label, price_cents, zone_codes, bay_kind, until_offset, sort_order,
+        capacity, gate_reserve);
 
 commit;
 

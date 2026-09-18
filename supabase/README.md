@@ -84,7 +84,15 @@ None of it is in a migration file. None of it had a caller when this was
 written: `admin.js` called eight gate-ops actions (`list`, `events`,
 `check_in`, `hand_over`, `sell`, `move_to_overflow`, `set_price`,
 `set_sold_out`, `adjust_capacity`) and `gate-ops` implemented exactly
-those. Nothing read one of the seven extra `v_gate_list` columns or
+those.
+
+> **That action list is a snapshot of 26 Aug and has since changed.**
+> "A tier is a number of spaces, not a set of bays" retired
+> `move_to_overflow`, `adjust_capacity` and `set_sold_out` — there are no
+> bays to move a car between, no zone to re-count, and sold out is now
+> what the count says. `set_capacity` and `set_reserve` took their place.
+> The orphan table above is unaffected: it was orphaned then and is
+> orphaned still. Nothing read one of the seven extra `v_gate_list` columns or
 called one of the six functions.
 
 **One of the six is no longer orphaned.** `set_event_status(uuid, text)`
