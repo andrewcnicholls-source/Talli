@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Leave a Review — Talli Parking</title>
+<meta name="description" content="Leave a Google review for Talli Parking.">
+<!-- noindex on purpose: this is the far end of a printed QR code, not a
+     page anyone should reach from a search result. Being noindex is also
+     what keeps it out of sitemap.xml — see scripts/check.sh. -->
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poiret+One&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<!-- Decides production vs test and marks the page. Must load in <head>,
+     before anything paints, so the test styling is never a flash. -->
+<script src="assets/talli-config.js"></script>
+<script src="assets/talli-testgate.js"></script>
+</head>
+<body>
+
+<header class="hero compact">
+  <div class="hero-rule"></div>
+  <span class="eyebrow">Talli Parking</span>
+  <h1>Thanks for parking with us</h1>
+  <p>If the night went well, a review helps more people find us.</p>
+</header>
+
+<main class="wrap tight">
+
+  <div class="btn-row" id="review-action" hidden>
+    <a class="btn btn-primary" id="review-link" href="#" rel="noopener">
+      Write a Google review
+    </a>
+  </div>
+
+  <!-- Shown only while GOOGLE_REVIEW_URL below is still empty, so a card
+       printed early lands on something sensible rather than a dead end. -->
+  <div class="box" id="review-pending">
+    <h3>Our review link isn't live yet</h3>
+    <p>Search <strong>Talli Parking, Sandringham</strong> in Google Maps and leave a review there — or email us and we'll pass it on.</p>
+    <p><a href="mailto:talli.parking@gmail.com">talli.parking@gmail.com</a></p>
+  </div>
+
+  <hr class="thin">
+
+  <p style="text-align:center"><a href="index.html">Back to talli.co.nz</a></p>
+
+</main>
+
+<footer>
+  <div class="footer-inner">
+    <div><strong>Talli Parking</strong><br>86 Paice Ave, Sandringham, Auckland<br><a href="terms.html" style="font-size: 0.85em; text-decoration: underline;">Terms &amp; Conditions</a></div>
+    <div>Book or ask a question:<br><a href="mailto:talli.parking@gmail.com">talli.parking@gmail.com</a></div>
+  </div>
+</footer>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ===================================================================
+     THE ONE LINE TO EDIT.
+
+     Paste the review link from your Google Business Profile between the
+     quotes — profile → Ask for reviews, which gives a link shaped like
+     https://g.page/r/XXXXXXXXXXXX/review
+
+     A Place ID works too, as:
+     https://search.google.com/local/writereview?placeid=ChIJ...
+
+     Leave it empty and this page shows the fallback above instead of
+     sending anyone to a broken link. The printed QR codes point at
+     /review, never at Google directly, so changing this line is the
+     whole job — nothing has to be reprinted.
+     =================================================================== */
+  var GOOGLE_REVIEW_URL = '';
+
+  if (!GOOGLE_REVIEW_URL) return;
+
+  var link = document.getElementById('review-link');
+  link.href = GOOGLE_REVIEW_URL;
+  document.getElementById('review-action').hidden = false;
+  document.getElementById('review-pending').hidden = true;
+
+  /* Straight through to Google. replace() rather than assign() so the
+     back button returns them to wherever they came from, not to this
+     page, which would bounce them forward again. */
+  window.location.replace(GOOGLE_REVIEW_URL);
+})();
+</script>
+
+</body>
+</html>
