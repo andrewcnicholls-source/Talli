@@ -688,7 +688,7 @@
         // them at the way that does work.
         if (result.data.code === 'NOT_CONFIGURED' || result.status === 503) {
           fail('Card payment isn\u2019t switched on just yet. Email ' +
-               'talli.parking@gmail.com with your name, phone, plate and the ' +
+               'bookings@talli.co.nz with your name, phone, plate and the ' +
                'event, and we\u2019ll hold a spot for you.');
           return;
         }
