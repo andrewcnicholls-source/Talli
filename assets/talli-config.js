@@ -70,6 +70,14 @@
     // back: Standard until it's gone, then Priority, then Valet. Anything
     // else the fixture offers falls in behind these.
     gateTierOrder: ['standard', 'priority', 'valet'],
+
+    // The order the arrivals list groups in, and the order its chips read
+    // left to right. Deliberately not the selling order above: at the window
+    // the question is not what to sell next, it is which car in front of you
+    // needs something done to it. Valet needs keys taken, Priority needs
+    // waving through to the front, Standard mostly parks itself — so the two
+    // that need a person come first, and Standard brings up the rear.
+    arrivalTierOrder: ['priority', 'valet', 'standard'],
   };
 
   if (!isTest) return;

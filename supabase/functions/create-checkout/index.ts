@@ -351,15 +351,13 @@ Deno.serve(async (req) => {
   const arrival = booking.arrival_from && booking.arrival_until
     ? `Arrive ${hhmm(booking.arrival_from)}–${hhmm(booking.arrival_until)}`
     : null
-  const departure = booking.must_depart_by
-    ? `Back at your car by ${hhmm(booking.must_depart_by)}`
-    : null
-
+  // No return deadline here, or anywhere else a customer reads. Everyone is
+  // wanted back promptly and the stack most of all, but it is a thing we do
+  // at the gate rather than a promise we extract at checkout.
   const description = [
     property?.name,
     property?.walk_minutes ? `${property.walk_minutes} min walk to the ground` : null,
     arrival,
-    departure,
   ].filter(Boolean).join(' · ')
 
   const currency = booking.currency ?? 'nzd'

@@ -32,6 +32,13 @@
   // form still has to come up on Standard.
   var GATE_ORDER = CFG.gateTierOrder || ['standard', 'priority', 'valet'];
 
+  // The order the arrivals side reads in, which is not the order you sell in.
+  // Selling goes cheapest first — hold the quick exits back. Working the gate
+  // goes the other way: Priority and Valet are the cars that need something
+  // done to them the moment they appear, so they come first and Standard,
+  // which mostly just parks itself, comes last.
+  var ARRIVAL_ORDER = CFG.arrivalTierOrder || ['priority', 'valet', 'standard'];
+
   var state = {
     // Who the server said we are, from the `session` action. Display only —
     // every request is authorised again on its own.
@@ -40,7 +47,6 @@
     eventId: null,
     tab: 'gate',
     rows: [],
-    zones: [],
     tiers: [],
     extras: [],       // what has been pre-purchased and still needs handing over
     catalogue: [],    // what we sell
@@ -333,7 +339,6 @@
     return call('list', { event_id: state.eventId })
       .then(function (data) {
         state.rows = data.rows || [];
-        state.zones = data.zones || [];
         state.tiers = data.tiers || [];
         state.extras = data.extras || [];
         state.summary = data.summary || null;
@@ -346,10 +351,10 @@
 
   function renderAll() {
     renderStats();
+    renderSplit();
     renderList();
     renderStatus();
     renderBoard();
-    renderZones();
     renderPrices();
     renderPricePicker();
     renderExtras();
@@ -382,12 +387,90 @@
     }
   }
 
+  // The tier as a class, so a Priority row and the Priority tally are the
+  // same colour without either of them naming it.
+  function tierClass(code) {
+    return code ? ' is-tier-' + String(code).replace(/[^a-z0-9]+/gi, '-').toLowerCase() : '';
+  }
+
+  // Where a tier sits in the arrivals running order. Anything the fixture
+  // sells that the order does not name falls in behind, alphabetically.
+  function byArrivalOrder(a, b) {
+    var ai = ARRIVAL_ORDER.indexOf(a);
+    var bi = ARRIVAL_ORDER.indexOf(b);
+    if (ai === -1 && bi === -1) return a.localeCompare(b);
+    if (ai === -1) return 1;
+    if (bi === -1) return -1;
+    return ai - bi;
+  }
+
+  // Bookings in tier order, each tier's rows left in the order the server
+  // sent them — not arrived first, then earliest arrival window. Grouping
+  // reorders the sections, never the queue inside one.
+  function byTier(rows) {
+    var seen = {};
+    var groups = [];
+    rows.forEach(function (r) {
+      var code = r.tier_code || 'other';
+      if (!seen[code]) {
+        seen[code] = { code: code, rows: [], arrived: 0 };
+        groups.push(seen[code]);
+      }
+      seen[code].rows.push(r);
+      if (r.arrived) seen[code].arrived += 1;
+    });
+    groups.sort(function (x, y) { return byArrivalOrder(x.code, y.code); });
+    return groups;
+  }
+
+  // Arrived over booked, per tier. The headline already says 6/10; what it
+  // cannot say is that the four still out are all Valet, which is the
+  // difference between a queue that clears itself and four sets of keys
+  // arriving at once. Counted off the rows rather than asked of the server,
+  // so it stays true between refreshes and always adds up to the headline —
+  // unpaid holds included, exactly as the headline counts them.
+  function renderSplit() {
+    var wrap = el('ad-split');
+    wrap.innerHTML = '';
+
+    var seen = {};
+    var codes = [];
+    state.rows.forEach(function (r) {
+      var code = r.tier_code || 'other';
+      if (!seen[code]) { seen[code] = { arrived: 0, total: 0 }; codes.push(code); }
+      seen[code].total += 1;
+      if (r.arrived) seen[code].arrived += 1;
+    });
+
+    if (!codes.length) {
+      hide(wrap);
+      return;
+    }
+
+    // Left to right in the order the list below is grouped, so the chip and
+    // the section it summarises are never in different places.
+    codes.sort(byArrivalOrder);
+
+    codes.forEach(function (code) {
+      var n = seen[code];
+      var done = n.arrived === n.total;
+      var item = make('div', 'ad-split-item' + tierClass(code) + (done ? ' is-done' : ''));
+      item.appendChild(make('span', 'ad-split-num', n.arrived + '/' + n.total));
+      item.appendChild(make('span', 'ad-split-key', code.replace(/_/g, ' ')));
+      item.title = n.arrived + ' of ' + n.total + ' ' + code.replace(/_/g, ' ') +
+        ' in' + (done ? '' : ', ' + (n.total - n.arrived) + ' still to come');
+      wrap.appendChild(item);
+    });
+
+    show(wrap);
+  }
+
   /* --------------------------------------------------------- the list */
 
   function matches(row) {
     if (!state.filter) return true;
     var f = state.filter.toLowerCase();
-    return [row.vehicle_rego, row.customer_name, row.customer_phone, row.bay_label]
+    return [row.vehicle_rego, row.customer_name, row.customer_phone]
       .some(function (v) { return v && String(v).toLowerCase().indexOf(f) > -1; });
   }
 
@@ -403,7 +486,22 @@
       return;
     }
 
-    rows.forEach(function (r) { list.appendChild(rowCard(r)); });
+    // One section per tier. The heading repeats the chip's count on purpose:
+    // by the time you have scrolled to the Standard block the chips are off
+    // the top of the screen, and "2/7 in" is the thing you came down here to
+    // check.
+    byTier(rows).forEach(function (g) {
+      list.appendChild(groupHead(g));
+      g.rows.forEach(function (r) { list.appendChild(rowCard(r)); });
+    });
+  }
+
+  function groupHead(g) {
+    var head = make('div', 'ad-group' + tierClass(g.code));
+    head.appendChild(make('span', 'ad-group-name', g.code.replace(/_/g, ' ')));
+    head.appendChild(make('span', 'ad-group-count',
+      g.arrived + '/' + g.rows.length + ' in'));
+    return head;
   }
 
   function rowCard(r) {
@@ -417,22 +515,18 @@
 
     var top = make('div', 'ad-row-top');
     top.appendChild(make('span', 'ad-rego', r.vehicle_rego || '— no plate —'));
-    if (r.bay_label) top.appendChild(make('span', 'ad-bay', r.bay_label));
     main.appendChild(top);
 
     var who = [r.customer_name, r.customer_phone].filter(Boolean).join(' · ');
     if (who) main.appendChild(make('div', 'ad-who', who));
 
     var meta = make('div', 'ad-meta');
-    if (r.tier_code) meta.appendChild(make('span', 'ad-chip', r.tier_code.replace(/_/g, ' ')));
+    if (r.tier_code) {
+      meta.appendChild(make('span', 'ad-chip' + tierClass(r.tier_code),
+        r.tier_code.replace(/_/g, ' ')));
+    }
     if (r.arrival_from && r.arrival_until) {
       meta.appendChild(make('span', 'ad-chip', asTime(r.arrival_from) + '–' + asTime(r.arrival_until)));
-    }
-    // This car is blocking someone in. The chip is a reminder to chase them if
-    // they are not back, not a curfew on the customer.
-    if (r.must_depart_by) {
-      meta.appendChild(make('span', 'ad-chip is-warn',
-        'back by ' + asTime(r.must_depart_by)));
     }
     if (r.payment_method && r.payment_method !== 'stripe') {
       meta.appendChild(make('span', 'ad-chip is-cash',
@@ -475,44 +569,9 @@
         function () { toggleHandedOver(r); }));
     }
 
-    // Valet holds keys, so those cars are already movable by hand and do not
-    // need this. Anything already out on the verge has nowhere further to go.
-    var inOverflow = /overflow/i.test(String(r.zone_label || ''));
-    if (!inOverflow && r.tier_code !== 'valet') {
-      var move = button('ad-move', '→ Overflow', function () {
-        moveToOverflow(r, move);
-      });
-      move.title = 'Move this car to overflow and free its bay';
-      move.disabled = !!state.busy[r.booking_id];
-      actions.appendChild(move);
-    }
-
     card.appendChild(actions);
 
     return card;
-  }
-
-  // Moving a prepaid car out to the verge puts its bay back on sale. That is
-  // the point: when there is a queue at the gate, a Standard sitting in the
-  // back yard is worth more to you parked on the overflow.
-  //
-  // Nobody agreed to this in advance any more — that box is gone from the
-  // booking page — so nothing is confirmed here either. You are standing next
-  // to the car; the conversation has already happened.
-  function moveToOverflow(r, btn) {
-    var who = r.vehicle_rego || r.customer_name || 'this car';
-    state.busy[r.booking_id] = true;
-    btn.disabled = true;
-    call('move_to_overflow', { booking_id: r.booking_id })
-      .then(function (data) {
-        toast(who + ' moved to ' + (data.moved_to || 'overflow'), 'good');
-        return loadList(true);
-      })
-      .catch(function (err) { toast(err.message, 'bad'); })
-      .finally(function () {
-        delete state.busy[r.booking_id];
-        btn.disabled = false;
-      });
   }
 
   function toggleArrived(r, btn) {
@@ -523,7 +582,8 @@
     call(action, { booking_id: r.booking_id })
       .then(function () {
         r.arrived = !r.arrived;
-        toast((r.vehicle_rego || 'Booking') + (r.arrived ? ' ticked in' : ' un-ticked'), 'good');
+        var who = r.vehicle_rego || 'Booking';
+        toast(who + (r.arrived ? ' ticked in' : ' un-ticked'), 'good');
         return loadList(true);
       })
       .catch(function (err) { toast(err.message, 'bad'); })
@@ -554,56 +614,7 @@
     var pct = s.capacity ? Math.round((s.filled / s.capacity) * 100) : 0;
     el('ad-board-bar').style.width = Math.min(pct, 100) + '%';
 
-    var notes = [s.free + ' free'];
-    if (s.lost) notes.push(s.lost + ' written off tonight');
-    if (s.opened) notes.push(s.opened + ' squeezed in');
-    text(el('ad-board-note'), notes.join(' · '));
-  }
-
-  function renderZones() {
-    var wrap = el('ad-zones');
-    wrap.innerHTML = '';
-    if (!state.zones.length) {
-      wrap.appendChild(make('p', 'ad-empty', 'No spaces set up for this event.'));
-      return;
-    }
-
-    state.zones.forEach(function (z) {
-      var card = make('div', 'ad-zone');
-
-      var head = make('div', 'ad-zone-head');
-      head.appendChild(make('span', 'ad-zone-name', z.zone_label));
-      head.appendChild(make('span', 'ad-zone-count', z.filled + '/' + z.capacity));
-      card.appendChild(head);
-
-      var notes = [];
-      if (z.lost) notes.push(z.lost + ' lost');
-      if (z.opened) notes.push(z.opened + ' extra');
-      if (z.gate_reserve) notes.push(z.gate_reserve + ' held for walk-ups');
-      if (!z.reservable_in_advance) notes.push('gate only');
-      notes.push(z.spare_left + ' spare' + (z.spare_left === 1 ? '' : 's') + ' in reserve');
-      card.appendChild(make('div', 'ad-zone-note', notes.join(' · ')));
-
-      var row = make('div', 'ad-zone-actions');
-      row.appendChild(button('ad-count-btn', '−', function () { adjust(z, -1); }));
-      row.appendChild(button('ad-count-btn', '+', function () { adjust(z, 1); }));
-      card.appendChild(row);
-
-      wrap.appendChild(card);
-    });
-  }
-
-  function adjust(zone, delta) {
-    call('adjust_capacity', {
-      event_id: state.eventId,
-      zone_id: zone.zone_id,
-      delta: delta,
-    })
-      .then(function (data) {
-        toast(zone.zone_label + ' now ' + data.capacity + ' spaces', 'good');
-        return loadList(true);
-      })
-      .catch(function (err) { toast(err.message, 'bad'); });
+    text(el('ad-board-note'), s.free + ' free');
   }
 
   /* ------------------------------------------------------------- prices */
@@ -629,45 +640,168 @@
       return;
     }
 
-    tiers.forEach(function (t) {
-      var gone = t.manually_sold_out || t.spots_left_gate <= 0;
-      var card = make('div', 'ad-price' + (gone ? ' is-gone' : ''));
+    tiers.forEach(function (t) { wrap.appendChild(tierCard(t)); });
+  }
 
-      var head = make('div', 'ad-price-head');
-      head.appendChild(make('span', 'ad-price-name', shortName(t)));
-      head.appendChild(button('ad-price-tag', money(t.price_cents), function () {
-        openPrice(t);
-      }));
-      card.appendChild(head);
+  // Everything about one type of space on one card: what it is, what it
+  // costs, how many there are, how many have gone, how many are being kept
+  // back for walk-ups, and what that leaves the website. The yard used to
+  // be a separate section of four cards split by corner, which is a fact
+  // about 86 Paice Ave rather than about parking.
+  //
+  // There is no Sold out button. Sold out is what the count says, and a
+  // button that could disagree with the count is a second version of the
+  // truth to keep in step.
+  function tierCard(t) {
+    var gone = t.manually_sold_out || t.spots_left_gate <= 0;
+    var card = make('div', 'ad-price' + (gone ? ' is-gone' : ''));
 
-      card.appendChild(make('div', 'ad-price-left',
-        t.manually_sold_out
-          ? 'Marked sold out'
-          : t.spots_left_gate + ' left at the gate · ' + t.spots_left + ' online'));
+    var head = make('div', 'ad-price-head');
+    head.appendChild(make('span', 'ad-price-name', shortName(t)));
+    head.appendChild(button('ad-price-tag', money(t.price_cents), function () {
+      openPrice(t);
+    }));
+    card.appendChild(head);
 
-      // The number above is what goes on the sign, and it is what a cash
-      // customer hands over. Card is that plus the surcharge, so say both
-      // rather than making anyone work it out at the driver's window.
-      if (state.surchargeBps) {
-        card.appendChild(make('div', 'ad-price-card',
-          'cash ' + money(t.price_cents) + ' · card ' +
-          money(t.price_cents + surchargeOn(t.price_cents, 'tap_to_pay'))));
-      }
+    // The number above is what goes on the sign, and it is what a cash
+    // customer hands over. Card is that plus the surcharge, so say both
+    // rather than making anyone work it out at the driver's window.
+    if (state.surchargeBps) {
+      card.appendChild(make('div', 'ad-price-card',
+        'cash ' + money(t.price_cents) + ' · card ' +
+        money(t.price_cents + surchargeOn(t.price_cents, 'tap_to_pay'))));
+    }
 
-      var row = make('div', 'ad-price-actions');
-      row.appendChild(button('ad-nudge', '−$5', function () {
-        setPrice(t, t.price_cents - 500);
-      }));
-      row.appendChild(button('ad-nudge', '+$5', function () {
-        setPrice(t, t.price_cents + 500);
-      }));
-      row.appendChild(button('ad-soldout' + (t.manually_sold_out ? ' is-on' : ''),
-        t.manually_sold_out ? 'Back on sale' : 'Sold out',
-        function () { toggleSoldOut(t); }));
-      card.appendChild(row);
+    var row = make('div', 'ad-price-actions');
+    row.appendChild(button('ad-nudge', '−$5', function () {
+      setPrice(t, t.price_cents - 500);
+    }));
+    row.appendChild(button('ad-nudge', '+$5', function () {
+      setPrice(t, t.price_cents + 500);
+    }));
+    card.appendChild(row);
 
-      wrap.appendChild(card);
+    var spaces = spacesRow(t);
+    if (spaces) card.appendChild(spaces);
+
+    var reserve = reserveRow(t);
+    if (reserve) card.appendChild(reserve);
+
+    card.appendChild(make('div', 'ad-price-left', leftLine(t)));
+
+    return card;
+  }
+
+  // The conclusion the other two rows add up to, in the words the question
+  // gets asked in: how many have gone, and can the website still sell one.
+  function leftLine(t) {
+    if (t.manually_sold_out) return 'Marked sold out';
+    if (!t.capacity) return 'No spaces set for tonight';
+
+    var taken = (t.sold || 0) + ' of ' + t.capacity + ' taken';
+    if (t.spots_left_gate <= 0) return taken + ' · full';
+    if (t.spots_left > 0) return taken + ' · ' + t.spots_left + ' available online';
+    return t.gate_reserve > 0
+      ? taken + ' · nothing online, the rest is held for walk-ups'
+      : taken + ' · nothing online';
+  }
+
+  // How many of this type there are tonight. A space lost to a bad park is
+  // one tap here: Andrew knows which bays are which, so a lost one in the
+  // back yard is one fewer Standard and he does not have to say which bay.
+  function spacesRow(t) {
+    if (typeof t.capacity !== 'number') return null;
+
+    var row = make('div', 'ad-tally');
+    row.appendChild(make('span', 'ad-tally-key', 'spaces tonight'));
+
+    var down = button('ad-count-btn', '−', function () { nudgeSpaces(t, -1); });
+    down.title = 'One fewer — a space lost tonight';
+    row.appendChild(down);
+
+    row.appendChild(make('span', 'ad-tally-num', String(t.capacity)));
+
+    var up = button('ad-count-btn', '+', function () { nudgeSpaces(t, 1); });
+    up.title = 'One more — a space squeezed in tonight';
+    row.appendChild(up);
+
+    return row;
+  }
+
+  // A delta, for the same reason the reserve sends one: the figure on the
+  // glass may be another phone's work, and a tap must move the count the
+  // way it was meant rather than write back what happened to be showing.
+  function nudgeSpaces(tier, delta) {
+    call('set_capacity', {
+      event_id: state.eventId,
+      property_id: tier.property_id,
+      tier_code: tier.code,
+      delta: delta,
+    })
+      .then(function (data) {
+        toast(shortName(tier) + ': ' + data.capacity + ' space' +
+          (data.capacity === 1 ? '' : 's') + ' tonight', 'good');
+        return loadList(true);
+      })
+      .catch(function (err) { toast(err.message, 'bad'); });
+  }
+
+  // Spaces of this tier the website may not sell down into, for tonight and
+  // tonight only. Two taps, the same − / + as the row above it, because it
+  // is the same kind of decision made at the same moment: one more, one fewer.
+  //
+  // "Release" rather than "−" in words, because that is what lowering it
+  // does — Standard nearly gone an hour before kickoff is the reason this
+  // control exists, and the answer is to put two of the held spaces back on
+  // the website rather than to stand at the gate hoping.
+  function reserveRow(t) {
+    // No reserve in the payload means the backend predates it: an older
+    // gate-ops, or a database without the column. Drawing a 0 there would
+    // be a claim about the night that nothing has told us, so draw nothing.
+    if (typeof t.gate_reserve !== 'number') return null;
+
+    var row = make('div', 'ad-reserve');
+
+    row.appendChild(make('span', 'ad-reserve-key', 'held for walk-ups'));
+
+    var down = button('ad-count-btn', '−', function () {
+      nudgeReserve(t, -1);
     });
+    // Not disabled at zero. The number beside it is thirty seconds old at
+    // worst and may be another phone's work at best; the database clamps,
+    // and a button that refuses to press is worse than one that no-ops.
+    down.title = 'Release one to the website';
+    row.appendChild(down);
+
+    row.appendChild(make('span', 'ad-reserve-num', String(t.gate_reserve)));
+
+    var up = button('ad-count-btn', '+', function () {
+      nudgeReserve(t, 1);
+    });
+    up.title = 'Hold one more back from the website';
+    row.appendChild(up);
+
+    return row;
+  }
+
+  // One more, one fewer — never "set it to this". What the screen is showing
+  // can be stale, and a tap must move the reserve the way it was meant
+  // rather than write back the figure that happened to be on the glass.
+  function nudgeReserve(tier, delta) {
+    call('set_reserve', {
+      event_id: state.eventId,
+      property_id: tier.property_id,
+      tier_code: tier.code,
+      delta: delta,
+    })
+      .then(function (data) {
+        var n = data.reserve;
+        toast(shortName(tier) + ': ' +
+          (n === 0 ? 'nothing held back now' :
+            n + ' held for walk-ups'), 'good');
+        return loadList(true);
+      })
+      .catch(function (err) { toast(err.message, 'bad'); });
   }
 
   // The dropdown under the price cards. It reads the same templates the
@@ -826,20 +960,6 @@
     setPrice(tier, dollars * 100);
   }
 
-  function toggleSoldOut(tier) {
-    call('set_sold_out', {
-      event_id: state.eventId,
-      property_id: tier.property_id,
-      tier_code: tier.code,
-      sold_out: !tier.manually_sold_out,
-    })
-      .then(function (data) {
-        toast(shortName(tier) + (data.sold_out ? ' marked sold out' : ' back on sale'), 'good');
-        return loadList(true);
-      })
-      .catch(function (err) { toast(err.message, 'bad'); });
-  }
-
   /* ------------------------------------------------------------- extras */
 
   function renderExtras() {
@@ -966,9 +1086,9 @@
   /* ----------------------------------------------------------- new event */
 
   // A tier as the modal holds it. Everything the database wants, including
-  // the parts the form does not show — arrival windows, which zones can
-  // fulfil it — so that editing a template's price does not quietly drop
-  // the rest of what that template knew.
+  // the parts the form does not show — arrival windows, and the zone and
+  // bay fields older templates still carry — so that editing a template's
+  // price does not quietly drop the rest of what that template knew.
   //
   // An arrival window nobody set stays null rather than picking a number
   // here. normalise_event_tiers fills it from the tier code — valet and
@@ -1330,8 +1450,8 @@
     wrap.innerHTML = '';
     var tiers = inGateOrder(state.tiers);
 
-    // Default to the first thing still sellable, which after a "sold out" tap
-    // is the next spot up. That is the whole point of the ordering.
+    // Default to the first thing still sellable, which once a type is full
+    // is the next one up. That is the whole point of the ordering.
     if (!state.sellTier) {
       var first = tiers.filter(function (t) {
         return !t.manually_sold_out && t.spots_left_gate > 0;
@@ -1550,11 +1670,19 @@
   // The sticky search bar has to sit directly under the header, whose height
   // depends on the safe-area inset and the length of the event name. Measure
   // it rather than hard-coding a number that is wrong on half the phones.
+  // The tier headings then park under the search bar, so measure that too —
+  // its height moves with the font size the phone is set to.
   function measureHead() {
     var head = el('ad-head') || document.querySelector('.ad-head');
-    if (!head) return;
-    document.documentElement.style.setProperty(
-      '--ad-head-h', head.offsetHeight + 'px');
+    if (head) {
+      document.documentElement.style.setProperty(
+        '--ad-head-h', head.offsetHeight + 'px');
+    }
+    var tools = document.querySelector('#ad-pane-gate .ad-tools');
+    if (tools) {
+      document.documentElement.style.setProperty(
+        '--ad-tools-h', tools.offsetHeight + 'px');
+    }
   }
 
   /* ---------------------------------------------------------------- tabs */

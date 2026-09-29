@@ -97,7 +97,7 @@ const TZ = 'Pacific/Auckland'
 
 const FROM_EMAIL = Deno.env.get('TALLI_FROM_EMAIL') ??
   'Talli Parking <bookings@talli.co.nz>'
-const REPLY_TO = Deno.env.get('TALLI_REPLY_TO') ?? 'talli.parking@gmail.com'
+const REPLY_TO = Deno.env.get('TALLI_REPLY_TO') ?? 'bookings@talli.co.nz'
 
 const money = (cents: number) =>
   '$' + (cents % 100 === 0 ? (cents / 100).toFixed(0) : (cents / 100).toFixed(2))
@@ -189,7 +189,6 @@ async function sendConfirmationEmail(bookingId: string): Promise<void> {
       ['Date', ev?.starts_at ? `${onDate(ev.starts_at)}, ${atTime(ev.starts_at)}` : null],
       ['Where', address],
       ['Arrive', arrival],
-      ['Back at your car by', atTime(b.must_depart_by)],
       ['Spot', spot],
       ['Vehicle', b.vehicle_rego ?? null],
       ['Low car', b.vehicle_low_clearance ? 'Noted — we will keep you off the steep entry' : null],

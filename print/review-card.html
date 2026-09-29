@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Review Cards — Talli Parking</title>
+<!-- Not part of the public site: a print sheet that happens to live in
+     the same repository, so it deploys with everything else. -->
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poiret+One&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  /* =================================================================
+     Four A6 review cards on one A4 sheet, for windscreens and the
+     gate table. A6 is exactly a quarter of A4, so the cut lines are
+     the halfway folds — no trimming guesswork.
+
+     Print at 100% / "Actual size", NOT "Fit to page": scaling shrinks
+     the QR, and a QR under about 30mm stops being reliable on a phone
+     held at arm's length in the dark.
+     ================================================================= */
+
+  :root {
+    --ink: #1A1A1A;
+    --blue: #2B4C7E;
+    --grey: #7A7A74;
+    --line: #E4E2DC;
+    --display: 'Poiret One', sans-serif;
+    --body: 'Jost', 'Work Sans', Arial, sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: var(--body);
+    color: var(--ink);
+    background: #F4F4F2;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .sheet {
+    width: 210mm;
+    height: 297mm;
+    margin: 12mm auto;
+    background: #FFFFFF;
+    display: grid;
+    grid-template-columns: 105mm 105mm;
+    grid-template-rows: 148.5mm 148.5mm;
+    box-shadow: 0 2mm 8mm rgba(0, 0, 0, 0.12);
+  }
+
+  .card {
+    /* The dotted rule is the cut line. It prints, deliberately —
+       cutting four cards freehand off a blank sheet is worse. */
+    border: 0.2mm dotted var(--line);
+    padding: 10mm 8mm;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    text-align: center;
+  }
+
+  .wordmark {
+    font-family: var(--display);
+    font-size: 30pt;
+    line-height: 1;
+    letter-spacing: 0.02em;
+  }
+
+  .rule {
+    width: 14mm;
+    height: 0.4mm;
+    background: var(--blue);
+    margin: 3mm auto 0;
+  }
+
+  .lead {
+    font-size: 13pt;
+    font-weight: 400;
+    line-height: 1.35;
+  }
+
+  .lead strong { font-weight: 500; }
+
+  .qr {
+    width: 46mm;
+    height: 46mm;
+    display: block;
+  }
+
+  .instruction {
+    font-size: 10.5pt;
+    font-weight: 400;
+    color: var(--ink);
+    line-height: 1.4;
+  }
+
+  .url {
+    font-size: 8pt;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--grey);
+  }
+
+  @media print {
+    @page { size: A4 portrait; margin: 0; }
+    body { background: #FFFFFF; }
+    .note { display: none; }
+    .sheet {
+      margin: 0;
+      box-shadow: none;
+      /* A shade under a full A4 (297mm) on purpose. At exactly 297mm the
+         sheet rounds a fraction of a pixel past the page and every print
+         comes out as two pages, the second one blank. */
+      height: 296mm;
+      grid-template-rows: 148mm 148mm;
+      /* Backgrounds and the blue rule are decoration the browser may
+         drop; the QR itself is a black-on-white image either way. */
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+  }
+
+  .note {
+    max-width: 210mm;
+    margin: 12mm auto 0;
+    padding: 0 4mm;
+    font-size: 10pt;
+    color: var(--grey);
+    line-height: 1.6;
+  }
+  .note code { font-family: ui-monospace, Menlo, Consolas, monospace; }
+</style>
+</head>
+<body>
+
+<div class="sheet">
+
+  <div class="card">
+    <div>
+      <div class="wordmark">talli.</div>
+      <div class="rule"></div>
+    </div>
+    <p class="lead">Enjoyed the park?<br><strong>Tell Google about it.</strong></p>
+    <img class="qr" src="review-qr.svg" alt="QR code linking to talli.co.nz/review">
+    <p class="instruction">Point your camera at the code<br>to leave a review.</p>
+    <p class="url">talli.co.nz/review</p>
+  </div>
+
+  <div class="card">
+    <div>
+      <div class="wordmark">talli.</div>
+      <div class="rule"></div>
+    </div>
+    <p class="lead">Enjoyed the park?<br><strong>Tell Google about it.</strong></p>
+    <img class="qr" src="review-qr.svg" alt="QR code linking to talli.co.nz/review">
+    <p class="instruction">Point your camera at the code<br>to leave a review.</p>
+    <p class="url">talli.co.nz/review</p>
+  </div>
+
+  <div class="card">
+    <div>
+      <div class="wordmark">talli.</div>
+      <div class="rule"></div>
+    </div>
+    <p class="lead">Enjoyed the park?<br><strong>Tell Google about it.</strong></p>
+    <img class="qr" src="review-qr.svg" alt="QR code linking to talli.co.nz/review">
+    <p class="instruction">Point your camera at the code<br>to leave a review.</p>
+    <p class="url">talli.co.nz/review</p>
+  </div>
+
+  <div class="card">
+    <div>
+      <div class="wordmark">talli.</div>
+      <div class="rule"></div>
+    </div>
+    <p class="lead">Enjoyed the park?<br><strong>Tell Google about it.</strong></p>
+    <img class="qr" src="review-qr.svg" alt="QR code linking to talli.co.nz/review">
+    <p class="instruction">Point your camera at the code<br>to leave a review.</p>
+    <p class="url">talli.co.nz/review</p>
+  </div>
+
+</div>
+
+<p class="note">
+  Print at <strong>100% / Actual size</strong>, not “fit to page” — the QR is
+  46&nbsp;mm here and wants to stay that way. Cut on the dotted lines for four
+  A6 cards. The code points at <code>talli.co.nz/review</code>, which forwards
+  to Google; the destination is one line in <code>review.html</code>, so these
+  never need reprinting. Regenerate the code itself with
+  <code>python3 scripts/make-review-qr.py</code>.
+</p>
+
+</body>
+</html>

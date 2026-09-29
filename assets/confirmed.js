@@ -113,7 +113,6 @@
           ? 'between ' + asTime(b.arrival_from) + ' and ' + asTime(b.arrival_until)
           : null
       ),
-      row('Back by', b.must_depart_by ? asTime(b.must_depart_by) : null),
       row('Vehicle', b.vehicle_rego),
       // Only appears if they told us. Saying it back is how they know the
       // marshal already has it, without having to raise it on the night.
