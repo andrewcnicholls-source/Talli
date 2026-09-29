@@ -260,7 +260,10 @@
       <option value="tap_to_pay">Card (tap to pay)</option>
       <option value="cash">Cash</option>
       <option value="bank_transfer">Bank transfer</option>
+      <option value="unpaid">Not paid yet &mdash; take it later</option>
     </select>
+    <p class="ad-hint" id="ad-sell-later-hint" hidden>Saves the car and ticks it in.
+      Tap the booking in the list when they pay.</p>
 
     <label class="ad-label">Extras <span>optional</span></label>
     <div class="ad-sell-extras" id="ad-sell-extras"></div>
@@ -300,7 +303,7 @@
         <span id="ad-sell-charge-surcharge"></span>
       </div>
       <div class="ad-charge-total">
-        <span>Charge them</span>
+        <span id="ad-sell-charge-total-label">Charge them</span>
         <strong id="ad-sell-charge-total"></strong>
       </div>
     </div>
@@ -308,6 +311,77 @@
     <p class="ad-sheet-error" id="ad-sell-error" role="alert" hidden></p>
 
     <button type="submit" class="btn btn-primary" id="ad-sell-submit">Take the money</button>
+  </form>
+</div>
+
+<!-- ----------------------------------------------------- one booking -->
+<!-- Tap a row to get here. Everything that can be wrong about a booking
+     after the fact: the plate, how to reach them, how they paid, and which
+     type of space they actually ended up in. -->
+<div class="ad-sheet" id="ad-edit" hidden>
+  <form class="ad-sheet-card" id="ad-edit-form">
+    <div class="ad-sheet-head">
+      <h2 id="ad-edit-title">Booking</h2>
+      <button type="button" class="ad-sheet-close" id="ad-edit-close" aria-label="Close">&times;</button>
+    </div>
+
+    <p class="ad-edit-sub" id="ad-edit-sub"></p>
+
+    <label class="ad-label">Space <span>move them if they ended up somewhere else</span></label>
+    <div class="ad-pick" id="ad-edit-tiers"></div>
+    <p class="ad-hint" id="ad-edit-move-hint" hidden></p>
+
+    <label class="ad-label" for="ad-edit-rego">License plate</label>
+    <input type="text" id="ad-edit-rego" name="rego" class="ad-input"
+           autocapitalize="characters" spellcheck="false">
+
+    <div class="ad-sheet-row">
+      <div>
+        <label class="ad-label" for="ad-edit-name">Name</label>
+        <input type="text" id="ad-edit-name" name="editname" class="ad-input">
+      </div>
+      <div>
+        <label class="ad-label" for="ad-edit-phone">Phone</label>
+        <input type="tel" id="ad-edit-phone" name="editphone" class="ad-input">
+      </div>
+    </div>
+
+    <label class="ad-label" for="ad-edit-email">Email</label>
+    <input type="email" id="ad-edit-email" name="editemail" class="ad-input"
+           autocapitalize="none" spellcheck="false">
+
+    <label class="ad-check" for="ad-edit-low">
+      <input type="checkbox" id="ad-edit-low" name="editlow">
+      <span>Low car &mdash; keep it off the steep entry</span>
+    </label>
+
+    <label class="ad-label" for="ad-edit-payment">Paid by</label>
+    <select id="ad-edit-payment" name="payment" class="ad-select">
+      <option value="tap_to_pay">Card (tap to pay)</option>
+      <option value="cash">Cash</option>
+      <option value="bank_transfer">Bank transfer</option>
+      <option value="free">Free / comp</option>
+      <option value="other">Other</option>
+      <option value="unpaid">Not paid yet</option>
+      <option value="stripe" disabled>Card online</option>
+    </select>
+    <p class="ad-hint" id="ad-edit-payment-hint" hidden></p>
+
+    <div class="ad-charge" id="ad-edit-charge">
+      <div class="ad-charge-total">
+        <span id="ad-edit-charge-label">Paid</span>
+        <strong id="ad-edit-charge-total"></strong>
+      </div>
+    </div>
+
+    <label class="ad-label" for="ad-edit-notes">Notes <span>optional</span></label>
+    <textarea id="ad-edit-notes" name="editnotes" class="ad-input" rows="2"
+              maxlength="500"></textarea>
+
+    <p class="ad-sheet-error" id="ad-edit-error" role="alert" hidden></p>
+
+    <button type="submit" class="btn btn-primary" id="ad-edit-submit">Save</button>
+    <button type="button" class="btn btn-outline" id="ad-edit-cancel" hidden>Cancel this booking</button>
   </form>
 </div>
 

@@ -82,6 +82,15 @@ function minutes(v: unknown, fallback: number | null): number | null {
 
 type Row = Record<string, any>
 
+// sell_at_gate's stand-in for a walk-up who gave no email.
+const isGateAddress = (email: string) => /^gate\+[0-9a-f]+@talli\.co\.nz$/i.test(email)
+
+const PAY_METHODS = ['cash', 'tap_to_pay', 'bank_transfer', 'free', 'other', 'unpaid']
+
+// Absent means "leave it"; a string, even an empty one, means "set it".
+const optText = (v: unknown): string | null =>
+  v === undefined || v === null ? null : String(v)
+
 // Everything the gate screen draws, from one round trip. On a phone at the
 // end of a driveway, one request that sometimes carries a little too much
 // beats four that each might not arrive.
@@ -97,7 +106,8 @@ async function nightState(eventId: string) {
     // booking. Adding a column to that view means restating all of it, and a
     // restatement written against one branch drops whatever another branch
     // added. This join costs one small query and cannot go stale.
-    db.from('booking').select('id, surcharge_cents, vehicle_low_clearance')
+    db.from('booking')
+      .select('id, surcharge_cents, vehicle_low_clearance, customer_email, hold_expires_at')
       .eq('event_id', eventId),
   ])
   if (listRes.error) throw listRes.error
@@ -106,9 +116,17 @@ async function nightState(eventId: string) {
 
   const surcharges = new Map<string, number>()
   const lowCars = new Set<string>()
+  const emails = new Map<string, string>()
+  const onTheClock = new Set<string>()
   for (const b of (chargeRes.data ?? []) as Row[]) {
     surcharges.set(String(b.id), b.surcharge_cents ?? 0)
     if (b.vehicle_low_clearance) lowCars.add(String(b.id))
+    // A walk-up with no email is given a made-up one so the column can stay
+    // not-null. That is not an address anyone should be shown, or edit.
+    if (b.customer_email && !isGateAddress(b.customer_email)) {
+      emails.set(String(b.id), b.customer_email)
+    }
+    if (b.hold_expires_at) onTheClock.add(String(b.id))
   }
 
   // Not yet arrived first — that is the working list. Within each group,
@@ -118,6 +136,12 @@ async function nightState(eventId: string) {
       ...r,
       surcharge_cents: surcharges.get(r.booking_id) ?? 0,
       vehicle_low_clearance: lowCars.has(String(r.booking_id)),
+      customer_email: emails.get(String(r.booking_id)) ?? null,
+      // Two kinds of unpaid, and they mean different things. A hold with a
+      // clock on it is somebody mid-checkout on the website; a walk-up saved
+      // as "pay later" is a car in the yard that still owes money.
+      owes: r.status === 'held' && r.payment_method === 'unpaid',
+      in_checkout: r.status === 'held' && onTheClock.has(String(r.booking_id)),
     }))
     .sort((a, b) => {
       if (a.arrived !== b.arrived) return a.arrived ? 1 : -1
@@ -160,13 +184,17 @@ async function nightState(eventId: string) {
     summary: {
       total: rows.length,
       arrived: rows.filter((r: Row) => r.arrived).length,
-      unpaid_holds: rows.filter((r: Row) => r.status === 'held').length,
+      unpaid_holds: rows.filter((r: Row) => r.in_checkout).length,
+      owing: rows.filter((r: Row) => r.owes).length,
+      owing_cents: rows.filter((r: Row) => r.owes)
+        .reduce((sum: number, r: Row) => sum + value(r), 0),
       // Spaces, not bookings. A valet car and a standard car both take one.
       capacity,
       filled,
       free: capacity - filled,
       cash_due_cents: rows
-        .filter((r: Row) => r.payment_method !== 'stripe' && !r.arrived)
+        .filter((r: Row) => r.payment_method !== 'stripe' && r.payment_method !== 'unpaid' &&
+          !r.arrived)
         .reduce((sum: number, r: Row) => sum + value(r), 0),
       taken_cents: paid.reduce((sum: number, r: Row) => sum + value(r), 0),
       online_cents: paid.filter((r: Row) => r.channel === 'online')
@@ -421,6 +449,44 @@ Deno.serve(async (req) => {
             ? (sold.amount_cents ?? 0) + (sold.addons_cents ?? 0) + (sold.surcharge_cents ?? 0)
             : null,
         })
+      }
+
+      // ------------------------------------------------ fixing a booking
+
+      // Tap a row, change what was wrong. Details, how they paid, and which
+      // type of space they are counted against, in one transaction — so a
+      // valet customer who ended up in Priority frees the valet space and
+      // takes a Priority one, with what they paid left exactly as it was.
+      case 'edit_booking': {
+        const id = String(body.booking_id ?? '')
+        if (!id) return json({ error: 'booking_id is required' }, 400)
+        const method = optText(body.payment_method)
+        if (method !== null && !PAY_METHODS.includes(method)) {
+          return json({ error: 'That is not a way to pay at the gate.' }, 400)
+        }
+        const low = body.vehicle_low_clearance
+        const { data, error } = await db.rpc('edit_booking_at_gate', {
+          p_booking_id: id,
+          p_name: optText(body.name),
+          p_phone: optText(body.phone),
+          p_email: optText(body.email),
+          p_rego: optText(body.vehicle_rego),
+          p_low_clearance: typeof low === 'boolean' ? low : null,
+          p_notes: optText(body.notes),
+          p_payment_method: method,
+          p_tier_code: body.tier_code ? String(body.tier_code) : null,
+        })
+        if (error) return json(named(error), 409)
+        return json({ ok: true, booking: data })
+      }
+
+      // A "pay later" walk-up who drove off, or was never really there.
+      case 'cancel_unpaid': {
+        const id = String(body.booking_id ?? '')
+        if (!id) return json({ error: 'booking_id is required' }, 400)
+        const { error } = await db.rpc('cancel_unpaid_gate_booking', { p_booking_id: id })
+        if (error) return json(named(error), 409)
+        return json({ ok: true })
       }
 
       // ------------------------------------------------ the night's levers

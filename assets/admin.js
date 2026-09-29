@@ -47,6 +47,9 @@
     busy: {},
     sellTier: null,
     sellExtras: {},
+    // The booking open in the edit sheet, and the space it is being moved to.
+    edit: null,
+    editTier: null,
     priceTier: null,
     // The new-event modal. templates and properties come down when it opens;
     // newTiers is what is being edited, held as objects rather than read back
@@ -286,6 +289,10 @@
 
     var holds = el('ad-holds');
     var notes = [];
+    if (s.owing > 0) {
+      notes.push(s.owing + ' walk-up' + (s.owing === 1 ? '' : 's') +
+        ' still to pay — ' + money(s.owing_cents) + '.');
+    }
     if (s.unpaid_holds > 0) {
       notes.push(s.unpaid_holds + ' unpaid hold' + (s.unpaid_holds === 1 ? '' : 's') +
         ' — people mid-checkout, not confirmed bookings.');
@@ -424,9 +431,19 @@
     var owing = (r.addons_pending || 0) > 0;
 
     var card = make('div', 'ad-row' + (r.arrived ? ' is-arrived' : '') +
-      (r.status === 'held' ? ' is-held' : '') + (owing ? ' has-extras' : ''));
+      (r.owes ? ' is-owing' : r.status === 'held' ? ' is-held' : '') +
+      (owing ? ' has-extras' : ''));
 
+    // The left side of the row opens the booking. The buttons on the right
+    // stay what they were, so ticking a car in is still one tap.
     var main = make('div', 'ad-row-main');
+    main.setAttribute('role', 'button');
+    main.tabIndex = 0;
+    main.setAttribute('aria-label', 'Edit ' + (r.vehicle_rego || 'booking'));
+    main.addEventListener('click', function () { openEdit(r); });
+    main.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openEdit(r); }
+    });
 
     var top = make('div', 'ad-row-top');
     top.appendChild(make('span', 'ad-rego', r.vehicle_rego || '— no plate —'));
@@ -443,17 +460,21 @@
     if (r.arrival_from && r.arrival_until) {
       meta.appendChild(make('span', 'ad-chip', asTime(r.arrival_from) + '–' + asTime(r.arrival_until)));
     }
-    if (r.payment_method && r.payment_method !== 'stripe') {
+    if (r.owes) {
+      meta.appendChild(make('span', 'ad-chip is-warn', 'owes ' + rowTotal(r)));
+    } else if (r.payment_method && r.payment_method !== 'stripe') {
       meta.appendChild(make('span', 'ad-chip is-cash',
         r.payment_method.replace(/_/g, ' ') + ' ' +
-        money((r.amount_cents || 0) + (r.addons_cents || 0) + (r.surcharge_cents || 0))));
+        rowTotal(r)));
     }
     // Read before the car is waved past the crossing, not after it has
     // grounded on it. Loud on purpose — it is a decision, not a detail.
     if (r.vehicle_low_clearance) {
       meta.appendChild(make('span', 'ad-chip is-low', 'low car'));
     }
-    if (r.status === 'held') meta.appendChild(make('span', 'ad-chip is-warn', 'unpaid hold'));
+    if (r.status === 'held' && !r.owes) {
+      meta.appendChild(make('span', 'ad-chip is-warn', 'unpaid hold'));
+    }
     if (meta.childNodes.length) main.appendChild(meta);
 
     // Paid for a fortnight ago and easy to forget. Loud enough to catch the
@@ -478,6 +499,10 @@
     tick.addEventListener('click', function () { toggleArrived(r, tick); });
     actions.appendChild(tick);
 
+    if (r.owes) {
+      actions.appendChild(button('ad-pay', 'Pay', function () { openEdit(r); }));
+    }
+
     if (addons.length) {
       actions.appendChild(button('ad-hand' + (owing ? '' : ' is-on'),
         owing ? 'Hand over' : 'Handed',
@@ -487,6 +512,10 @@
     card.appendChild(actions);
 
     return card;
+  }
+
+  function rowTotal(r) {
+    return money((r.amount_cents || 0) + (r.addons_cents || 0) + (r.surcharge_cents || 0));
   }
 
   function toggleArrived(r, btn) {
@@ -910,6 +939,7 @@
       ['Of that, extras', money(s.addons_cents), false],
       ['Of that, card surcharge', money(s.surcharge_cents), false],
       ['Still to collect', money(s.cash_due_cents), s.cash_due_cents > 0],
+      ['Owed by pay-later walk-ups', money(s.owing_cents || 0), (s.owing_cents || 0) > 0],
     ].forEach(function (line) {
       var row = make('div', 'ad-money-row' + (line[2] ? ' is-lead' : ''));
       row.appendChild(make('span', null, line[0]));
@@ -1349,15 +1379,26 @@
 
   /* -------------------------------------------------------- walk-up sale */
 
+  // Opening the sheet does not wipe it. A walk-up closed half-typed — the
+  // driver went to find their wallet, the terminal would not connect — comes
+  // back as it was left. Only a sale that went through clears it.
   function openSell() {
     el('ad-sell-error').hidden = true;
-    el('ad-sell-form').reset();
-    state.sellTier = null;
-    state.sellExtras = {};
+    // The type picked last time may have filled up since.
+    var still = state.tiers.filter(function (t) {
+      return t.code === state.sellTier && !t.manually_sold_out && t.spots_left_gate > 0;
+    })[0];
+    if (!still) state.sellTier = null;
     renderSellTiers();
     renderSellExtras();
     renderSellCharge();
     show(el('ad-sell'));
+  }
+
+  function clearSell() {
+    el('ad-sell-form').reset();
+    state.sellTier = null;
+    state.sellExtras = {};
   }
 
   function renderSellTiers() {
@@ -1465,6 +1506,10 @@
     }
 
     var method = el('ad-sell-payment').value;
+    var later = method === 'unpaid';
+    el('ad-sell-later-hint').hidden = !later;
+    text(el('ad-sell-charge-total-label'), later ? 'They will owe' : 'Charge them');
+    text(el('ad-sell-submit'), later ? 'Save — they pay later' : 'Take the money');
     var extras = sellExtrasTotal();
     var subtotal = tier.price_cents + extras;
     var surcharge = surchargeOn(subtotal, method);
@@ -1525,6 +1570,8 @@
       .then(function (data) {
         hide(el('ad-sell'));
         var plate = form.rego.value.trim().toUpperCase();
+        var later = form.payment.value === 'unpaid';
+        clearSell();
         if (data.addons_failed) {
           toast('Space sold, but the extras did not save — take that cash', 'bad');
         } else {
@@ -1532,7 +1579,8 @@
           // repeated from the screen, so a rate that changed mid-night shows
           // up here rather than being quietly wrong.
           var charged = data.charge_cents != null ? ' · ' + money(data.charge_cents) : '';
-          toast((plate ? 'Sold — ' + plate : 'Sold') + charged, 'good');
+          toast((later ? 'Saved, to pay later' : 'Sold') + (plate ? ' — ' + plate : '') +
+            charged, 'good');
         }
         return loadList(true);
       })
@@ -1542,6 +1590,208 @@
         show(box);
       })
       .finally(function () { btn.disabled = false; });
+  }
+
+  /* ----------------------------------------------------- one booking */
+
+  var METHOD_NAMES = {
+    stripe: 'Card online', tap_to_pay: 'Card (tap to pay)', cash: 'Cash',
+    bank_transfer: 'Bank transfer', free: 'Free / comp', other: 'Other',
+    unpaid: 'Not paid yet',
+  };
+
+  // Everything that can be wrong about a booking once it exists: the plate,
+  // how to reach them, how they paid, and which type of space they actually
+  // took. Opened by tapping the row.
+  function openEdit(r) {
+    state.edit = r;
+    state.editTier = r.tier_code;
+    var form = el('ad-edit-form');
+    form.reset();
+    el('ad-edit-error').hidden = true;
+
+    text(el('ad-edit-title'), r.vehicle_rego || 'Booking');
+    var sub = [r.channel === 'gate' ? 'Sold at the gate' : 'Booked online'];
+    if (r.arrived) sub.push('ticked in');
+    if (r.in_checkout) sub.push('still paying online');
+    text(el('ad-edit-sub'), sub.join(' · '));
+
+    form.rego.value = r.vehicle_rego || '';
+    form.editname.value = r.customer_name || '';
+    form.editphone.value = r.customer_phone || '';
+    form.editemail.value = r.customer_email || '';
+    form.editlow.checked = !!r.vehicle_low_clearance;
+    form.editnotes.value = r.notes || '';
+
+    // A card payment on the website is Stripe's record, not ours to relabel;
+    // an online checkout still running is about to be settled by Stripe. In
+    // both cases the method is shown and left alone.
+    var pay = el('ad-edit-payment');
+    var online = r.payment_method === 'stripe';
+    pay.value = r.payment_method || 'cash';
+    pay.disabled = online || !!r.in_checkout;
+    var payHint = el('ad-edit-payment-hint');
+    if (online || r.in_checkout) {
+      text(payHint, r.in_checkout
+        ? 'They are still paying on the website. This fills in when they finish.'
+        : 'Paid by card on the website — Stripe holds that record.');
+      show(payHint);
+    } else {
+      hide(payHint);
+    }
+
+    el('ad-edit-cancel').hidden = !r.owes;
+
+    renderEditTiers();
+    renderEditCharge();
+    show(el('ad-edit'));
+  }
+
+  function renderEditTiers() {
+    var r = state.edit;
+    var wrap = el('ad-edit-tiers');
+    wrap.innerHTML = '';
+    var tiers = inGateOrder(state.tiers);
+
+    tiers.forEach(function (t) {
+      var current = t.code === r.tier_code;
+      // Its own space is counted in its own tier, so the tier it is in is
+      // never "full" as far as this booking is concerned.
+      var full = !current && (t.manually_sold_out || t.spots_left_gate <= 0);
+      var opt = make('button', 'ad-pick-opt' + tierClass(t.code) +
+        (state.editTier === t.code ? ' is-on' : '') +
+        (current ? ' is-current' : '') + (full ? ' is-gone' : ''));
+      opt.type = 'button';
+      opt.disabled = full || !!r.in_checkout;
+
+      var line = make('span', 'ad-pick-line');
+      line.appendChild(make('span', 'ad-pick-name', shortName(t)));
+      line.appendChild(make('span', 'ad-pick-price', money(t.price_cents)));
+      opt.appendChild(line);
+      opt.appendChild(make('span', 'ad-pick-left',
+        current ? 'booked as this'
+          : full ? 'full — add a space on Tonight first'
+          : t.spots_left_gate + ' left'));
+
+      opt.addEventListener('click', function () {
+        state.editTier = t.code;
+        renderEditTiers();
+        renderEditCharge();
+      });
+      wrap.appendChild(opt);
+    });
+  }
+
+  // What the booking will be worth once saved, worked out the way the
+  // database will: a paid booking that moves keeps what it paid; an unpaid
+  // one takes the new space's price. The database still records the figure.
+  function editAmounts() {
+    var r = state.edit;
+    var method = el('ad-edit-payment').value;
+    var moved = state.editTier !== r.tier_code;
+    var tier = state.tiers.filter(function (t) { return t.code === state.editTier; })[0];
+    var paid = r.status === 'paid';
+    var space = moved && !paid && tier ? tier.price_cents : (r.amount_cents || 0);
+    var sub = space + (r.addons_cents || 0);
+    var surcharge = method === r.payment_method && !moved
+      ? (r.surcharge_cents || 0)
+      : surchargeOn(sub, method);
+    return { method: method, moved: moved, tier: tier, paid: paid, total: sub + surcharge };
+  }
+
+  function renderEditCharge() {
+    var r = state.edit;
+    if (!r) return;
+    var a = editAmounts();
+
+    var hint = el('ad-edit-move-hint');
+    if (a.moved && a.tier) {
+      text(hint, a.paid
+        ? 'Moves them to ' + shortName(a.tier) + ' and frees their ' +
+          r.tier_code.replace(/_/g, ' ') + ' space. What they paid stays as it was — ' +
+          'no refund, nothing extra to charge.'
+        : 'Moves them to ' + shortName(a.tier) + '. Not paid yet, so they owe the ' +
+          shortName(a.tier) + ' price.');
+      show(hint);
+    } else {
+      hide(hint);
+    }
+
+    var nowPaying = r.owes && a.method !== 'unpaid';
+    var label = a.method === 'unpaid' ? 'They owe'
+      : nowPaying ? 'Charge them'
+      : 'Paid';
+    text(el('ad-edit-charge-label'), label);
+    text(el('ad-edit-charge-total'), money(a.total));
+
+    text(el('ad-edit-submit'), nowPaying
+      ? 'Paid by ' + METHOD_NAMES[a.method].toLowerCase() + ' — ' + money(a.total)
+      : 'Save');
+  }
+
+  function submitEdit(e) {
+    e.preventDefault();
+    var r = state.edit;
+    if (!r) return;
+    var form = el('ad-edit-form');
+    var btn = el('ad-edit-submit');
+    var box = el('ad-edit-error');
+    box.hidden = true;
+
+    var params = {
+      booking_id: r.booking_id,
+      vehicle_rego: form.rego.value.trim(),
+      name: form.editname.value.trim(),
+      phone: form.editphone.value.trim(),
+      // Blank leaves the address it has: a booking must keep one.
+      email: form.editemail.value.trim(),
+      vehicle_low_clearance: form.editlow.checked,
+      notes: form.editnotes.value.trim(),
+    };
+    var pay = el('ad-edit-payment');
+    if (!pay.disabled && pay.value !== r.payment_method) params.payment_method = pay.value;
+    if (state.editTier && state.editTier !== r.tier_code) params.tier_code = state.editTier;
+
+    btn.disabled = true;
+    call('edit_booking', params)
+      .then(function (data) {
+        hide(el('ad-edit'));
+        var b = data.booking || {};
+        var who = form.rego.value.trim().toUpperCase() || 'Booking';
+        var said = [];
+        if (params.tier_code) said.push('moved to ' + params.tier_code.replace(/_/g, ' '));
+        if (params.payment_method) {
+          said.push(params.payment_method === 'unpaid' ? 'marked not paid'
+            : 'paid ' + money(b.total_cents));
+        }
+        toast(who + ' — ' + (said.length ? said.join(', ') : 'saved'), 'good');
+        state.edit = null;
+        return loadList(true);
+      })
+      .catch(function (err) {
+        text(box, err.message);
+        show(box);
+      })
+      .finally(function () { btn.disabled = false; });
+  }
+
+  function cancelUnpaid() {
+    var r = state.edit;
+    if (!r || !r.owes) return;
+    if (!window.confirm('Cancel ' + (r.vehicle_rego || 'this booking') +
+        '? The space goes back on sale.')) return;
+    call('cancel_unpaid', { booking_id: r.booking_id })
+      .then(function () {
+        hide(el('ad-edit'));
+        state.edit = null;
+        toast((r.vehicle_rego || 'Booking') + ' cancelled', 'good');
+        return loadList(true);
+      })
+      .catch(function (err) {
+        var box = el('ad-edit-error');
+        text(box, err.message);
+        show(box);
+      });
   }
 
   /* ------------------------------------------------- configuration check */
@@ -1665,6 +1915,11 @@
     // Cash and card are different numbers. Switching the method has to move
     // the figure being read out, not just what gets recorded.
     el('ad-sell-payment').addEventListener('change', renderSellCharge);
+
+    el('ad-edit-close').addEventListener('click', function () { hide(el('ad-edit')); });
+    el('ad-edit-form').addEventListener('submit', submitEdit);
+    el('ad-edit-payment').addEventListener('change', renderEditCharge);
+    el('ad-edit-cancel').addEventListener('click', cancelUnpaid);
 
     el('ad-pricepick-select').addEventListener('change', paintPricePick);
     el('ad-pricepick-apply').addEventListener('click', applyPricePick);
