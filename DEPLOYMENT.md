@@ -227,6 +227,59 @@ against Supabase, done **before** the front end goes out:
 
 A green Pages deployment proves nothing about either.
 
+### The one function that is not called by anything
+
+`expire-holds` is the exception to "deploy it and it works". Nothing
+calls it — no browser, no webhook. It has to be **scheduled**, once per
+project, or it never runs at all, and its not running is silent.
+
+What it does: a bay is held for 10 minutes, but Stripe will not create
+a Checkout Session that expires sooner than 30. So the session outlives
+the hold and has to be shut off by hand. `expire-holds` does that every
+minute, for every held booking past its `checkout_expires_at` (8
+minutes). Stripe answers with a `checkout.session.expired` webhook, and
+`stripe-webhook` puts the bay back on sale from there.
+
+The two minutes between 8 and 10 are the safety margin, and
+`scripts/check.sh` fails if they ever invert. Both numbers are
+constants at the top of `supabase/functions/create-checkout/index.ts`.
+
+Schedule it with `pg_cron`, on **each** project, once:
+
+```sql
+create extension if not exists pg_cron;
+create extension if not exists pg_net;
+
+-- The service-role key is the function's only authentication, so it
+-- goes in Vault, never in a migration. scripts/check.sh fails the
+-- build if one is ever committed.
+select vault.create_secret('<service-role key>', 'expire_holds_key');
+
+select cron.schedule('expire-holds', '* * * * *', $$
+  select net.http_post(
+    url     := 'https://<project-ref>.supabase.co/functions/v1/expire-holds',
+    headers := jsonb_build_object(
+      'Content-Type',  'application/json',
+      'Authorization', 'Bearer ' || (
+        select decrypted_secret from vault.decrypted_secrets
+         where name = 'expire_holds_key')),
+    body    := '{}'::jsonb)
+$$);
+```
+
+Check it is alive with `select * from cron.job_run_details where jobid =
+(select jobid from cron.job where jobname = 'expire-holds') order by
+start_time desc limit 5;`. The function also logs a line every run, so
+an empty function log means it is not being called.
+
+If it stops, nothing breaks loudly. The bay still returns to sale on
+its own clock at 10 minutes, and `confirm_booking` refuses a hold that
+has run out — so a late payment is rejected and flagged as **PAID BUT
+NOT ALLOCATED** rather than quietly sold on top of somebody else. That
+is a refund and a phone call. It is the designed failure, not an
+acceptable steady state: a sweep that has been dead a week means every
+abandoned checkout is costing a real customer a real card charge.
+
 ## 7. How do I roll back production?
 
 **Application rollback and database rollback are different operations.

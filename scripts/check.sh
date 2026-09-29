@@ -711,6 +711,58 @@ else
 fi
 
 # ---------------------------------------------------------------------
+head "A payment can never land on a bay that is back on sale"
+# ---------------------------------------------------------------------
+# A bay is held for ten minutes; the customer's window to pay closes at
+# eight. Those two minutes are the whole safety margin, and they only
+# work in that order. Reverse them — or let the pay window creep out to
+# meet the hold — and the flow starts taking money for spaces it has
+# already resold. Nothing about that failure is visible until two cars
+# turn up for one space.
+#
+# Stripe will not create a session expiring sooner than thirty minutes,
+# so the number handed to Stripe proves nothing. What has to hold is the
+# pair of constants, and the sweep that acts on them.
+CHECKOUT_FN="supabase/functions/create-checkout/index.ts"
+SWEEP_FN="supabase/functions/expire-holds/index.ts"
+
+# `head` is a section printer in this script, so the last-line pick is
+# sed's job here, not head's.
+read_const() { grep -oE "const $2 *= *[0-9]+" "$1" 2>/dev/null | grep -oE '[0-9]+$' | sed -n 1p; }
+
+PAY_M="$(read_const "$CHECKOUT_FN" PAY_MINUTES)"
+HOLD_M="$(read_const "$CHECKOUT_FN" HOLD_MINUTES)"
+
+if [ -n "$PAY_M" ] && [ -n "$HOLD_M" ] && [ "$PAY_M" -lt "$HOLD_M" ]; then
+  pass "the pay window ($PAY_M min) closes before the hold does ($HOLD_M min)"
+else
+  fail "the pay window no longer closes before the bay goes back on sale"
+  printf '      checked: %s (PAY_MINUTES=%s, HOLD_MINUTES=%s)\n' \
+    "$CHECKOUT_FN" "${PAY_M:-unset}" "${HOLD_M:-unset}"
+fi
+
+# The deadline is only real if something enforces it. Stripe's own expiry
+# is half an hour away, so without this function nothing shuts the
+# session off and the margin above is decoration.
+if [ -f "$SWEEP_FN" ] && grep -q "sessions.expire(" "$SWEEP_FN"; then
+  pass "something still shuts the Stripe session off at that deadline"
+else
+  fail "nothing expires the Stripe session — the pay window is unenforced"
+  printf '      checked: %s\n' "$SWEEP_FN"
+fi
+
+# And the sweep is allowed to be late. That is only survivable because
+# the database refuses to confirm a hold whose clock has run out; without
+# it, a missed run turns a late payment into an oversell.
+CONF_MIG="$(latest_defining 'function confirm_booking')"
+if [ -n "$CONF_MIG" ] && grep -q "hold_expires_at > now()" "$CONF_MIG"; then
+  pass "a hold that has run out can no longer be confirmed into a sale"
+else
+  fail "confirm_booking will confirm an expired hold — a missed sweep oversells"
+  printf '      checked: %s\n' "${CONF_MIG:-no confirm_booking migration found}"
+fi
+
+# ---------------------------------------------------------------------
 head "Edge function TypeScript"
 # ---------------------------------------------------------------------
 # The functions import Stripe from esm.sh and supabase-js from jsr.io, so

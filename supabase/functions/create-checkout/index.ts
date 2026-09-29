@@ -8,9 +8,10 @@
 //       catalogue, never from the request body.
 //    3. Only then do we create the Checkout Session, priced from the rows
 //       the database just wrote.
-//    4. The session's expiry sits INSIDE the hold, so Stripe stops accepting
-//       payment before the sweeper can release the bay. A customer can never
-//       pay for a spot that has just been given away.
+//    4. The pay window sits INSIDE the hold, so Stripe stops accepting
+//       payment before the bay goes back on sale. A customer can never pay
+//       for a spot that has just been given away. Stripe's own floor is
+//       longer than the hold, so `expire-holds` closes the session early.
 //
 //  No price is ever sent from here. A browser does not get to choose what
 //  it pays — not for the bay, and not for a poncho.
@@ -145,10 +146,17 @@ type Row = Record<string, any>
 
 const ALLOWED_ORIGIN = Deno.env.get('ALLOWED_ORIGIN') ?? '*'
 
-// Holds run slightly longer than the Stripe session so the sweeper can never
-// beat a payment in flight. Stripe's minimum session life is 30 minutes.
-const SESSION_MINUTES = 30
-const HOLD_MINUTES = 34
+// How long an unpaid checkout keeps a bay out of the yard, and how long the
+// customer actually has to pay. The pay window closes FIRST, always: money
+// must never land on a bay that has already gone back on sale.
+//
+// Stripe will not create a session that expires sooner than 30 minutes, so
+// the session is born at that floor and the `expire-holds` function kills it
+// early, at the booking's checkout_expires_at. The floor is the backstop for
+// a sweep that did not run — never the deadline anyone is working to.
+const HOLD_MINUTES = 10
+const PAY_MINUTES = 8
+const STRIPE_FLOOR_MINUTES = 30
 
 const cors = {
   'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
@@ -433,8 +441,11 @@ Deno.serve(async (req) => {
     })
   }
 
-  // ---- 4. Create the session, expiring inside the hold.
-  const expiresAt = Math.floor(Date.now() / 1000) + SESSION_MINUTES * 60
+  // ---- 4. Create the session. Stripe's floor outlives the hold, so the
+  // deadline that binds is written on the booking and enforced by the
+  // `expire-holds` sweep, not by the number handed to Stripe.
+  const payBy = new Date(Date.now() + PAY_MINUTES * 60_000)
+  const expiresAt = Math.floor(Date.now() / 1000) + STRIPE_FLOOR_MINUTES * 60
 
   try {
     const session = await stripe!.checkout.sessions.create({
@@ -457,11 +468,21 @@ Deno.serve(async (req) => {
       cancel_url: `${siteUrl}/?cancelled=1`,
     })
 
+    // Both in one write: the sweep only ever looks at rows that carry a
+    // session id, so it can never see a deadline it has no way to enforce.
     await db.from('booking')
-      .update({ stripe_checkout_session_id: session.id })
+      .update({
+        stripe_checkout_session_id: session.id,
+        checkout_expires_at: payBy.toISOString(),
+      })
       .eq('id', bookingId)
 
-    return json({ url: session.url, booking_id: bookingId, expires_at: expiresAt })
+    // The deadline the customer is actually working to, not Stripe's floor.
+    return json({
+      url: session.url,
+      booking_id: bookingId,
+      expires_at: Math.floor(payBy.getTime() / 1000),
+    })
   } catch (err) {
     // Stripe refused.
     console.error('stripe session failed', err)
