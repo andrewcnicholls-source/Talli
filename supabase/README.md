@@ -37,11 +37,43 @@ this change touched.
 **The `IS_TEST` blocks in the functions are fallbacks, never overrides.** They
 compare the project's own `SUPABASE_URL` — injected by Supabase, not settable
 by a caller — against the test project's ref, and only ever fill in a value
-that has not been set: the test site's `SITE_URL`, a known gate passphrase, and
-a stand-in for the Stripe round-trip. A real secret always wins, and on
-production every one of them is unreachable. Deploying a function that has lost
-these blocks quietly points the test site at production, so keep them when
-merging.
+that has not been set: the test site's `SITE_URL` and a stand-in for the Stripe
+round-trip. A real secret always wins, and on production every one of them is
+unreachable. Deploying a function that has lost these blocks quietly points the
+test site at production, so keep them when merging.
+
+`gate-ops` used to have such a block too, holding a known gate passphrase for
+test. It has none now, and should never grow one back: access is a signed-in
+host on both projects, which means device testing on staging exercises the
+same code path production runs.
+
+## Who may call `gate-ops` and `check-setup`
+
+A signed-in host, and nobody else. Both functions do the same three things
+before anything else runs:
+
+1. `auth.getUser(token)` — **resolved** against the auth server, not decoded.
+   The project's own anon key is a well-formed JWT signed by the same secret,
+   so anything that merely parsed the token would let the whole internet in.
+2. A confirmed email. Google confirms one; this only excludes identities that
+   arrived some other way.
+3. `host_access_for(user_id, email)` — the email from step 1, never from the
+   request body. That is the entire security boundary, and it is why the
+   function is `revoke`d from `anon` and `authenticated` and reachable only
+   under the service role.
+
+No rows back means a real Google account that is not a host: a 403, not a
+401, and the screen says so by name.
+
+`host_user` is deny-all under RLS with no policies, the same treatment `host`
+and `booking` get. Nothing reads it from a browser. A row with `user_id`
+null is an unclaimed invitation; the first sign-in with that verified email
+claims it, which is how the very first sign-in works with no bootstrap screen
+and no window where the gate is open to anyone.
+
+`scripts/check.sh` asserts all of this is still written down, because losing
+any one line fails **open** — the screen keeps working perfectly for whoever
+is signed in, and also for everybody else.
 
 ## The two projects are NOT in step
 

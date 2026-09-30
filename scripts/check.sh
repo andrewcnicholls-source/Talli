@@ -132,6 +132,113 @@ done
 [ "$found_is_test" -eq 1 ] || skip "no edge function uses IS_TEST"
 
 # ---------------------------------------------------------------------
+head "Token handling"
+# ---------------------------------------------------------------------
+# assets/talli-auth.js holds the host's session: capturing it off the
+# redirect, refreshing it before it dies, and dropping it when it is
+# refused. Every one of those fails quietly — either nobody can get in on
+# a matchday, or a session outlives its welcome. scripts/check-auth.js
+# runs it against a fake window and a fake fetch. Still no test framework:
+# one file, plain node, no dependencies, no network.
+if command -v node >/dev/null 2>&1; then
+  if out=$(node scripts/check-auth.js 2>&1); then
+    pass "assets/talli-auth.js behaves ($(printf '%s' "$out" | grep -c '^  ok') checks)"
+  else
+    fail "assets/talli-auth.js does not behave"
+    printf '%s\n' "$out" | grep 'FAIL' | sed 's/^/      /'
+  fi
+else
+  skip "node not installed — token handling is NOT checked"
+fi
+
+# ---------------------------------------------------------------------
+head "The gate screen is behind a signed-in host"
+# ---------------------------------------------------------------------
+# gate-ops and check-setup take money and describe payment configuration.
+# What stands between them and the open internet is three lines in each
+# file: resolve the bearer token against the auth server, insist on a
+# confirmed email, ask the database whether that email is a host.
+#
+# Each of those is one careless merge from being gone, and losing any one
+# of them fails open — the screen keeps working perfectly for whoever is
+# signed in, and also for everyone else. Nothing else in this repository
+# would notice.
+GUARDED_FNS="gate-ops check-setup"
+for name in $GUARDED_FNS; do
+  fn="supabase/functions/$name/index.ts"
+  if [ ! -f "$fn" ]; then
+    fail "$name: the function is missing"
+    continue
+  fi
+
+  # Resolved against the auth server, not decoded. The project's own anon
+  # key is a valid JWT signed by the same secret, so anything that merely
+  # parsed the token would let the whole internet in.
+  if grep -q 'auth.getUser(' "$fn"; then
+    pass "$name: the bearer token is resolved by Supabase Auth, not decoded"
+  else
+    fail "$name: nothing calls auth.getUser — the token is not being verified"
+  fi
+
+  # Being signed in is not being a host. This is the call that tells the
+  # two apart.
+  if grep -q "rpc('host_access_for'" "$fn"; then
+    pass "$name: a signed-in identity is still checked against host_user"
+  else
+    fail "$name: does not call host_access_for — any Google account would get in"
+  fi
+
+  # The email is the whole security boundary, and it is only worth
+  # anything because it comes out of the auth server. Read it off the
+  # request body and a caller can simply claim to be Andrew.
+  if grep -q "p_email: email" "$fn" && ! grep -qE "p_email: *String\(body" "$fn"; then
+    pass "$name: the email checked is the verified one, not one from the body"
+  else
+    fail "$name: the email passed to host_access_for does not come from the verified user"
+  fi
+done
+
+# The shared passphrase was retired, not demoted to a fallback. A second
+# door would bring back every problem the first one had: a secret that
+# cannot say who took the money and cannot be withdrawn from one person.
+# Matched on the env read rather than the name, so the functions can still
+# explain in a comment what they used to do.
+leftover=$(grep -rl "env.get('GATE_PASSPHRASE')" supabase/functions 2>/dev/null || true)
+if [ -z "$leftover" ]; then
+  pass "no GATE_PASSPHRASE fallback has come back as a second way in"
+else
+  fail "GATE_PASSPHRASE is read again — the gate screen has two doors"
+  printf '      %s\n' "$leftover"
+fi
+
+# The browser must send the host's own access token. It used to send the
+# anon key here, which the server would now refuse — silently, as "your
+# session has expired", on a phone in the dark.
+#
+# The anon key IS still the right credential for the public extras
+# catalogue further down that file, so this looks for the token and for
+# the absence of the passphrase rather than banning the anon key outright.
+if grep -q "Authorization: 'Bearer ' + token" assets/admin.js \
+   && grep -q "AUTH.accessToken()" assets/admin.js \
+   && ! grep -q "passphrase" assets/admin.js; then
+  pass "the gate screen sends the signed-in host's token, not a shared secret"
+else
+  fail "assets/admin.js is not sending the signed-in host's access token"
+fi
+
+# RLS on, no policy, is what keeps host_user unreadable if a grant is ever
+# added by accident. It is the same treatment host and booking get.
+SSO="supabase/migrations/20260908090000_talli_host_sso_access.sql"
+if [ ! -f "$SSO" ]; then
+  fail "the host sign-in migration is missing: $SSO"
+elif grep -q "alter table host_user enable row level security" "$SSO" \
+     && grep -q "revoke all on host_user from anon, authenticated" "$SSO"; then
+  pass "host_user is RLS-enabled and not granted to anon or authenticated"
+else
+  fail "$SSO no longer locks host_user down"
+fi
+
+# ---------------------------------------------------------------------
 head "Stripe returns the customer to a site that talks to this project"
 # ---------------------------------------------------------------------
 # On 8 September 2026 the first real customer paid on talli.co.nz and was

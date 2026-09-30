@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  talli.co.nz — the five public pages, and only those.
+  talli.co.nz — the six public pages, and only those.
 
   admin.html and booking-confirmed.html are deliberately absent: both
   are noindex, one is the gate and the other is a per-booking receipt
@@ -22,4 +22,5 @@
   <url><loc>https://talli.co.nz/book</loc></url>
   <url><loc>https://talli.co.nz/eden-park</loc></url>
   <url><loc>https://talli.co.nz/terms</loc></url>
+  <url><loc>https://talli.co.nz/privacy</loc></url>
 </urlset>

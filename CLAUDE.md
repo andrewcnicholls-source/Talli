@@ -101,6 +101,36 @@ deploy succeeded before Cloudflare reports it successful at that commit.
 hostname at load time — `talli.co.nz` and its aliases get production,
 everything else falls to test. There is no build-time substitution.
 
+## Who may open the gate screen
+
+`admin.html` is Google sign-in, through Supabase Auth. There is no shared
+passphrase any more, on either project.
+
+`gate-ops` and `check-setup` resolve the caller's bearer token against the
+auth server — never by decoding it, because the anon key is itself a valid
+JWT — then look the verified email up in `host_user`. Signed in is not the
+same as allowed; the table is what decides.
+
+A `host_user` row with no `user_id` is an unclaimed invitation, claimed by
+the first sign-in with that email. That is how a new host is added: one
+`insert`, no console step. Both projects carry a seeded invitation for
+Andrew, and they are separate projects so they are separate sign-ins.
+
+Two things follow that are easy to get wrong:
+
+- **Google sign-in is dashboard configuration**, per Supabase project, and
+  no MCP tool reaches it. `DEPLOYMENT.md` § 0c has the exact steps. Until
+  it is done on a project, that project's gate screen lets nobody in.
+- **Losing any of the three checks fails open.** The screen keeps working
+  for whoever is signed in, and for everyone else too. `scripts/check.sh`
+  asserts they are still there; do not weaken those checks to make a
+  refactor pass.
+
+Events are deliberately **not** yet filtered by host — there is one real
+host, and a filter written against a second host who does not exist is a
+filter nobody can prove. The identity is in the request now, which is the
+part that had to come first.
+
 ## Database permission policy
 
 Andrew's standing instruction, enforced by the `PreToolUse` hook at

@@ -9,9 +9,9 @@
    is public. Anyone who opens dev tools can read it and walk straight in.
    That is an accepted trade: the test database holds no customer data, and
    the things that could actually cost something — writing bookings, the
-   gate screen, taking payment — are all guarded server-side by the
-   GATE_PASSPHRASE secret and the service-role key, neither of which is
-   reachable from a browser.
+   gate screen, taking payment — are all guarded server-side, by a signed-in
+   host identity and the service-role key, neither of which is reachable
+   from a browser.
 
    If real access control is ever wanted here, the right answer is
    Cloudflare Access (Zero Trust -> Access -> Applications), pointed at
@@ -19,9 +19,10 @@
    is served, and unlike the Netlify equivalent this replaced, it is free
    at this scale. Turn it on and delete this file.
 
-   The gate screen at /admin.html is deliberately exempt: it already has a
-   passphrase of its own that is checked server-side, and asking for two in
-   a row on a phone in the rain helps nobody.
+   The gate screen at /admin.html is deliberately exempt: it is behind
+   Google sign-in and a host_user row checked server-side on every request,
+   which is real access control rather than a signpost, and putting this
+   in front of it would only add a second thing to type in the rain.
    ===================================================================== */
 (function () {
   'use strict';
