@@ -8,10 +8,11 @@
 //       catalogue, never from the request body.
 //    3. Only then do we create the Checkout Session, priced from the rows
 //       the database just wrote.
-//    4. The pay window sits INSIDE the hold, so Stripe stops accepting
-//       payment before the bay goes back on sale. A customer can never pay
-//       for a spot that has just been given away. Stripe's own floor is
-//       longer than the hold, so `expire-holds` closes the session early.
+//    4. Stripe stops accepting payment before the bay goes back on sale,
+//       so a customer can never pay for a spot that has just been given
+//       away. Far from kickoff that is free — the hold simply outlasts
+//       Stripe's own expiry. Inside the last few hours the hold is shorter
+//       than Stripe's floor, and `expire-holds` closes the session early.
 //
 //  No price is ever sent from here. A browser does not get to choose what
 //  it pays — not for the bay, and not for a poncho.
@@ -147,15 +148,31 @@ type Row = Record<string, any>
 const ALLOWED_ORIGIN = Deno.env.get('ALLOWED_ORIGIN') ?? '*'
 
 // How long an unpaid checkout keeps a bay out of the yard, and how long the
-// customer actually has to pay. The pay window closes FIRST, always: money
-// must never land on a bay that has already gone back on sale.
+// customer has to pay for it. Two regimes, because a held bay does not cost
+// the same thing at all times.
 //
-// Stripe will not create a session that expires sooner than 30 minutes, so
-// the session is born at that floor and the `expire-holds` function kills it
-// early, at the booking's checkout_expires_at. The floor is the backstop for
-// a sweep that did not run — never the deadline anyone is working to.
-const HOLD_MINUTES = 10
-const PAY_MINUTES = 8
+// A bay held half an hour a fortnight out costs nothing: there is all the
+// time in the world to sell it again. The same half hour at quarter past
+// six, with online sales closing at T-45, is a space that never gets sold
+// at all. So the squeeze goes where it buys something, and everywhere else
+// the customer gets time to find their card.
+//
+// Far from kickoff this is exactly the behaviour that shipped before: the
+// hold outlives Stripe's own 30-minute expiry, the session dies of old age,
+// the webhook returns the bay. No sweep is involved and none is needed.
+const CRUNCH_HOURS = 3
+const FAR_HOLD_MINUTES = 34
+
+// Inside CRUNCH_HOURS the hold is short, and that is where it gets awkward:
+// Stripe will not create a session expiring sooner than 30 minutes, so the
+// session now OUTLIVES the hold and `expire-holds` has to shut it off at
+// NEAR_PAY_MINUTES. That window closes first, always — money must never
+// land on a bay that has already gone back on sale.
+const NEAR_HOLD_MINUTES = 10
+const NEAR_PAY_MINUTES = 8
+
+// Stripe's floor. Far out it is the real deadline; near kickoff it is only
+// the backstop for a sweep that did not run.
 const STRIPE_FLOOR_MINUTES = 30
 
 const cors = {
@@ -266,6 +283,16 @@ Deno.serve(async (req) => {
     return json({ error: 'That event is not on sale', code: 'NOT_ON_SALE' }, 409)
   }
 
+  // Which regime this booking falls in — decided from the event's own
+  // kickoff time, never from anything the browser said. A fixture with no
+  // start time counts as far out: the tight window is a deliberate act, not
+  // something a missing column should switch on by accident.
+  const msToKickoff = ev.starts_at
+    ? new Date(ev.starts_at).getTime() - Date.now()
+    : Number.POSITIVE_INFINITY
+  const nearKickoff = msToKickoff <= CRUNCH_HOURS * 3600_000
+  const holdMinutes = nearKickoff ? NEAR_HOLD_MINUTES : FAR_HOLD_MINUTES
+
   // ---- 1. Allocate a bay. Atomic: booking and allocation, or neither.
   //
   // Nothing is asked about the overflow verge any more. Where a car actually
@@ -279,7 +306,7 @@ Deno.serve(async (req) => {
     p_name: body.name ? String(body.name) : null,
     p_phone: body.phone ? String(body.phone) : null,
     p_rego: body.vehicle_rego ? String(body.vehicle_rego) : null,
-    p_hold_minutes: HOLD_MINUTES,
+    p_hold_minutes: holdMinutes,
     p_channel: 'online',
     p_accepts_street: false,
     p_payment_method: 'stripe',
@@ -441,11 +468,13 @@ Deno.serve(async (req) => {
     })
   }
 
-  // ---- 4. Create the session. Stripe's floor outlives the hold, so the
-  // deadline that binds is written on the booking and enforced by the
-  // `expire-holds` sweep, not by the number handed to Stripe.
-  const payBy = new Date(Date.now() + PAY_MINUTES * 60_000)
+  // ---- 4. Create the session. The number handed to Stripe is the same
+  // either way; what differs is whether anything shuts the session off
+  // early. Far from kickoff nothing does, and nothing needs to.
   const expiresAt = Math.floor(Date.now() / 1000) + STRIPE_FLOOR_MINUTES * 60
+  const payBy = nearKickoff
+    ? new Date(Date.now() + NEAR_PAY_MINUTES * 60_000)
+    : null
 
   try {
     const session = await stripe!.checkout.sessions.create({
@@ -470,18 +499,20 @@ Deno.serve(async (req) => {
 
     // Both in one write: the sweep only ever looks at rows that carry a
     // session id, so it can never see a deadline it has no way to enforce.
+    // Null far from kickoff, which is how the sweep knows to leave the row
+    // alone — that session is allowed to die of old age.
     await db.from('booking')
       .update({
         stripe_checkout_session_id: session.id,
-        checkout_expires_at: payBy.toISOString(),
+        checkout_expires_at: payBy ? payBy.toISOString() : null,
       })
       .eq('id', bookingId)
 
-    // The deadline the customer is actually working to, not Stripe's floor.
+    // The deadline the customer is actually working to.
     return json({
       url: session.url,
       booking_id: bookingId,
-      expires_at: Math.floor(payBy.getTime() / 1000),
+      expires_at: payBy ? Math.floor(payBy.getTime() / 1000) : expiresAt,
     })
   } catch (err) {
     // Stripe refused.

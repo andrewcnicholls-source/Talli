@@ -1,33 +1,35 @@
 -- =====================================================================
---  A hold is ten minutes, and the pay window closes first
+--  A hold is ten minutes once the night is close
 --
 --  A bay used to sit out of the yard for 34 minutes while somebody
---  thought about it. On a night that sells out in an hour that is a
---  space nobody can buy, for half an hour, because one person opened
---  a checkout tab and wandered off.
+--  thought about it. Two weeks out that costs nothing. At quarter past
+--  six, with online sales closing at T-45, it is a space that never
+--  gets sold at all.
 --
---  Ten minutes instead. The awkward part is Stripe: a Checkout Session
---  cannot be created with an expiry sooner than 30 minutes, so the
---  session always outlives the hold. Left alone, that inverts the one
---  rule this flow has ever had — the customer could pay at minute
---  twenty for a bay that went back on sale at minute ten.
+--  So the hold is now short only where short buys something:
 --
---  So the session is no longer allowed to die of old age. It is killed
---  early, by the `expire-holds` edge function, at a deadline written on
---  the booking itself:
+--    more than 3h to kickoff    34 min hold, Stripe's own 30 min expiry
+--    inside 3h to kickoff       10 min hold, 8 min to pay
 --
---    checkout_expires_at   t + 8   Stripe is shut off here
---    hold_expires_at       t + 10  the bay is back on sale here
+--  The far case is unchanged from what shipped before — the hold
+--  outlasts the session, the session dies of old age, the webhook
+--  returns the bay, and nothing sweeps anything. The near case is the
+--  awkward one: Stripe will not create a Checkout Session expiring
+--  sooner than 30 minutes, so there the session OUTLIVES the hold, and
+--  left alone that inverts the one rule this flow has ever had — pay at
+--  minute twenty for a bay resold at minute ten.
 --
---  Two minutes between them, for a payment already in flight to land.
---  Same shape as the 30/34 pair it replaces, an hour shorter.
+--  Near kickoff, then, the session is not allowed to die of old age. It
+--  is killed early by the `expire-holds` edge function, at a deadline
+--  written on the booking itself, with two minutes of daylight before
+--  the hold lapses for a payment already in flight.
 --
 --  Two things in this file, and the second is the one that matters:
 --
 --    1. checkout_expires_at, so the sweep knows when to shut Stripe off
---       without having to know what constant create-checkout was built
---       with. A booking carries its own deadline; changing the constant
---       later cannot retroactively move one already in flight.
+--       without having to know which regime the booking was made under,
+--       or what constant create-checkout was built with. A booking
+--       carries its own deadline, or carries none and is left alone.
 --
 --    2. confirm_booking stops confirming a hold that has run out.
 --       Without this the sweep is load-bearing: miss a run, and a late
@@ -43,11 +45,13 @@ alter table booking
   add column if not exists checkout_expires_at timestamptz;
 
 comment on column booking.checkout_expires_at is
-  'When the Stripe Checkout Session for this hold must stop accepting '
-  'payment. Set by create-checkout, enforced by the expire-holds function. '
-  'Always earlier than hold_expires_at, so money cannot land on a bay that '
-  'has gone back on sale. Null for gate sales and stubbed test payments, '
-  'which never had a session to expire.';
+  'When the Stripe Checkout Session for this hold must be shut off by hand. '
+  'Set by create-checkout only for a booking made inside the last few hours '
+  'before kickoff, where the hold is shorter than Stripe can create a '
+  'session for; enforced by the expire-holds function. Always earlier than '
+  'hold_expires_at, so money cannot land on a bay that has gone back on '
+  'sale. Null everywhere else — a booking made further out, a gate sale, a '
+  'stubbed test payment — meaning there is nothing for the sweep to do.';
 
 -- What the sweep reads, every minute, and nothing else does.
 create index if not exists booking_checkout_expiry_idx

@@ -713,37 +713,53 @@ fi
 # ---------------------------------------------------------------------
 head "A payment can never land on a bay that is back on sale"
 # ---------------------------------------------------------------------
-# A bay is held for ten minutes; the customer's window to pay closes at
-# eight. Those two minutes are the whole safety margin, and they only
-# work in that order. Reverse them — or let the pay window creep out to
-# meet the hold — and the flow starts taking money for spaces it has
-# already resold. Nothing about that failure is visible until two cars
-# turn up for one space.
+# One rule, two regimes, and it has to hold in both: Stripe must stop
+# accepting payment BEFORE the bay goes back on sale. Get the order wrong
+# either way and the flow takes money for a space it has already resold —
+# a failure nobody sees until two cars turn up for one bay.
 #
-# Stripe will not create a session expiring sooner than thirty minutes,
-# so the number handed to Stripe proves nothing. What has to hold is the
-# pair of constants, and the sweep that acts on them.
+# Far from kickoff the hold (34 min) simply outlives Stripe's own 30-minute
+# expiry, and nothing else is involved. Near kickoff the hold is shorter
+# than Stripe's floor, so the pay window (8 min) has to be closed by the
+# expire-holds sweep before the hold (10 min) lapses.
+#
+# The database is the authority and cannot be proven from here. What can be
+# proven is that the four numbers still line up, and that something still
+# acts on the near-kickoff one.
 CHECKOUT_FN="supabase/functions/create-checkout/index.ts"
 SWEEP_FN="supabase/functions/expire-holds/index.ts"
 
-# `head` is a section printer in this script, so the last-line pick is
+# `head` is a section printer in this script, so the first-line pick is
 # sed's job here, not head's.
 read_const() { grep -oE "const $2 *= *[0-9]+" "$1" 2>/dev/null | grep -oE '[0-9]+$' | sed -n 1p; }
 
-PAY_M="$(read_const "$CHECKOUT_FN" PAY_MINUTES)"
-HOLD_M="$(read_const "$CHECKOUT_FN" HOLD_MINUTES)"
+NEAR_PAY="$(read_const "$CHECKOUT_FN" NEAR_PAY_MINUTES)"
+NEAR_HOLD="$(read_const "$CHECKOUT_FN" NEAR_HOLD_MINUTES)"
+FAR_HOLD="$(read_const "$CHECKOUT_FN" FAR_HOLD_MINUTES)"
+FLOOR="$(read_const "$CHECKOUT_FN" STRIPE_FLOOR_MINUTES)"
 
-if [ -n "$PAY_M" ] && [ -n "$HOLD_M" ] && [ "$PAY_M" -lt "$HOLD_M" ]; then
-  pass "the pay window ($PAY_M min) closes before the hold does ($HOLD_M min)"
+if [ -n "$NEAR_PAY" ] && [ -n "$NEAR_HOLD" ] && [ "$NEAR_PAY" -lt "$NEAR_HOLD" ]; then
+  pass "near kickoff, the pay window ($NEAR_PAY min) closes before the hold ($NEAR_HOLD min)"
 else
-  fail "the pay window no longer closes before the bay goes back on sale"
-  printf '      checked: %s (PAY_MINUTES=%s, HOLD_MINUTES=%s)\n' \
-    "$CHECKOUT_FN" "${PAY_M:-unset}" "${HOLD_M:-unset}"
+  fail "near kickoff, the pay window no longer closes before the bay is resold"
+  printf '      checked: %s (NEAR_PAY_MINUTES=%s, NEAR_HOLD_MINUTES=%s)\n' \
+    "$CHECKOUT_FN" "${NEAR_PAY:-unset}" "${NEAR_HOLD:-unset}"
 fi
 
-# The deadline is only real if something enforces it. Stripe's own expiry
-# is half an hour away, so without this function nothing shuts the
-# session off and the margin above is decoration.
+# Far from kickoff nothing shuts the session off early, so the ONLY thing
+# keeping the bay is that the hold outlasts Stripe's floor. Shorten the hold
+# past it and the far path breaks silently, with no sweep to catch it.
+if [ -n "$FAR_HOLD" ] && [ -n "$FLOOR" ] && [ "$FAR_HOLD" -gt "$FLOOR" ]; then
+  pass "far from kickoff, the hold ($FAR_HOLD min) outlasts Stripe's floor ($FLOOR min)"
+else
+  fail "far from kickoff, the hold no longer outlasts the Stripe session"
+  printf '      checked: %s (FAR_HOLD_MINUTES=%s, STRIPE_FLOOR_MINUTES=%s)\n' \
+    "$CHECKOUT_FN" "${FAR_HOLD:-unset}" "${FLOOR:-unset}"
+fi
+
+# The near-kickoff deadline is only real if something enforces it. Stripe's
+# own expiry is half an hour away, so without this function the margin above
+# is decoration.
 if [ -f "$SWEEP_FN" ] && grep -q "sessions.expire(" "$SWEEP_FN"; then
   pass "something still shuts the Stripe session off at that deadline"
 else
@@ -751,9 +767,9 @@ else
   printf '      checked: %s\n' "$SWEEP_FN"
 fi
 
-# And the sweep is allowed to be late. That is only survivable because
-# the database refuses to confirm a hold whose clock has run out; without
-# it, a missed run turns a late payment into an oversell.
+# And the sweep is allowed to be late. That is only survivable because the
+# database refuses to confirm a hold whose clock has run out; without it, a
+# missed run turns a late payment into an oversell.
 CONF_MIG="$(latest_defining 'function confirm_booking')"
 if [ -n "$CONF_MIG" ] && grep -q "hold_expires_at > now()" "$CONF_MIG"; then
   pass "a hold that has run out can no longer be confirmed into a sale"

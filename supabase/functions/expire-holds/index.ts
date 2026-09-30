@@ -1,10 +1,16 @@
 // =====================================================================
 //  Talli Parking — shut off checkouts whose pay window has closed
 //
-//  A bay is held for ten minutes. Stripe will not create a Checkout
-//  Session that expires sooner than thirty, so the session always
-//  outlives the hold and has to be killed by hand. That is this
-//  function's whole job.
+//  Inside the last few hours before kickoff a bay is held for only ten
+//  minutes. Stripe will not create a Checkout Session that expires sooner
+//  than thirty, so there the session outlives the hold and has to be
+//  killed by hand. That is this function's whole job.
+//
+//  It is therefore idle most of the time, and deliberately so. A booking
+//  made further out carries no checkout_expires_at at all: its session is
+//  allowed to die of old age inside a longer hold, exactly as it always
+//  has. Only the crunch rows are this function's business, and the query
+//  below sees nothing else.
 //
 //  It runs every minute and, for every held booking past its
 //  checkout_expires_at, calls sessions.expire(). It does NOT touch the

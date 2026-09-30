@@ -233,16 +233,24 @@ A green Pages deployment proves nothing about either.
 calls it — no browser, no webhook. It has to be **scheduled**, once per
 project, or it never runs at all, and its not running is silent.
 
-What it does: a bay is held for 10 minutes, but Stripe will not create
-a Checkout Session that expires sooner than 30. So the session outlives
-the hold and has to be shut off by hand. `expire-holds` does that every
-minute, for every held booking past its `checkout_expires_at` (8
-minutes). Stripe answers with a `checkout.session.expired` webhook, and
-`stripe-webhook` puts the bay back on sale from there.
+What it does: inside the last 3 hours before kickoff a bay is held for
+only 10 minutes, but Stripe will not create a Checkout Session that
+expires sooner than 30. So there the session outlives the hold and has
+to be shut off by hand. `expire-holds` does that every minute, for
+every held booking past its `checkout_expires_at` (8 minutes). Stripe
+answers with a `checkout.session.expired` webhook, and `stripe-webhook`
+puts the bay back on sale from there.
 
-The two minutes between 8 and 10 are the safety margin, and
-`scripts/check.sh` fails if they ever invert. Both numbers are
-constants at the top of `supabase/functions/create-checkout/index.ts`.
+Further out nothing is swept: the hold is 34 minutes, it outlasts
+Stripe's own 30-minute expiry, and the session dies of old age exactly
+as it always has. Those bookings carry no `checkout_expires_at`, so the
+sweep never sees them. **An empty run is the normal result**, and only
+becomes suspicious if it stays empty through the hour before a fixture.
+
+All four numbers are constants at the top of
+`supabase/functions/create-checkout/index.ts`, and `scripts/check.sh`
+fails if either margin inverts — the 8-before-10 near kickoff, or the
+34-after-30 further out.
 
 Schedule it with `pg_cron`, on **each** project, once:
 
@@ -272,13 +280,14 @@ Check it is alive with `select * from cron.job_run_details where jobid =
 start_time desc limit 5;`. The function also logs a line every run, so
 an empty function log means it is not being called.
 
-If it stops, nothing breaks loudly. The bay still returns to sale on
-its own clock at 10 minutes, and `confirm_booking` refuses a hold that
-has run out — so a late payment is rejected and flagged as **PAID BUT
-NOT ALLOCATED** rather than quietly sold on top of somebody else. That
-is a refund and a phone call. It is the designed failure, not an
-acceptable steady state: a sweep that has been dead a week means every
-abandoned checkout is costing a real customer a real card charge.
+If it stops, nothing breaks loudly, and nothing at all breaks outside
+the last 3 hours before a fixture. In that window the bay still returns
+to sale on its own clock at 10 minutes, and `confirm_booking` refuses a
+hold that has run out — so a late payment is rejected and flagged as
+**PAID BUT NOT ALLOCATED** rather than quietly sold on top of somebody
+else. That is a refund and a phone call. It is the designed failure,
+not an acceptable steady state: a sweep still dead on match night means
+real customers taking real card charges for bays they do not get.
 
 ## 7. How do I roll back production?
 
