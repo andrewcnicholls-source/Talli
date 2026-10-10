@@ -1254,6 +1254,9 @@ footer a { color: var(--blue); }
   margin: 14px 0 6px;
 }
 .ad-label span { text-transform: none; letter-spacing: 0.02em; opacity: 0.7; }
+/* A label whose wording changes, written into a span so the hint beside
+   it survives — but it is still the label, not the hint. */
+.ad-label span.ad-label-main { text-transform: inherit; letter-spacing: inherit; opacity: 1; }
 .ad-sheet-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 /* A date-and-time input reports a wide intrinsic size. Without this the
    column it is in refuses to shrink and squeezes whatever sits beside it. */
@@ -1630,6 +1633,10 @@ footer a { color: var(--blue); }
 }
 .ad-tab.is-on { background: var(--white); color: var(--blue-deep); font-weight: 500; }
 
+/* ---------- Insights: looking back at a finished night ---------- */
+.ad-insight-pick { padding: 14px 16px 16px; }
+.ad-insight-pick .ad-select { width: 100%; }
+
 /* The one number that answers "where am I at". */
 .ad-board {
   background: var(--blue-deep);
@@ -1825,6 +1832,20 @@ footer a { color: var(--blue); }
   font-weight: 400;
   color: var(--ink);
   font-variant-numeric: tabular-nums;
+}
+/* The count under a channel or a spot: "12 cars · 40%". */
+.ad-money-sub {
+  display: block;
+  font-size: 0.76rem;
+  color: var(--grey);
+  margin-top: 2px;
+}
+.ad-money-more {
+  font-size: 0.82rem;
+  font-weight: 300;
+  color: var(--grey);
+  padding-top: 10px;
+  max-width: none;
 }
 .ad-money-row.is-lead { color: var(--blue-deep); }
 .ad-money-row.is-lead strong {

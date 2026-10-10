@@ -150,6 +150,15 @@ function minutes(v: unknown, fallback: number | null): number | null {
   return Number.isFinite(n) ? Math.round(n) : fallback
 }
 
+// A price for one car, in cents. null when none was sent; false when one
+// was sent and it is not a price. The database checks the same bounds.
+function priceCents(v: unknown): number | null | false {
+  if (v === undefined || v === null || v === '') return null
+  const n = Number(v)
+  if (!Number.isInteger(n) || n < 100 || n > 50000) return false
+  return n
+}
+
 type Row = Record<string, any>
 
 // sell_at_gate's stand-in for a walk-up who gave no email.
@@ -494,7 +503,15 @@ Deno.serve(async (req) => {
       }
 
       case 'sell': {
+        // A price for this one car, when the deal at the window was not the
+        // sign. Sent only when set, so an ordinary sale makes the same call
+        // it always has.
+        const price = priceCents(body.price_cents)
+        if (price === false) {
+          return json({ error: 'A price between $1 and $500, please.', code: 'BAD_PRICE' }, 400)
+        }
         const { data, error } = await db.rpc('sell_at_gate', {
+          ...(price !== null ? { p_price_cents: price } : {}),
           p_event_id: eventId,
           p_property_id: String(body.property_id ?? ''),
           p_tier_code: String(body.tier_code ?? ''),
@@ -575,6 +592,29 @@ Deno.serve(async (req) => {
           p_tier_code: body.tier_code ? String(body.tier_code) : null,
         })
         if (error) return json(named(error), 409)
+
+        // What they paid for the space, last — so it wins over the re-price
+        // an unpaid booking gets when it moves type. Its own call: the
+        // edits above are already saved if this one is refused.
+        const price = priceCents(body.price_cents)
+        if (price === false) {
+          return json({ error: 'Saved, but the price was not: between $1 and $500, please.',
+            code: 'BAD_PRICE' }, 400)
+        }
+        if (price !== null) {
+          const { error: pErr } = await db.rpc('set_booking_price_at_gate', {
+            p_booking_id: id,
+            p_price_cents: price,
+          })
+          if (pErr) {
+            const out = named(pErr)
+            return json({ ...out, error: 'Saved, but the price was not: ' + out.error }, 409)
+          }
+          const { data: now } = await db.from('booking')
+            .select('amount_cents, addons_cents, surcharge_cents')
+            .eq('id', id).maybeSingle()
+          return json({ ok: true, booking: { ...data, ...(now ?? {}) } })
+        }
         return json({ ok: true, booking: data })
       }
 

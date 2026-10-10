@@ -57,7 +57,9 @@
       <span class="ad-brand">talli<span>.</span> gate</span>
       <button type="button" class="ad-refresh" id="ad-refresh" aria-label="Refresh">↻</button>
     </div>
-    <div class="ad-event-row">
+    <!-- Tonight and what is coming up. Finished nights live under Insights,
+         which has its own picker, so this row steps aside on that tab. -->
+    <div class="ad-event-row" id="ad-event-row">
       <select id="ad-event" class="ad-select" aria-label="Event"></select>
       <button type="button" class="ad-event-new" id="ad-new-open"
               aria-label="New event" title="New event">+</button>
@@ -68,6 +70,8 @@
               role="tab" aria-selected="true" aria-controls="ad-pane-gate">Arrivals</button>
       <button type="button" class="ad-tab" id="ad-tab-night"
               role="tab" aria-selected="false" aria-controls="ad-pane-night">Tonight</button>
+      <button type="button" class="ad-tab" id="ad-tab-insights"
+              role="tab" aria-selected="false" aria-controls="ad-pane-insights">Insights</button>
     </nav>
   </header>
 
@@ -167,6 +171,17 @@
     <!-- ----------------------------------------------------------- money -->
     <h2 class="ad-section">Money</h2>
     <div class="ad-money" id="ad-money"></div>
+  </section>
+
+  <!-- ----------------------------------------------------------- insights -->
+  <!-- Looking back rather than working the night. Its own picker, because
+       the one in the header only carries tonight and what is coming. -->
+  <section id="ad-pane-insights" role="tabpanel" aria-labelledby="ad-tab-insights" hidden>
+    <div class="ad-insight-pick">
+      <label class="ad-label" for="ad-insight-event">Night</label>
+      <select id="ad-insight-event" class="ad-select"></select>
+    </div>
+    <div id="ad-insight"></div>
   </section>
 
   <p class="ad-foot">
@@ -273,6 +288,17 @@
 
     <label class="ad-label">Spot</label>
     <div class="ad-pick" id="ad-sell-tiers"></div>
+
+    <!-- The deal struck at the window, for this car only. The sign, and
+         every other car, stay where they are — so the spot above can be
+         the space they are actually getting, not whichever one costs that. -->
+    <label class="ad-label" for="ad-sell-price">Price for this car
+      <span>leave blank for the sign price</span></label>
+    <div class="ad-price-entry">
+      <span>$</span>
+      <input type="number" id="ad-sell-price" name="sellprice" class="ad-input"
+             inputmode="numeric" min="1" max="500" step="1">
+    </div>
 
     <label class="ad-label" for="ad-sell-rego">License plate <span>optional</span></label>
     <input type="text" id="ad-sell-rego" name="rego" class="ad-input"
@@ -389,6 +415,18 @@
       <option value="stripe" disabled>Card online</option>
     </select>
     <p class="ad-hint" id="ad-edit-payment-hint" hidden></p>
+
+    <!-- Rung up at the sign price before anyone remembered the deal. -->
+    <div id="ad-edit-price-row">
+      <label class="ad-label" for="ad-edit-price"><span
+        class="ad-label-main" id="ad-edit-price-label">Paid for the space</span>
+        <span>change it if the deal was different</span></label>
+      <div class="ad-price-entry">
+        <span>$</span>
+        <input type="number" id="ad-edit-price" name="editprice" class="ad-input"
+               inputmode="decimal" min="1" max="500" step="any">
+      </div>
+    </div>
 
     <div class="ad-charge" id="ad-edit-charge">
       <div class="ad-charge-total">

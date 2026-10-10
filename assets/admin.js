@@ -51,6 +51,9 @@
     extras: [],       // what has been pre-purchased and still needs handing over
     catalogue: [],    // what we sell
     summary: null,
+    // The Insights tab's night, held apart from the one the gate is working.
+    insightId: null,
+    insight: null,
     filter: '',
     busy: {},
     sellTier: null,
@@ -299,16 +302,44 @@
 
   /* ------------------------------------------------------------- events */
 
+  // The calendar day an event falls on, at the ground. There is only ever
+  // one event a day, so the day is what identifies "tonight" — not the
+  // kickoff instant, which passes while the night is still being worked.
+  function dayKey(iso) {
+    var parts = {};
+    new Intl.DateTimeFormat('en-NZ', {
+      timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit',
+    }).formatToParts(new Date(iso)).forEach(function (p) { parts[p.type] = p.value; });
+    return parts.year + '-' + parts.month + '-' + parts.day;
+  }
+
+  function todayKey() { return dayKey(new Date()); }
+
+  var FINISHED = ['closed', 'cancelled'];
+
+  // What the header picker carries: tonight and everything ahead, plus any
+  // earlier night still not closed off — that one needs a tap, and hiding
+  // it is how it stays on sale for ever. Finished nights are under Insights.
+  function headerEvents() {
+    var today = todayKey();
+    return state.events.filter(function (ev) {
+      return dayKey(ev.starts_at) >= today ||
+        FINISHED.indexOf(ev.status) === -1 ||
+        ev.id === state.eventId;
+    });
+  }
+
   // Redrawn on its own whenever an event is made or its status moves, so
   // the name in the picker never disagrees with the badge below it.
   function renderEventOptions() {
     var sel = el('ad-event');
     sel.innerHTML = '';
-    if (!state.events.length) {
-      sel.appendChild(new Option('No events yet', ''));
+    var events = headerEvents();
+    if (!events.length) {
+      sel.appendChild(new Option(state.events.length ? 'Nothing coming up' : 'No events yet', ''));
       return;
     }
-    state.events.forEach(function (ev) {
+    events.forEach(function (ev) {
       var label = asDate(ev.starts_at) + ' — ' + ev.name +
         (ev.status !== 'on_sale' ? ' (' + statusMeta(ev.status)[1].toLowerCase() + ')' : '');
       sel.appendChild(new Option(label, ev.id));
@@ -317,18 +348,21 @@
   }
 
   function renderEvents() {
+    // Default to tonight's event, and keep it until midnight: kickoff
+    // passing is the middle of the night's work, not the end of it. Failing
+    // that, the next one coming. A cancelled night is passed over if there
+    // is anything else on the same day or later.
+    var today = todayKey();
+    var ahead = state.events.filter(function (e) { return dayKey(e.starts_at) >= today; });
+    var pick = ahead.filter(function (e) { return e.status !== 'cancelled'; })[0] ||
+      ahead[0] || headerEvents().slice(-1)[0] || null;
+
+    state.eventId = pick ? pick.id : null;
     renderEventOptions();
-    if (!state.events.length) {
-      state.eventId = null;
+    if (!state.eventId) {
       renderStatus();
       return;
     }
-
-    // Default to the next event that has not finished yet; that is almost
-    // always the one being worked.
-    var now = Date.now();
-    var next = state.events.filter(function (e) { return new Date(e.starts_at) > now; })[0];
-    state.eventId = (next || state.events[state.events.length - 1]).id;
     el('ad-event').value = state.eventId;
     loadList();
   }
@@ -1011,26 +1045,236 @@
 
   /* -------------------------------------------------------------- money */
 
+  // Where the money actually landed. Four of them are how a night is
+  // reconciled — the Stripe payout, the terminal, the bank account and the
+  // tin — so those four always show, even at $0. A $0 line is an answer;
+  // a missing one is a question.
+  var CHANNELS = [
+    ['stripe', 'Online', true],
+    ['tap_to_pay', 'PayWave', true],
+    ['bank_transfer', 'Bank transfer', true],
+    ['cash', 'Cash', true],
+    ['free', 'Free / comp', false],
+    ['other', 'Other', false],
+  ];
+
+  function rowCents(r) {
+    return (r.amount_cents || 0) + (r.addons_cents || 0) + (r.surcharge_cents || 0);
+  }
+
+  // The same rows, and the same "paid" test, the server's taken_cents adds
+  // up — so the channels always sum to the total above them.
+  function byChannel(rows) {
+    var out = {};
+    rows.forEach(function (r) {
+      if (r.status !== 'paid') return;
+      var at = out[r.payment_method] || (out[r.payment_method] = { cars: 0, cents: 0 });
+      at.cars += 1;
+      at.cents += rowCents(r);
+    });
+    return CHANNELS
+      .filter(function (c) { return c[2] || out[c[0]]; })
+      .map(function (c) {
+        var at = out[c[0]] || { cars: 0, cents: 0 };
+        return { code: c[0], label: c[1], cars: at.cars, cents: at.cents };
+      });
+  }
+
+  function cars(n) { return n + ' car' + (n === 1 ? '' : 's'); }
+
+  // [label, amount, lead?, small print?]
+  function moneyRows(wrap, lines) {
+    lines.forEach(function (line) {
+      var row = make('div', 'ad-money-row' + (line[2] ? ' is-lead' : ''));
+      var key = make('span', null, line[0]);
+      if (line[3]) key.appendChild(make('span', 'ad-money-sub', line[3]));
+      row.appendChild(key);
+      row.appendChild(make('strong', null, line[1]));
+      wrap.appendChild(row);
+    });
+  }
+
   function renderMoney() {
     var s = state.summary;
     var wrap = el('ad-money');
     wrap.innerHTML = '';
     if (!s) return;
 
-    [
-      ['Taken tonight', money(s.taken_cents), true],
-      ['Prepaid online', money(s.online_cents), false],
-      ['Sold at the gate', money(s.gate_cents), false],
+    var lines = [['Taken tonight', money(s.taken_cents), true]];
+    byChannel(state.rows).forEach(function (c) {
+      lines.push([c.label, money(c.cents), false, c.cars ? cars(c.cars) : null]);
+    });
+    lines.push(
       ['Of that, extras', money(s.addons_cents), false],
       ['Of that, card surcharge', money(s.surcharge_cents), false],
       ['Still to collect', money(s.cash_due_cents), s.cash_due_cents > 0],
-      ['Owed by pay-later walk-ups', money(s.owing_cents || 0), (s.owing_cents || 0) > 0],
-    ].forEach(function (line) {
-      var row = make('div', 'ad-money-row' + (line[2] ? ' is-lead' : ''));
-      row.appendChild(make('span', null, line[0]));
-      row.appendChild(make('strong', null, line[1]));
-      wrap.appendChild(row);
+      ['Owed by pay-later walk-ups', money(s.owing_cents || 0), (s.owing_cents || 0) > 0]
+    );
+    moneyRows(wrap, lines);
+
+    var more = make('p', 'ad-money-more');
+    more.appendChild(document.createTextNode('Finished nights, and more of the detail, are under '));
+    more.appendChild(button('ad-link', 'Insights', function () { showTab('insights'); }));
+    more.appendChild(document.createTextNode('.'));
+    wrap.appendChild(more);
+  }
+
+  /* ----------------------------------------------------------- insights */
+
+  // Any night that has happened, most recent first — tonight included, as
+  // "so far", because the first thing anyone asks after the last car leaves
+  // is how it went. Nights still ahead have nothing to say yet.
+  function insightEvents() {
+    var today = todayKey();
+    return state.events
+      .filter(function (ev) { return dayKey(ev.starts_at) <= today; })
+      .slice()
+      .reverse();
+  }
+
+  function renderInsightOptions() {
+    var sel = el('ad-insight-event');
+    sel.innerHTML = '';
+    var events = insightEvents();
+    if (!events.length) {
+      sel.appendChild(new Option('No nights yet', ''));
+      sel.disabled = true;
+      state.insightId = null;
+      return;
+    }
+    sel.disabled = false;
+    var today = todayKey();
+    events.forEach(function (ev) {
+      var tag = dayKey(ev.starts_at) === today ? ' (tonight, so far)'
+        : ev.status === 'cancelled' ? ' (cancelled)' : '';
+      sel.appendChild(new Option(asDate(ev.starts_at) + ' — ' + ev.name + tag, ev.id));
     });
+    var still = events.some(function (ev) { return ev.id === state.insightId; });
+    if (!still) state.insightId = events[0].id;
+    sel.value = state.insightId;
+  }
+
+  function openInsights() {
+    renderInsightOptions();
+    if (!state.insightId) {
+      state.insight = null;
+      renderInsight();
+      return;
+    }
+    if (!state.insight || state.insight.eventId !== state.insightId) loadInsight();
+  }
+
+  // Its own copy of the night, so looking back at last Saturday never
+  // disturbs the list the gate is working from right now.
+  function loadInsight() {
+    var id = state.insightId;
+    if (!id) return;
+    var wrap = el('ad-insight');
+    wrap.setAttribute('aria-busy', 'true');
+    return call('list', { event_id: id })
+      .then(function (data) {
+        // Somebody picked a different night while this one was on its way.
+        if (id !== state.insightId) return;
+        state.insight = {
+          eventId: id,
+          rows: data.rows || [],
+          tiers: data.tiers || [],
+          summary: data.summary || null,
+        };
+        renderInsight();
+      })
+      .catch(function (err) { toast(err.message, 'bad'); })
+      .finally(function () { wrap.removeAttribute('aria-busy'); });
+  }
+
+  function insightSection(wrap, title) {
+    wrap.appendChild(make('h2', 'ad-section', title));
+    var box = make('div', 'ad-money');
+    wrap.appendChild(box);
+    return box;
+  }
+
+  function renderInsight() {
+    var wrap = el('ad-insight');
+    wrap.innerHTML = '';
+    var data = state.insight;
+    var ev = data && state.events.filter(function (e) { return e.id === data.eventId; })[0];
+    if (!data || !ev || !data.summary) {
+      wrap.appendChild(make('p', 'ad-empty',
+        state.insightId ? 'Loading…' : 'Nothing to look back on yet.'));
+      return;
+    }
+
+    var s = data.summary;
+    var paid = data.rows.filter(function (r) { return r.status === 'paid'; });
+
+    // The headline: what came in, and how full the place was.
+    var board = make('div', 'ad-board');
+    var fill = make('div', 'ad-board-fill');
+    fill.appendChild(make('span', 'ad-board-num', money(s.taken_cents)));
+    fill.appendChild(make('span', 'ad-board-of',
+      'from ' + cars(paid.length) + ' · ' + s.filled + ' of ' + s.capacity + ' spaces'));
+    var bar = make('div', 'ad-bar');
+    var barFill = make('span', 'ad-bar-fill');
+    barFill.style.width = Math.min(s.capacity ? Math.round(s.filled / s.capacity * 100) : 0, 100) + '%';
+    bar.appendChild(barFill);
+    fill.appendChild(bar);
+    fill.appendChild(make('span', 'ad-board-note',
+      [ev.name, asDate(ev.starts_at), ev.venue, statusMeta(ev.status)[1]]
+        .filter(Boolean).join(' · ')));
+    board.appendChild(fill);
+    wrap.appendChild(board);
+
+    // By how it was paid.
+    var channels = byChannel(data.rows);
+    var pay = insightSection(wrap, 'By payment');
+    moneyRows(pay, channels.map(function (c) {
+      var share = s.taken_cents ? Math.round(c.cents / s.taken_cents * 100) : 0;
+      return [c.label, money(c.cents), false,
+        c.cars ? cars(c.cars) + ' · ' + share + '%' : null];
+    }).concat([['Total', money(s.taken_cents), true]]));
+
+    // By the kind of space. Space price only: extras and surcharge are not
+    // what the spot was worth, and they have their own lines below.
+    var names = {};
+    data.tiers.forEach(function (t) { names[t.code] = shortName(t); });
+    var tiers = {};
+    paid.forEach(function (r) {
+      var code = r.tier_code || 'other';
+      var at = tiers[code] || (tiers[code] = { cars: 0, cents: 0 });
+      at.cars += 1;
+      at.cents += r.amount_cents || 0;
+    });
+    var order = GATE_ORDER.filter(function (c) { return tiers[c]; })
+      .concat(Object.keys(tiers).filter(function (c) { return GATE_ORDER.indexOf(c) === -1; }));
+    if (order.length) {
+      var spots = insightSection(wrap, 'By spot');
+      moneyRows(spots, order.map(function (code) {
+        var t = tiers[code];
+        return [names[code] || code.replace(/_/g, ' '), money(t.cents), false,
+          cars(t.cars) + (t.cars ? ' · avg ' + money(Math.round(t.cents / t.cars)) : '')];
+      }));
+    }
+
+    // What the total is made of, and where it was sold.
+    var online = paid.filter(function (r) { return r.channel === 'online'; });
+    var gate = paid.filter(function (r) { return r.channel === 'gate'; });
+    var made = insightSection(wrap, 'Made up of');
+    moneyRows(made, [
+      ['Spaces', money(s.taken_cents - s.addons_cents - s.surcharge_cents), false],
+      ['Extras', money(s.addons_cents), false],
+      ['Card surcharge', money(s.surcharge_cents), false, 'covers card fees'],
+      ['Booked online', money(s.online_cents), false, cars(online.length)],
+      ['Sold at the gate', money(s.gate_cents), false, cars(gate.length)],
+    ]);
+
+    // Anything the night left unfinished.
+    var noShows = paid.filter(function (r) { return !r.arrived; }).length;
+    var loose = [];
+    if (s.owing_cents) loose.push(['Owed by pay-later walk-ups', money(s.owing_cents), true, cars(s.owing)]);
+    if (s.cash_due_cents) loose.push(['Still to collect', money(s.cash_due_cents), true]);
+    if (noShows) loose.push(['Paid, never ticked in', cars(noShows), false]);
+    if (loose.length) moneyRows(insightSection(wrap, 'Loose ends'), loose);
   }
 
   /* -------------------------------------------------- the event's status */
@@ -1596,11 +1840,18 @@
     text(el('ad-sell-charge-total-label'), later ? 'They will owe' : 'Charge them');
     text(el('ad-sell-submit'), later ? 'Save — they pay later' : 'Take the money');
     var extras = sellExtrasTotal();
-    var subtotal = tier.price_cents + extras;
+    // The sign price unless a deal was typed in. A half-typed or silly
+    // number falls back to the sign here; submitting it says what is wrong.
+    var priceInput = el('ad-sell-price');
+    priceInput.placeholder = String(Math.round(tier.price_cents / 100));
+    var typed = typedPrice(priceInput);
+    var spot = typed > 0 ? typed : tier.price_cents;
+    var subtotal = spot + extras;
     var surcharge = surchargeOn(subtotal, method);
 
-    text(el('ad-sell-charge-spot-name'), shortName(tier));
-    text(el('ad-sell-charge-spot'), money(tier.price_cents));
+    text(el('ad-sell-charge-spot-name'), shortName(tier) +
+      (spot !== tier.price_cents ? ' (sign ' + money(tier.price_cents) + ')' : ''));
+    text(el('ad-sell-charge-spot'), money(spot));
 
     var extraRow = el('ad-sell-charge-extras-row');
     if (extras > 0) {
@@ -1622,6 +1873,16 @@
     show(box);
   }
 
+  // A price typed for one car, in cents. null when the box is empty;
+  // false when what is in it is not a price the database will take.
+  function typedPrice(input) {
+    var raw = String(input.value || '').trim();
+    if (!raw) return null;
+    var dollars = Number(raw);
+    if (!isFinite(dollars) || dollars < 1 || dollars > 500) return false;
+    return Math.round(dollars * 100);
+  }
+
   function submitSell(e) {
     e.preventDefault();
     var form = el('ad-sell-form');
@@ -1632,6 +1893,15 @@
       show(pick);
       return;
     }
+    var price = typedPrice(el('ad-sell-price'));
+    if (price === false) {
+      var bad = el('ad-sell-error');
+      text(bad, 'A price between $1 and $500, or leave it blank for the sign.');
+      show(bad);
+      return;
+    }
+    // Typing the sign price is the sign price — no need to record a deal.
+    if (price === tier.price_cents) price = null;
 
     var btn = el('ad-sell-submit');
     btn.disabled = true;
@@ -1651,6 +1921,7 @@
       phone: form.sellphone.value.trim() || null,
       vehicle_low_clearance: form.selllow.checked,
       addons: addons,
+      price_cents: price,
     })
       .then(function (data) {
         hide(el('ad-sell'));
@@ -1727,6 +1998,11 @@
 
     el('ad-edit-cancel').hidden = !r.owes;
 
+    // What they paid for the space. Not for a website sale: that price is
+    // whatever Stripe charged, and Stripe is the record of it.
+    el('ad-edit-price-row').hidden = online || !!r.in_checkout;
+    el('ad-edit-price').value = r.amount_cents != null ? String(r.amount_cents / 100) : '';
+
     renderEditTiers();
     renderEditCharge();
     show(el('ad-edit'));
@@ -1760,6 +2036,12 @@
 
       opt.addEventListener('click', function () {
         state.editTier = t.code;
+        // Not paid yet, so moving them changes what they owe — show that in
+        // the price box, where it can still be talked down.
+        if (r.status !== 'paid') {
+          el('ad-edit-price').value = String(
+            (t.code === r.tier_code ? r.amount_cents : t.price_cents) / 100);
+        }
         renderEditTiers();
         renderEditCharge();
       });
@@ -1776,12 +2058,17 @@
     var moved = state.editTier !== r.tier_code;
     var tier = state.tiers.filter(function (t) { return t.code === state.editTier; })[0];
     var paid = r.status === 'paid';
-    var space = moved && !paid && tier ? tier.price_cents : (r.amount_cents || 0);
+    // What the database will land on by itself, before any deal typed here.
+    var natural = moved && !paid && tier ? tier.price_cents : (r.amount_cents || 0);
+    var typed = el('ad-edit-price-row').hidden ? null : typedPrice(el('ad-edit-price'));
+    var space = typed > 0 ? typed : natural;
+    var repriced = typed > 0 && typed !== natural;
     var sub = space + (r.addons_cents || 0);
-    var surcharge = method === r.payment_method && !moved
+    var surcharge = method === r.payment_method && !moved && !repriced
       ? (r.surcharge_cents || 0)
       : surchargeOn(sub, method);
-    return { method: method, moved: moved, tier: tier, paid: paid, total: sub + surcharge };
+    return { method: method, moved: moved, tier: tier, paid: paid, total: sub + surcharge,
+      typed: typed, natural: natural, repriced: repriced };
   }
 
   function renderEditCharge() {
@@ -1801,6 +2088,11 @@
     } else {
       hide(hint);
     }
+
+    // A pay-later car is booked, not paid: the figure in the box is what it
+    // was booked at and still owes, until a real way to pay is picked.
+    text(el('ad-edit-price-label'),
+      a.method === 'unpaid' ? 'Booked at' : 'Paid for the space');
 
     var nowPaying = r.owes && a.method !== 'unpaid';
     var label = a.method === 'unpaid' ? 'They owe'
@@ -1837,6 +2129,14 @@
     if (!pay.disabled && pay.value !== r.payment_method) params.payment_method = pay.value;
     if (state.editTier && state.editTier !== r.tier_code) params.tier_code = state.editTier;
 
+    var a = editAmounts();
+    if (a.typed === false) {
+      text(box, 'A price between $1 and $500 for the space.');
+      show(box);
+      return;
+    }
+    if (a.repriced) params.price_cents = a.typed;
+
     btn.disabled = true;
     call('edit_booking', params)
       .then(function (data) {
@@ -1845,6 +2145,7 @@
         var who = form.rego.value.trim().toUpperCase() || 'Booking';
         var said = [];
         if (params.tier_code) said.push('moved to ' + params.tier_code.replace(/_/g, ' '));
+        if (params.price_cents) said.push('space now ' + money(params.price_cents));
         if (params.payment_method) {
           said.push(params.payment_method === 'unpaid' ? 'marked not paid'
             : 'paid ' + money(b.total_cents));
@@ -1937,15 +2238,21 @@
 
   /* ---------------------------------------------------------------- tabs */
 
+  var TABS = { gate: 'ad-pane-gate', night: 'ad-pane-night', insights: 'ad-pane-insights' };
+
   function showTab(which) {
     state.tab = which;
-    var gate = which === 'gate';
-    el('ad-pane-gate').hidden = !gate;
-    el('ad-pane-night').hidden = gate;
-    el('ad-tab-gate').classList.toggle('is-on', gate);
-    el('ad-tab-night').classList.toggle('is-on', !gate);
-    el('ad-tab-gate').setAttribute('aria-selected', String(gate));
-    el('ad-tab-night').setAttribute('aria-selected', String(!gate));
+    Object.keys(TABS).forEach(function (name) {
+      var on = name === which;
+      el(TABS[name]).hidden = !on;
+      el('ad-tab-' + name).classList.toggle('is-on', on);
+      el('ad-tab-' + name).setAttribute('aria-selected', String(on));
+    });
+    // The header picker drives Arrivals and Tonight. Insights has its own,
+    // and two pickers on one screen is one too many to read at a glance.
+    el('ad-event-row').hidden = which === 'insights';
+    measureHead();
+    if (which === 'insights') openInsights();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -1977,12 +2284,22 @@
       renderList();
     });
 
-    el('ad-refresh').addEventListener('click', function () { loadList(); });
+    el('ad-refresh').addEventListener('click', function () {
+      if (state.tab === 'insights') loadInsight(); else loadList();
+    });
 
     window.addEventListener('resize', measureHead);
 
     el('ad-tab-gate').addEventListener('click', function () { showTab('gate'); });
     el('ad-tab-night').addEventListener('click', function () { showTab('night'); });
+    el('ad-tab-insights').addEventListener('click', function () { showTab('insights'); });
+
+    el('ad-insight-event').addEventListener('change', function () {
+      state.insightId = this.value;
+      state.insight = null;
+      renderInsight();
+      loadInsight();
+    });
 
     el('ad-new-open').addEventListener('click', openNew);
     el('ad-new-close').addEventListener('click', function () { hide(el('ad-new')); });
@@ -1999,10 +2316,13 @@
     // Cash and card are different numbers. Switching the method has to move
     // the figure being read out, not just what gets recorded.
     el('ad-sell-payment').addEventListener('change', renderSellCharge);
+    // So does a deal typed for this one car.
+    el('ad-sell-price').addEventListener('input', renderSellCharge);
 
     el('ad-edit-close').addEventListener('click', function () { hide(el('ad-edit')); });
     el('ad-edit-form').addEventListener('submit', submitEdit);
     el('ad-edit-payment').addEventListener('change', renderEditCharge);
+    el('ad-edit-price').addEventListener('input', renderEditCharge);
     el('ad-edit-cancel').addEventListener('click', cancelUnpaid);
 
     el('ad-pricepick-select').addEventListener('change', paintPricePick);
@@ -2019,7 +2339,13 @@
 
     // Someone else may be selling at the gate while this phone is open.
     setInterval(function () {
-      if (!document.hidden && state.eventId && el('ad-app').hidden === false) loadList(true);
+      if (document.hidden || el('ad-app').hidden) return;
+      if (state.eventId) loadList(true);
+      // A finished night does not move; tonight's "so far" does.
+      var seen = state.insight && state.events.filter(function (e) {
+        return e.id === state.insight.eventId;
+      })[0];
+      if (state.tab === 'insights' && seen && dayKey(seen.starts_at) === todayKey()) loadInsight();
     }, REFRESH_MS);
 
     // Coming back from Google with the person having cancelled, or with a
