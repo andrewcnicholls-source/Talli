@@ -2088,7 +2088,20 @@
     // both cases the method is shown and left alone.
     var pay = el('ad-edit-payment');
     var online = r.payment_method === 'stripe';
-    pay.value = r.payment_method || 'cash';
+    // Card, cash, bank transfer, or not yet — nothing else is taken now. A
+    // booking recorded some other way before that (free, other) is shown as
+    // it was, greyed out, rather than silently reading as the first option.
+    [].slice.call(pay.querySelectorAll('option.is-legacy')).forEach(function (o) {
+      o.remove();
+    });
+    var method = r.payment_method || 'cash';
+    if (![].some.call(pay.options, function (o) { return o.value === method; })) {
+      var legacy = new Option(METHOD_NAMES[method] || method.replace(/_/g, ' '), method);
+      legacy.disabled = true;
+      legacy.className = 'is-legacy';
+      pay.add(legacy);
+    }
+    pay.value = method;
     pay.disabled = online || !!r.in_checkout;
     var payHint = el('ad-edit-payment-hint');
     if (online || r.in_checkout) {
