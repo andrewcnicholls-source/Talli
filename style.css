@@ -1707,11 +1707,13 @@ footer a { color: var(--blue); }
   min-width: 0;
 }
 /* The line the two count rows add up to, and the last thing on the card:
-   how many have gone, and whether the website can still sell one. */
+   how many have gone, and whether the website can still sell one. Right-
+   aligned, under the counts it totals, the way a tally is read. */
 .ad-price-left {
   font-size: 0.8rem;
   font-weight: 300;
   color: var(--grey);
+  text-align: right;
   margin-top: 10px;
   padding-top: 10px;
   border-top: 1px solid var(--line);
