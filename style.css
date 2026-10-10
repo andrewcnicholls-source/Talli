@@ -1253,11 +1253,7 @@ footer a { color: var(--blue); }
   color: var(--grey);
   margin: 14px 0 6px;
 }
-.ad-label span { text-transform: none; letter-spacing: 0.02em; opacity: 0.7; }
-/* A label whose wording changes, written into a span so the hint beside
-   it survives — but it is still the label, not the hint. */
-.ad-label span.ad-label-main { text-transform: inherit; letter-spacing: inherit; opacity: 1; }
-.ad-sheet-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.ad-label span { text-transform: none; letter-spacing: 0.02em; opacity: 0.7; }.ad-sheet-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 /* A date-and-time input reports a wide intrinsic size. Without this the
    column it is in refuses to shrink and squeezes whatever sits beside it. */
 .ad-sheet-row > div { min-width: 0; }
@@ -1915,6 +1911,58 @@ footer a { color: var(--blue); }
   color: var(--grey);
   margin-top: 3px;
 }
+.ad-pick-opt[aria-disabled="true"] { pointer-events: none; }
+.ad-pick-opt:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+
+/* The selected spot's price, and the pencil that opens it for one car. The
+   figure is a button too, so a thumb that lands on the number rather than
+   the pencil still gets the box. */
+.ad-pick-priceslot {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.ad-pick-price-edit {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  border-bottom: 1px dashed var(--blue);
+}
+.ad-pick-pencil {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  margin: -10px -10px -10px 0;
+  background: none;
+  border: none;
+  color: var(--blue);
+  cursor: pointer;
+}
+.ad-pick-dollar {
+  font-family: var(--display);
+  font-size: 1.25rem;
+  color: var(--blue-deep);
+}
+.ad-pick-input {
+  width: 4.5em;
+  font-family: var(--display);
+  font-size: 1.25rem;
+  color: var(--blue-deep);
+  text-align: right;
+  padding: 4px 6px;
+  border: 1px solid var(--blue);
+  border-radius: 4px;
+  background: var(--white);
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+/* No spinner arrows: nobody nudges a price by a dollar with a thumb. */
+.ad-pick-input::-webkit-outer-spin-button,
+.ad-pick-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 
 /* ---------- How many there are, and how many are held back ---------- */
 /* Two rows of the same shape under the price actions, because they are the

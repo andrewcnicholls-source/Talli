@@ -58,6 +58,13 @@
     busy: {},
     sellTier: null,
     sellExtras: {},
+    // A deal for this one car, typed on the selected spot's price: cents,
+    // or null for the sign. editPrice is the same for the edit sheet.
+    sellPrice: null,
+    sellPriceEditing: false,
+    editPrice: null,
+    editPriceEditing: false,
+    editPriceLocked: false,
     // The booking open in the edit sheet, and the space it is being moved to.
     edit: null,
     editTier: null,
@@ -1717,7 +1724,11 @@
     var still = state.tiers.filter(function (t) {
       return t.code === state.sellTier && !t.manually_sold_out && t.spots_left_gate > 0;
     })[0];
-    if (!still) state.sellTier = null;
+    if (!still) {
+      state.sellTier = null;
+      state.sellPrice = null;
+    }
+    state.sellPriceEditing = false;
     renderSellTiers();
     renderSellExtras();
     renderSellCharge();
@@ -1728,6 +1739,8 @@
     el('ad-sell-form').reset();
     state.sellTier = null;
     state.sellExtras = {};
+    state.sellPrice = null;
+    state.sellPriceEditing = false;
   }
 
   function renderSellTiers() {
@@ -1746,27 +1759,121 @@
 
     tiers.forEach(function (t) {
       var gone = t.manually_sold_out || t.spots_left_gate <= 0;
-      var opt = make('button', 'ad-pick-opt' +
-        (state.sellTier === t.code ? ' is-on' : '') + (gone ? ' is-gone' : ''));
-      opt.type = 'button';
-      opt.disabled = gone;
+      var on = state.sellTier === t.code;
+      var deal = on && state.sellPrice > 0 && state.sellPrice !== t.price_cents;
+      var opt = pickTile('ad-pick-opt' + (on ? ' is-on' : '') + (gone ? ' is-gone' : ''),
+        gone, function () {
+          if (state.sellTier === t.code) return;
+          // A deal was struck for the spot it was typed against.
+          state.sellTier = t.code;
+          state.sellPrice = null;
+          state.sellPriceEditing = false;
+          renderSellTiers();
+          renderSellCharge();
+        });
 
       var line = make('span', 'ad-pick-line');
       line.appendChild(make('span', 'ad-pick-name', shortName(t)));
-      line.appendChild(make('span', 'ad-pick-price', money(t.price_cents)));
+      if (on) {
+        line.appendChild(priceSlot({
+          cents: deal ? state.sellPrice : t.price_cents,
+          editing: state.sellPriceEditing,
+          label: 'Change the price for this car',
+          start: function () { state.sellPriceEditing = true; renderSellTiers(); },
+          input: function (cents) { state.sellPrice = cents; renderSellCharge(); },
+          done: function () {
+            // Left empty, or with something that is not a price: back to the sign.
+            if (!(state.sellPrice > 0)) state.sellPrice = null;
+            state.sellPriceEditing = false;
+            renderSellTiers();
+            renderSellCharge();
+          },
+        }));
+      } else {
+        line.appendChild(make('span', 'ad-pick-price', money(t.price_cents)));
+      }
       opt.appendChild(line);
-      opt.appendChild(make('span', 'ad-pick-left',
-        t.manually_sold_out ? 'marked sold out'
-          : t.spots_left_gate > 0 ? t.spots_left_gate + ' left'
-          : 'none left'));
 
-      opt.addEventListener('click', function () {
-        state.sellTier = t.code;
-        renderSellTiers();
-        renderSellCharge();
-      });
+      var left = t.manually_sold_out ? 'marked sold out'
+        : t.spots_left_gate > 0 ? t.spots_left_gate + ' left'
+        : 'none left';
+      // The sign is still the sign. Say so, so a deal never reads as a
+      // price change for the next car.
+      if (deal) left += ' · this car only, sign ' + money(t.price_cents);
+      opt.appendChild(make('span', 'ad-pick-left', left));
+
       wrap.appendChild(opt);
     });
+  }
+
+  // A spot tile. Not a <button>: the selected one carries a price you can
+  // type into, and an input inside a button cannot be focused on every
+  // phone. So it is a div that behaves like one.
+  function pickTile(cls, disabled, onPick) {
+    var opt = make('div', cls);
+    opt.setAttribute('role', 'button');
+    if (disabled) {
+      opt.setAttribute('aria-disabled', 'true');
+      return opt;
+    }
+    opt.tabIndex = 0;
+    opt.addEventListener('click', onPick);
+    opt.addEventListener('keydown', function (e) {
+      if (e.target !== opt) return;
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPick(); }
+    });
+    return opt;
+  }
+
+  var PENCIL = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">' +
+    '<path d="M11.3 1.7a1.5 1.5 0 0 1 2.1 0l.9.9a1.5 1.5 0 0 1 0 2.1L5.6 13.4 ' +
+    '2 14l.6-3.6z" fill="none" stroke="currentColor" stroke-width="1.4" ' +
+    'stroke-linejoin="round"/></svg>';
+
+  // The price on the selected tile, with a pencil beside it. Tap either and
+  // the figure becomes a box to type the deal into; leave the box and it is
+  // a figure again. Typing never redraws the tile — that would take the
+  // cursor out of the box mid-number.
+  function priceSlot(o) {
+    var slot = make('span', 'ad-pick-priceslot');
+    // Taps in here are about the price, not about picking the tile.
+    slot.addEventListener('click', function (e) { e.stopPropagation(); });
+    slot.addEventListener('keydown', function (e) { e.stopPropagation(); });
+
+    if (o.editing) {
+      slot.appendChild(make('span', 'ad-pick-dollar', '$'));
+      var input = make('input', 'ad-pick-input');
+      input.type = 'number';
+      input.inputMode = 'decimal';
+      input.min = '1';
+      input.max = '500';
+      input.step = 'any';
+      input.value = String(o.cents / 100);
+      input.setAttribute('aria-label', o.label);
+      input.addEventListener('input', function () { o.input(typedPrice(input)); });
+      input.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+      });
+      input.addEventListener('blur', function () { o.done(); });
+      slot.appendChild(input);
+      // After it is in the page, so focus and the selection both land.
+      setTimeout(function () { input.focus(); input.select(); }, 0);
+      return slot;
+    }
+
+    var figure = make('button', 'ad-pick-price ad-pick-price-edit', money(o.cents));
+    figure.type = 'button';
+    figure.setAttribute('aria-label', o.label + ' (now ' + money(o.cents) + ')');
+    figure.addEventListener('click', o.start);
+    slot.appendChild(figure);
+
+    var pencil = make('button', 'ad-pick-pencil');
+    pencil.type = 'button';
+    pencil.innerHTML = PENCIL;
+    pencil.setAttribute('aria-label', o.label);
+    pencil.addEventListener('click', o.start);
+    slot.appendChild(pencil);
+    return slot;
   }
 
   function renderSellExtras() {
@@ -1840,12 +1947,9 @@
     text(el('ad-sell-charge-total-label'), later ? 'They will owe' : 'Charge them');
     text(el('ad-sell-submit'), later ? 'Save — they pay later' : 'Take the money');
     var extras = sellExtrasTotal();
-    // The sign price unless a deal was typed in. A half-typed or silly
-    // number falls back to the sign here; submitting it says what is wrong.
-    var priceInput = el('ad-sell-price');
-    priceInput.placeholder = String(Math.round(tier.price_cents / 100));
-    var typed = typedPrice(priceInput);
-    var spot = typed > 0 ? typed : tier.price_cents;
+    // The sign price unless a deal was typed on the tile. A half-typed
+    // number falls back to the sign here, as it does when the box is left.
+    var spot = state.sellPrice > 0 ? state.sellPrice : tier.price_cents;
     var subtotal = spot + extras;
     var surcharge = surchargeOn(subtotal, method);
 
@@ -1893,15 +1997,15 @@
       show(pick);
       return;
     }
-    var price = typedPrice(el('ad-sell-price'));
+    var price = state.sellPrice;
     if (price === false) {
       var bad = el('ad-sell-error');
-      text(bad, 'A price between $1 and $500, or leave it blank for the sign.');
+      text(bad, 'Tap the price on the spot — between $1 and $500.');
       show(bad);
       return;
     }
     // Typing the sign price is the sign price — no need to record a deal.
-    if (price === tier.price_cents) price = null;
+    if (!price || price === tier.price_cents) price = null;
 
     var btn = el('ad-sell-submit');
     btn.disabled = true;
@@ -1984,7 +2088,20 @@
     // both cases the method is shown and left alone.
     var pay = el('ad-edit-payment');
     var online = r.payment_method === 'stripe';
-    pay.value = r.payment_method || 'cash';
+    // Card, cash, bank transfer, or not yet — nothing else is taken now. A
+    // booking recorded some other way before that (free, other) is shown as
+    // it was, greyed out, rather than silently reading as the first option.
+    [].slice.call(pay.querySelectorAll('option.is-legacy')).forEach(function (o) {
+      o.remove();
+    });
+    var method = r.payment_method || 'cash';
+    if (![].some.call(pay.options, function (o) { return o.value === method; })) {
+      var legacy = new Option(METHOD_NAMES[method] || method.replace(/_/g, ' '), method);
+      legacy.disabled = true;
+      legacy.className = 'is-legacy';
+      pay.add(legacy);
+    }
+    pay.value = method;
     pay.disabled = online || !!r.in_checkout;
     var payHint = el('ad-edit-payment-hint');
     if (online || r.in_checkout) {
@@ -1998,10 +2115,12 @@
 
     el('ad-edit-cancel').hidden = !r.owes;
 
-    // What they paid for the space. Not for a website sale: that price is
-    // whatever Stripe charged, and Stripe is the record of it.
-    el('ad-edit-price-row').hidden = online || !!r.in_checkout;
-    el('ad-edit-price').value = r.amount_cents != null ? String(r.amount_cents / 100) : '';
+    // What they paid for the space, editable on the selected tile. Not for a
+    // website sale: that price is whatever Stripe charged, and Stripe is the
+    // record of it.
+    state.editPrice = null;
+    state.editPriceEditing = false;
+    state.editPriceLocked = online || !!r.in_checkout;
 
     renderEditTiers();
     renderEditCharge();
@@ -2019,32 +2138,48 @@
       // Its own space is counted in its own tier, so the tier it is in is
       // never "full" as far as this booking is concerned.
       var full = !current && (t.manually_sold_out || t.spots_left_gate <= 0);
-      var opt = make('button', 'ad-pick-opt' + tierClass(t.code) +
-        (state.editTier === t.code ? ' is-on' : '') +
-        (current ? ' is-current' : '') + (full ? ' is-gone' : ''));
-      opt.type = 'button';
-      opt.disabled = full || !!r.in_checkout;
+      var on = state.editTier === t.code;
+      var opt = pickTile('ad-pick-opt' + tierClass(t.code) +
+        (on ? ' is-on' : '') + (current ? ' is-current' : '') + (full ? ' is-gone' : ''),
+        full || !!r.in_checkout, function () {
+          if (state.editTier === t.code) return;
+          state.editTier = t.code;
+          // What the space is worth starts again from what the move means:
+          // kept if paid, the new type's price if not.
+          state.editPrice = null;
+          state.editPriceEditing = false;
+          renderEditTiers();
+          renderEditCharge();
+        });
 
       var line = make('span', 'ad-pick-line');
       line.appendChild(make('span', 'ad-pick-name', shortName(t)));
-      line.appendChild(make('span', 'ad-pick-price', money(t.price_cents)));
+      var a = on ? editAmounts() : null;
+      if (on && !state.editPriceLocked) {
+        line.appendChild(priceSlot({
+          cents: a.space,
+          editing: state.editPriceEditing,
+          label: 'Change what this car pays for the space',
+          start: function () { state.editPriceEditing = true; renderEditTiers(); },
+          input: function (cents) { state.editPrice = cents; renderEditCharge(); },
+          done: function () {
+            if (!(state.editPrice > 0)) state.editPrice = null;
+            state.editPriceEditing = false;
+            renderEditTiers();
+            renderEditCharge();
+          },
+        }));
+      } else {
+        line.appendChild(make('span', 'ad-pick-price', money(on ? a.space : t.price_cents)));
+      }
       opt.appendChild(line);
-      opt.appendChild(make('span', 'ad-pick-left',
-        current ? 'booked as this'
-          : full ? 'full — add a space on Tonight first'
-          : t.spots_left_gate + ' left'));
 
-      opt.addEventListener('click', function () {
-        state.editTier = t.code;
-        // Not paid yet, so moving them changes what they owe — show that in
-        // the price box, where it can still be talked down.
-        if (r.status !== 'paid') {
-          el('ad-edit-price').value = String(
-            (t.code === r.tier_code ? r.amount_cents : t.price_cents) / 100);
-        }
-        renderEditTiers();
-        renderEditCharge();
-      });
+      var left = current ? 'booked as this'
+        : full ? 'full — add a space on Tonight first'
+        : t.spots_left_gate + ' left';
+      if (on && a.space !== t.price_cents) left += ' · this car only, sign ' + money(t.price_cents);
+      opt.appendChild(make('span', 'ad-pick-left', left));
+
       wrap.appendChild(opt);
     });
   }
@@ -2060,7 +2195,7 @@
     var paid = r.status === 'paid';
     // What the database will land on by itself, before any deal typed here.
     var natural = moved && !paid && tier ? tier.price_cents : (r.amount_cents || 0);
-    var typed = el('ad-edit-price-row').hidden ? null : typedPrice(el('ad-edit-price'));
+    var typed = state.editPriceLocked ? null : state.editPrice;
     var space = typed > 0 ? typed : natural;
     var repriced = typed > 0 && typed !== natural;
     var sub = space + (r.addons_cents || 0);
@@ -2068,7 +2203,7 @@
       ? (r.surcharge_cents || 0)
       : surchargeOn(sub, method);
     return { method: method, moved: moved, tier: tier, paid: paid, total: sub + surcharge,
-      typed: typed, natural: natural, repriced: repriced };
+      typed: typed, natural: natural, repriced: repriced, space: space };
   }
 
   function renderEditCharge() {
@@ -2088,11 +2223,6 @@
     } else {
       hide(hint);
     }
-
-    // A pay-later car is booked, not paid: the figure in the box is what it
-    // was booked at and still owes, until a real way to pay is picked.
-    text(el('ad-edit-price-label'),
-      a.method === 'unpaid' ? 'Booked at' : 'Paid for the space');
 
     var nowPaying = r.owes && a.method !== 'unpaid';
     var label = a.method === 'unpaid' ? 'They owe'
@@ -2316,13 +2446,10 @@
     // Cash and card are different numbers. Switching the method has to move
     // the figure being read out, not just what gets recorded.
     el('ad-sell-payment').addEventListener('change', renderSellCharge);
-    // So does a deal typed for this one car.
-    el('ad-sell-price').addEventListener('input', renderSellCharge);
 
     el('ad-edit-close').addEventListener('click', function () { hide(el('ad-edit')); });
     el('ad-edit-form').addEventListener('submit', submitEdit);
     el('ad-edit-payment').addEventListener('change', renderEditCharge);
-    el('ad-edit-price').addEventListener('input', renderEditCharge);
     el('ad-edit-cancel').addEventListener('click', cancelUnpaid);
 
     el('ad-pricepick-select').addEventListener('change', paintPricePick);
