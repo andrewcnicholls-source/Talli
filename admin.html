@@ -296,16 +296,6 @@
     <input type="text" id="ad-sell-rego" name="rego" class="ad-input"
            autocapitalize="characters" spellcheck="false">
 
-    <label class="ad-label" for="ad-sell-payment">Paid by</label>
-    <select id="ad-sell-payment" name="payment" class="ad-select">
-      <option value="tap_to_pay">Card (tap to pay)</option>
-      <option value="cash">Cash</option>
-      <option value="bank_transfer">Bank transfer</option>
-      <option value="unpaid">Not paid yet &mdash; take it later</option>
-    </select>
-    <p class="ad-hint" id="ad-sell-later-hint" hidden>Saves the car and ticks it in.
-      Tap the booking in the list when they pay.</p>
-
     <label class="ad-label">Extras <span>optional</span></label>
     <div class="ad-sell-extras" id="ad-sell-extras"></div>
 
@@ -326,6 +316,19 @@
       <input type="checkbox" id="ad-sell-low" name="selllow">
       <span>Low car &mdash; keep it off the steep entry</span>
     </label>
+
+    <!-- Last, because it is the last thing asked at the window: everything
+         else is captured, then the money changes hands. It sits straight
+         above what to charge, which moves the moment it is picked. -->
+    <label class="ad-label" for="ad-sell-payment">Paid by</label>
+    <select id="ad-sell-payment" name="payment" class="ad-select">
+      <option value="tap_to_pay">Card (tap to pay)</option>
+      <option value="cash">Cash</option>
+      <option value="bank_transfer">Bank transfer</option>
+      <option value="unpaid">Not paid yet &mdash; take it later</option>
+    </select>
+    <p class="ad-hint" id="ad-sell-later-hint" hidden>Saves the car and ticks it in.
+      Tap the booking in the list when they pay.</p>
 
     <!-- What to actually ask for. The sign price is the cash price, so a card
          sale is a different number and the marshal should not be doing that
@@ -396,6 +399,12 @@
       <span>Low car &mdash; keep it off the steep entry</span>
     </label>
 
+    <label class="ad-label" for="ad-edit-notes">Notes <span>optional</span></label>
+    <textarea id="ad-edit-notes" name="editnotes" class="ad-input" rows="2"
+              maxlength="500"></textarea>
+
+    <!-- Last, as on the walk-up form: how they paid is settled once
+         everything else about the car is right. -->
     <label class="ad-label" for="ad-edit-payment">Paid by</label>
     <select id="ad-edit-payment" name="payment" class="ad-select">
       <option value="tap_to_pay">Card (tap to pay)</option>
@@ -414,10 +423,6 @@
         <strong id="ad-edit-charge-total"></strong>
       </div>
     </div>
-
-    <label class="ad-label" for="ad-edit-notes">Notes <span>optional</span></label>
-    <textarea id="ad-edit-notes" name="editnotes" class="ad-input" rows="2"
-              maxlength="500"></textarea>
 
     <p class="ad-sheet-error" id="ad-edit-error" role="alert" hidden></p>
 
