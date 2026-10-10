@@ -165,10 +165,71 @@
   // Google skips the picker when there is exactly one signed-in session,
   // so somebody who signed in with the wrong account has no way back: the
   // button just hands the same refused identity over again.
+  //
+  // returnTo is for a page that is not the gate screen — the test site's
+  // sign-in card. Rather than put every page of the site on Supabase's
+  // redirect allow-list, Google comes back through the gate screen's
+  // address, which is already on it, and this file sends the browser on
+  // to where it started (see the end of this file).
   function signInWithGoogle(opts) {
+    var target = redirectTarget();
+    var back = opts && opts.returnTo;
+    if (safePath(back)) {
+      try {
+        window.localStorage.setItem(RETURN_KEY, JSON.stringify({ path: back, at: now() }));
+        target = window.location.origin + GATEWAY;
+      } catch (e) { /* no storage: come back here, if the list allows it */ }
+    }
     window.location.href = AUTH + '/authorize?provider=google' +
       ((opts && opts.chooseAccount) ? '&prompt=select_account' : '') +
-      '&redirect_to=' + encodeURIComponent(redirectTarget());
+      '&redirect_to=' + encodeURIComponent(target);
+  }
+
+  /* --------------------------------------------- back where you began */
+
+  var RETURN_KEY = 'talli.auth.return';
+  var ERROR_KEY = 'talli.auth.error';
+  var GATEWAY = '/admin';
+  // A sign-in abandoned at Google should not, days later, whisk someone
+  // off the gate screen to wherever they once started from.
+  var RETURN_WINDOW_SECONDS = 15 * 60;
+
+  // This site only, by path. Anything else — another origin, a protocol-
+  // relative "//evil", a backslash trick — is not somewhere to send people.
+  function safePath(p) {
+    return typeof p === 'string' && /^\/(?![\/\\])/.test(p);
+  }
+
+  function takeReturn() {
+    try {
+      var raw = window.localStorage.getItem(RETURN_KEY);
+      window.localStorage.removeItem(RETURN_KEY);
+      var r = raw ? JSON.parse(raw) : null;
+      if (!r || !safePath(r.path) || now() - Number(r.at) > RETURN_WINDOW_SECONDS) return null;
+      return r.path;
+    } catch (e) { return null; }
+  }
+
+  // Run on the page Google returned to. Signed in or refused, the person
+  // goes back to the page they asked from — carrying any refusal with them
+  // so that page can say what went wrong.
+  function sendBack(landing) {
+    if (!landing) return false;
+    var path = takeReturn();
+    if (!path || path === window.location.pathname + window.location.search) return false;
+    if (landing.error) {
+      try { window.sessionStorage.setItem(ERROR_KEY, landing.error); } catch (e) { /* fine */ }
+    }
+    window.location.replace(window.location.origin + path);
+    return true;
+  }
+
+  function carriedError() {
+    try {
+      var msg = window.sessionStorage.getItem(ERROR_KEY);
+      window.sessionStorage.removeItem(ERROR_KEY);
+      return msg || null;
+    } catch (e) { return null; }
   }
 
   // Tell Supabase first so the refresh token dies server-side, then drop
@@ -186,12 +247,17 @@
 
   session = load();
   var landing = captureHash();
+  var leaving = sendBack(landing);
 
   window.TalliAuth = {
     // Set when this page load WAS the return trip from Google, so the
     // screen can report "you cancelled" rather than silently offering the
-    // button again.
-    landingError: (landing && landing.error) || null,
+    // button again — or when the return trip passed through the gate
+    // screen and was sent on here.
+    landingError: leaving ? null : ((landing && landing.error) || carriedError()),
+    // True while this page is handing the browser back to where sign-in
+    // began. Nothing on it needs to start up.
+    leaving: leaving,
     hasSession: function () { return !!session; },
     accessToken: accessToken,
     signInWithGoogle: signInWithGoogle,

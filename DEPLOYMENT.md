@@ -173,8 +173,9 @@ is. `release-production` stops when it sees that.
 
 Open https://staging.talli.pages.dev on the actual hardware.
 
-- Front-door passphrase: `talli-test` (see `TESTING.md` — it is a
-  signpost, not security).
+- Front door: sign in with Google, staff only — the test project's
+  `host_user` list (see `TESTING.md`). One sign-in covers the public
+  pages and the gate screen.
 - The gate screen is Google sign-in, per project: signing in on staging
   does not sign you in on production, and both need a `host_user` row.
 - Every page carries a red *TEST SITE* bar; the gate screen turns red.

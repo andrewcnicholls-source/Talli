@@ -107,14 +107,29 @@ The default points away from real customer data on purpose.
 
 | Where | How | Enforced |
 | --- | --- | --- |
-| Test site front door | passphrase `talli-test` | in the browser |
+| Test site front door | sign in with Google — staff only | checked server-side, applied in the browser |
 | Gate screen (`/admin.html`), either site | sign in with Google | server-side |
 
-**Be honest with yourself about the first one.** It is in `assets/talli-testgate.js`,
-which anyone can read. It exists to keep the test site out of Google and to
-stop a confused customer booking a fixture that does not exist — not to keep
-a determined person out. That is fine, because the test database holds no
-customer data and every write is still guarded server-side.
+**The test site is for Talli staff; hosts use production.** That split is
+the data, not the code: the test Supabase project has its own `host_user`
+list, separate from production's, and only staff go on it. A production
+host has no row on test, so their Google account is turned away at the
+front door with "not on the staff list for the test site". To let a new
+staff member in, add their Google email to `host_user` on **talli-test**.
+
+It is one sign-in for the whole test site: signing in on the gate screen
+opens the public pages too, and the other way round, and it lasts across
+tabs until you sign out. Google returns through `/admin`, which is already
+on Supabase's redirect allow-list, and `talli-auth.js` sends you on to the
+page you started from — so no page needs adding to that list.
+
+**Be honest with yourself about what the front door is.** The check is
+real — `gate-ops` decides — but it is applied in the browser by
+`assets/talli-testgate.js`, after the HTML has been served. It keeps the
+test site out of Google and away from customers and hosts; it does not hide
+the pages from a determined person. That is fine, because the test database
+holds no customer data and every write is still guarded server-side.
+`localhost` skips it, since nobody stumbles onto a local copy.
 
 If you ever want real protection there, Cloudflare Access does it at the
 edge, before a byte of HTML is served, and it is free at this scale —
