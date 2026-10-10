@@ -286,19 +286,11 @@
       <button type="button" class="ad-sheet-close" id="ad-sell-close" aria-label="Close">×</button>
     </div>
 
+    <!-- The selected spot carries its price with a pencil beside it: tap
+         either to type the deal struck at the window, for this car only.
+         The sign and every other car stay where they are. -->
     <label class="ad-label">Spot</label>
     <div class="ad-pick" id="ad-sell-tiers"></div>
-
-    <!-- The deal struck at the window, for this car only. The sign, and
-         every other car, stay where they are — so the spot above can be
-         the space they are actually getting, not whichever one costs that. -->
-    <label class="ad-label" for="ad-sell-price">Price for this car
-      <span>leave blank for the sign price</span></label>
-    <div class="ad-price-entry">
-      <span>$</span>
-      <input type="number" id="ad-sell-price" name="sellprice" class="ad-input"
-             inputmode="numeric" min="1" max="500" step="1">
-    </div>
 
     <label class="ad-label" for="ad-sell-rego">License plate <span>optional</span></label>
     <input type="text" id="ad-sell-rego" name="rego" class="ad-input"
@@ -415,18 +407,6 @@
       <option value="stripe" disabled>Card online</option>
     </select>
     <p class="ad-hint" id="ad-edit-payment-hint" hidden></p>
-
-    <!-- Rung up at the sign price before anyone remembered the deal. -->
-    <div id="ad-edit-price-row">
-      <label class="ad-label" for="ad-edit-price"><span
-        class="ad-label-main" id="ad-edit-price-label">Paid for the space</span>
-        <span>change it if the deal was different</span></label>
-      <div class="ad-price-entry">
-        <span>$</span>
-        <input type="number" id="ad-edit-price" name="editprice" class="ad-input"
-               inputmode="decimal" min="1" max="500" step="any">
-      </div>
-    </div>
 
     <div class="ad-charge" id="ad-edit-charge">
       <div class="ad-charge-total">
