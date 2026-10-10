@@ -2475,6 +2475,11 @@
       if (state.tab === 'insights' && seen && dayKey(seen.starts_at) === todayKey()) loadInsight();
     }, REFRESH_MS);
 
+    // Google came back through here on the way to a test-site page that
+    // asked for the sign-in. The browser is already leaving; do not start
+    // the gate screen up behind it.
+    if (AUTH.leaving) return;
+
     // Coming back from Google with the person having cancelled, or with a
     // redirect URL the project does not allow: say what happened rather
     // than showing the same button as if nothing had been pressed.

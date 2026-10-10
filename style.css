@@ -2350,6 +2350,7 @@ footer a { color: var(--blue); }
   font-size: 0.85rem;
   margin: 0 0 12px !important;
 }
+.talli-gate-hint { margin: 12px 0 0 !important; font-size: 0.8rem !important; }
 .talli-gate-foot { margin: 16px 0 0 !important; font-size: 0.8rem; }
 .talli-gate-foot a { color: var(--grey); }
 
