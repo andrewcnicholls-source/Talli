@@ -48,6 +48,10 @@
     tab: 'gate',
     rows: [],
     tiers: [],
+    // The driveways selling this event, and the one this phone is standing
+    // at. With one site (most nights at Paice Ave) none of this shows.
+    sites: [],
+    siteId: null,
     extras: [],       // what has been pre-purchased and still needs handing over
     catalogue: [],    // what we sell
     summary: null,
@@ -218,8 +222,9 @@
       hide(el('ad-lock'));
       show(el('ad-app'));
       renderWho();
+      applyRole();
       loadCatalogue();
-      loadTemplates();
+      if (isOperator()) loadTemplates();
       renderEvents();
     });
   }
@@ -264,6 +269,20 @@
     showSignIn(err && err.message, err && err.code);
   }
 
+  // Andrew sees every tab. A warden works Arrivals only, for their blocks;
+  // the server enforces that, and this just stops offering what it refuses.
+  function isOperator() {
+    return !state.who || state.who.operator !== false;
+  }
+
+  function applyRole() {
+    var op = isOperator();
+    el('ad-tab-night').hidden = !op;
+    el('ad-tab-insights').hidden = !op;
+    el('ad-new-open').hidden = !op;
+    if (!op && state.tab !== 'gate') showTab('gate');
+  }
+
   function renderWho() {
     var node = el('ad-who');
     if (!node) return;
@@ -273,8 +292,13 @@
   // Any call, anywhere on the screen, can be the one that discovers the
   // session died. Route those back to the card rather than letting them
   // surface as a toast the person cannot act on.
+  // A warden asking for something that is not theirs (another block's car,
+  // Andrew's price levers) is refused, not signed out.
+  var SCOPE_REFUSALS = ['OPERATOR_ONLY', 'NOT_YOUR_SITE'];
+
   function fatal(err) {
-    if (err && (err.status === 401 || err.status === 403)) {
+    if (err && (err.status === 401 ||
+        (err.status === 403 && SCOPE_REFUSALS.indexOf(err.code) === -1))) {
       signedOut(err);
       return true;
     }
@@ -384,6 +408,8 @@
       .then(function (data) {
         state.rows = data.rows || [];
         state.tiers = data.tiers || [];
+        state.sites = data.sites || [];
+        pickSite();
         state.extras = data.extras || [];
         state.summary = data.summary || null;
         state.surchargeBps = data.card_surcharge_bps || 0;
@@ -393,7 +419,96 @@
       .finally(function () { el('ad-list').removeAttribute('aria-busy'); });
   }
 
+  /* ------------------------------------------------- which driveway */
+
+  function multiSite() { return state.sites.length > 1; }
+
+  function siteKey() { return 'talli.gate.site.' + state.eventId; }
+
+  // Sticky per event, per phone: set once at the start of the night.
+  function pickSite() {
+    var ids = state.sites.map(function (s) { return s.property_id; });
+    if (state.siteId && ids.indexOf(state.siteId) > -1) return;
+    var saved = null;
+    try { saved = window.localStorage.getItem(siteKey()); } catch (e) { saved = null; }
+    if (saved && ids.indexOf(saved) > -1) { state.siteId = saved; return; }
+    var anchor = state.sites.filter(function (s) { return s.is_anchor; })[0];
+    state.siteId = (anchor || state.sites[0] || {}).property_id || null;
+  }
+
+  function setSite(id) {
+    state.siteId = id;
+    try { window.localStorage.setItem(siteKey(), id); } catch (e) { /* private mode */ }
+    renderAll();
+  }
+
+  function siteName(id) {
+    var s = state.sites.filter(function (x) { return x.property_id === id; })[0];
+    return s ? s.name : '';
+  }
+
+  function currentSite() {
+    return state.sites.filter(function (x) { return x.property_id === state.siteId; })[0] || null;
+  }
+
+  // The types of space sold at the driveway this phone is at. With one
+  // site, that is every type tonight, exactly as before.
+  function tiersHere() {
+    if (!multiSite() || !state.siteId) return state.tiers;
+    return state.tiers.filter(function (t) { return t.property_id === state.siteId; });
+  }
+
+  function renderSitePicker() {
+    var row = el('ad-site-row');
+    var select = el('ad-site');
+    if (!row || !select) return;
+    row.hidden = !multiSite();
+    if (!multiSite()) return;
+    select.innerHTML = '';
+    var group = null;
+    var groupName = null;
+    state.sites.forEach(function (s) {
+      if (s.block_name !== groupName) {
+        groupName = s.block_name;
+        group = document.createElement('optgroup');
+        group.label = groupName || 'Sites';
+        select.appendChild(group);
+      }
+      var opt = document.createElement('option');
+      opt.value = s.property_id;
+      var here = arrivedAt(s.property_id);
+      opt.textContent = s.name + (s.is_anchor ? ' (anchor)' : '') +
+        ' — ' + here + '/' + capacityAt(s.property_id) + ' in' +
+        (s.status !== 'confirmed' ? ' · ' + s.status : '');
+      opt.selected = s.property_id === state.siteId;
+      group.appendChild(opt);
+    });
+    var site = currentSite();
+    var guide = el('ad-site-guide');
+    if (guide) {
+      guide.hidden = !(site && site.site_guide_url);
+      if (site && site.site_guide_url) guide.href = site.site_guide_url;
+    }
+    var notes = el('ad-site-notes');
+    if (notes) {
+      notes.hidden = !(site && site.fill_notes);
+      text(notes, site && site.fill_notes ? site.fill_notes : '');
+    }
+  }
+
+  function capacityAt(id) {
+    return state.tiers.filter(function (t) { return t.property_id === id; })
+      .reduce(function (n, t) { return n + (t.capacity || 0); }, 0);
+  }
+
+  function arrivedAt(id) {
+    return state.rows.filter(function (r) {
+      return r.arrived && r.property_id === id;
+    }).length;
+  }
+
   function renderAll() {
+    renderSitePicker();
     renderStats();
     renderSplit();
     renderList();
@@ -518,7 +633,11 @@
   function matches(row) {
     if (!state.filter) return true;
     var f = state.filter.toLowerCase();
-    return [row.vehicle_rego, row.customer_name, row.customer_phone]
+    // The plate as typed with or without a space, the booking reference from
+    // the confirmation email, a name or a phone number.
+    var plate = String(row.vehicle_rego || '').replace(/\s+/g, '').toLowerCase();
+    if (plate && plate.indexOf(f.replace(/\s+/g, '')) > -1) return true;
+    return [row.reference, row.customer_name, row.customer_phone]
       .some(function (v) { return v && String(v).toLowerCase().indexOf(f) > -1; });
   }
 
@@ -586,6 +705,14 @@
     if (r.arrival_from && r.arrival_until) {
       meta.appendChild(make('span', 'ad-chip', asTime(r.arrival_from) + '–' + asTime(r.arrival_until)));
     }
+    // Which driveway — where they are if they are in, where they were booked
+    // if not. Only worth saying when there is more than one.
+    if (multiSite() && r.property_id) {
+      var at = siteName(r.property_id);
+      var moved = r.booked_property_id && r.booked_property_id !== r.property_id;
+      meta.appendChild(make('span', 'ad-chip is-site',
+        (r.arrived ? '@ ' : '→ ') + at + (moved ? ' (booked ' + siteName(r.booked_property_id) + ')' : '')));
+    }
     if (r.owes) {
       meta.appendChild(make('span', 'ad-chip is-warn', 'owes ' + rowTotal(r)));
     } else if (r.payment_method && r.payment_method !== 'stripe') {
@@ -649,10 +776,26 @@
     state.busy[r.booking_id] = true;
     btn.disabled = true;
 
-    call(action, { booking_id: r.booking_id })
+    var params = { booking_id: r.booking_id };
+    // One tap puts the car at the driveway this phone is standing at.
+    if (!r.arrived && multiSite() && state.siteId) params.property_id = state.siteId;
+
+    call(action, params)
       .then(function () {
         r.arrived = !r.arrived;
         var who = r.vehicle_rego || 'Booking';
+        if (r.arrived && params.property_id) {
+          r.property_id = params.property_id;
+          var inNow = arrivedAt(params.property_id);
+          var cap = capacityAt(params.property_id);
+          if (cap && inNow > cap) {
+            toast(who + ' in at ' + siteName(params.property_id) +
+              ' — over its count (' + inNow + '/' + cap + ')', 'bad');
+            return loadList(true);
+          }
+          toast(who + ' in at ' + siteName(params.property_id), 'good');
+          return loadList(true);
+        }
         toast(who + (r.arrived ? ' ticked in' : ' un-ticked'), 'good');
         return loadList(true);
       })
@@ -710,7 +853,36 @@
       return;
     }
 
+    if (multiSite()) wrap.appendChild(siteBoard());
     tiers.forEach(function (t) { wrap.appendChild(tierCard(t)); });
+  }
+
+  // Each driveway's online status for this event. A host's site sells
+  // online only once it is confirmed; paused stops the website and leaves
+  // the gate working.
+  function siteBoard() {
+    var box = make('div', 'ad-sites');
+    box.appendChild(make('div', 'ad-sites-head', 'Sites tonight'));
+    state.sites.forEach(function (site) {
+      var line = make('div', 'ad-site-line');
+      line.appendChild(make('span', 'ad-site-name',
+        (site.block_name ? site.block_name + ' · ' : '') + site.name));
+      line.appendChild(make('span', 'ad-chip is-' + site.status, site.status));
+      var next = site.status === 'confirmed' ? 'paused' : 'confirmed';
+      line.appendChild(button('ad-nudge', next === 'confirmed' ? 'Put on sale' : 'Pause online',
+        function () {
+          call('set_offer_status', {
+            event_id: state.eventId, property_id: site.property_id, status: next,
+          })
+            .then(function () {
+              toast(site.name + ' ' + (next === 'confirmed' ? 'on sale online' : 'paused online'), 'good');
+              return loadList(true);
+            })
+            .catch(function (err) { toast(err.message, 'bad'); });
+        }));
+      box.appendChild(line);
+    });
+    return box;
   }
 
   // Everything about one type of space on one card: what it is, what it
@@ -727,7 +899,8 @@
     var card = make('div', 'ad-price' + (gone ? ' is-gone' : ''));
 
     var head = make('div', 'ad-price-head');
-    head.appendChild(make('span', 'ad-price-name', shortName(t)));
+    head.appendChild(make('span', 'ad-price-name',
+      (multiSite() ? siteName(t.property_id) + ' · ' : '') + shortName(t)));
     head.appendChild(button('ad-price-tag', money(t.price_cents), function () {
       openPrice(t);
     }));
@@ -1721,7 +1894,7 @@
   function openSell() {
     el('ad-sell-error').hidden = true;
     // The type picked last time may have filled up since.
-    var still = state.tiers.filter(function (t) {
+    var still = tiersHere().filter(function (t) {
       return t.code === state.sellTier && !t.manually_sold_out && t.spots_left_gate > 0;
     })[0];
     if (!still) {
@@ -1746,7 +1919,7 @@
   function renderSellTiers() {
     var wrap = el('ad-sell-tiers');
     wrap.innerHTML = '';
-    var tiers = inGateOrder(state.tiers);
+    var tiers = inGateOrder(tiersHere());
 
     // Default to the first thing still sellable, which once a type is full
     // is the next one up. That is the whole point of the ordering.
@@ -1990,11 +2163,18 @@
   function submitSell(e) {
     e.preventDefault();
     var form = el('ad-sell-form');
-    var tier = state.tiers.filter(function (t) { return t.code === state.sellTier; })[0];
+    var tier = tiersHere().filter(function (t) { return t.code === state.sellTier; })[0];
     if (!tier) {
       var pick = el('ad-sell-error');
       text(pick, 'Pick a spot first.');
       show(pick);
+      return;
+    }
+    if (!form.rego.value.trim()) {
+      var noPlate = el('ad-sell-error');
+      text(noPlate, 'Number plate first — it is how we find them later.');
+      show(noPlate);
+      form.rego.focus();
       return;
     }
     var price = state.sellPrice;
@@ -2422,6 +2602,7 @@
 
     el('ad-tab-gate').addEventListener('click', function () { showTab('gate'); });
     el('ad-tab-night').addEventListener('click', function () { showTab('night'); });
+    el('ad-site').addEventListener('change', function (e) { setSite(e.target.value); });
     el('ad-tab-insights').addEventListener('click', function () { showTab('insights'); });
 
     el('ad-insight-event').addEventListener('change', function () {

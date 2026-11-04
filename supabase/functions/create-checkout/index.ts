@@ -199,20 +199,28 @@ const SALE_ERRORS: Record<string, { status: number; message: string }> = {
     status: 409,
     message:
       'Online sales for that option have finished — there are still spaces, ' +
-      'but they are held for arrivals on the night. Come to 86 Paice Ave and ' +
-      'ask the marshal.',
+      'but they are held for arrivals on the night. Come to the parking address and ' +
+      'ask the warden.',
   },
   ONLINE_SALES_CLOSED: {
     status: 409,
     message:
       'Online booking has closed for this event. There may still be space on ' +
-      'the night — come to 86 Paice Ave and ask the marshal.',
+      'the night — come to the parking address and ask the warden.',
+  },
+  PLATE_REQUIRED: {
+    status: 400,
+    message: 'Please add your number plate — it is how we find you on the night.',
+  },
+  SITE_NOT_CONFIRMED: {
+    status: 409,
+    message: 'That option has just come off sale. Pick again and we will find you a space nearby.',
   },
   CONSENT_REQUIRED: {
     status: 409,
     message:
       'The only space left is on the street verge, which we place by hand on ' +
-      'the night. Come to 86 Paice Ave and ask the marshal.',
+      'the night. Come to the parking address and ask the warden.',
   },
 }
 
@@ -246,15 +254,22 @@ Deno.serve(async (req) => {
   }
 
   const eventId = String(body.event_id ?? '')
-  const propertyId = String(body.property_id ?? '')
+  // A booking is made for a block — "70 Gribblehurst or within 100m" — and
+  // the database picks the driveway. property_id is still accepted, for a
+  // page that predates blocks.
+  const blockId = String(body.block_id ?? '')
+  let propertyId = String(body.property_id ?? '')
   const tierCode = String(body.tier_code ?? '')
   const email = String(body.email ?? '').trim()
 
-  if (!eventId || !propertyId || !tierCode || !email) {
+  if (!eventId || (!propertyId && !blockId) || !tierCode || !email) {
     return json(
-      { error: 'event_id, property_id, tier_code and email are all required' },
+      { error: 'event_id, block_id, tier_code and email are all required' },
       400,
     )
+  }
+  if (!String(body.vehicle_rego ?? '').trim()) {
+    return json({ error: SALE_ERRORS.PLATE_REQUIRED.message, code: 'PLATE_REQUIRED' }, 400)
   }
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
     return json({ error: 'That email address does not look right' }, 400)
@@ -298,7 +313,26 @@ Deno.serve(async (req) => {
   // Nothing is asked about the overflow verge any more. Where a car actually
   // ends up is a judgement made in the driveway on the night, by someone
   // standing next to it — not a checkbox ticked a fortnight earlier.
-  const { data: bookingId, error: holdErr } = await db.rpc('hold_booking', {
+  const pick = async () => {
+    const { data, error } = await db.rpc('pick_block_property', {
+      p_event_id: eventId, p_block_id: blockId, p_tier_code: tierCode,
+    })
+    if (error) throw error
+    return data ? String(data) : ''
+  }
+  if (blockId && !propertyId) {
+    try {
+      propertyId = await pick()
+    } catch (err) {
+      console.error('pick_block_property failed', err)
+      return json({ error: 'Could not hold a space just then' }, 500)
+    }
+    if (!propertyId) {
+      return json({ error: SALE_ERRORS.SOLD_OUT.message, code: 'SOLD_OUT' }, 409)
+    }
+  }
+
+  const hold = () => db.rpc('hold_booking', {
     p_event_id: eventId,
     p_property_id: propertyId,
     p_tier_code: tierCode,
@@ -315,6 +349,17 @@ Deno.serve(async (req) => {
     // deciding what a boolean column says.
     p_low_clearance: body.vehicle_low_clearance === true,
   })
+  let { data: bookingId, error: holdErr } = await hold()
+
+  // Two people raced for the last space at the driveway the block picked.
+  // Pick again once: another driveway in the block may still have room.
+  if (holdErr && blockId && (holdErr.message ?? '').startsWith('SOLD_OUT')) {
+    const again = await pick().catch(() => '')
+    if (again && again !== propertyId) {
+      propertyId = again
+      ;({ data: bookingId, error: holdErr } = await hold())
+    }
+  }
 
   if (holdErr) {
     const code = (holdErr.message ?? '').split(':')[0].trim()

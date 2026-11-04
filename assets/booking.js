@@ -193,7 +193,7 @@
               'p',
               'bk-empty',
               'Nothing on the calendar just now. We take arrivals on the night ' +
-              'as well — come to 86 Paice Ave and ask the marshal.'
+              'as well — come to one of our parking addresses and ask the warden.'
             )
           );
           return;
@@ -257,7 +257,7 @@
     text(el('bk-interest-when'), asDate(ev.starts_at) + ' · ' + asTime(ev.starts_at));
     text(el('bk-interest-lead'), ev.closed
       ? 'Online booking has closed for this one. Leave your email and we\u2019ll let ' +
-        'you know if a space frees up — or just come to 86 Paice Ave on the night.'
+        'you know if a space frees up — or just come along on the night and ask a Talli warden.'
       : 'We haven\u2019t set prices for this one yet. Leave your email and you\u2019ll be ' +
         'the first to know when it opens.');
     el('bk-interest-error').hidden = true;
@@ -309,6 +309,7 @@
   function chooseEvent(ev) {
     state.event = ev;
     state.tier = null;
+    state.block = null;
     el('bk-details').hidden = true;
     el('bk-extras-step').hidden = true;
     clearError();
@@ -329,12 +330,27 @@
     primary.appendChild(make('p', 'bk-empty', 'Loading options…'));
 
     read(
-      '/v_tier_availability?event_id=eq.' + encodeURIComponent(eventId) +
-      '&order=sort_order.asc'
+      '/v_block_tier_availability?event_id=eq.' + encodeURIComponent(eventId) +
+      '&order=block_sort.asc,sort_order.asc'
     )
-      .then(function (tiers) {
+      .then(function (rows) {
+        state.blockRows = rows;
+        var blocks = blocksIn(rows);
+        // Most nights there is one area, and the page reads exactly as it
+        // always has. With several, the area comes first: where you park
+        // decides what is left.
+        if (!state.block && blocks.length === 1) state.block = blocks[0];
+        if (!state.block && blocks.length > 1) {
+          primary.innerHTML = '';
+          renderBlocks(primary, blocks);
+          return;
+        }
+        var tiers = rows.filter(function (r) {
+          return !state.block || r.block_id === state.block.block_id;
+        });
         state.tiers = tiers;
         primary.innerHTML = '';
+        if (blocks.length > 1 && state.block) primary.appendChild(blockBanner(state.block));
 
         var sellable = tiers.filter(function (t) { return t.spots_left > 0; });
         if (!sellable.length) {
@@ -343,7 +359,7 @@
               'p',
               'bk-empty',
               'Everything for this event is sold out online. There may still be ' +
-              'space on the night — come to 86 Paice Ave and ask the marshal.'
+              'space on the night — come to ' + whereToCome() + ' and ask the warden.'
             )
           );
           return;
@@ -376,6 +392,89 @@
       });
   }
 
+  /* ------------------------------------------------- step 2a: the area */
+
+  function blocksIn(rows) {
+    var seen = {};
+    var out = [];
+    rows.forEach(function (r) {
+      if (!seen[r.block_id]) {
+        seen[r.block_id] = {
+          block_id: r.block_id, block_name: r.block_name,
+          anchor_address: r.anchor_address, spots_left: 0, from_cents: null,
+        };
+        out.push(seen[r.block_id]);
+      }
+      var b = seen[r.block_id];
+      b.spots_left += Math.max(0, r.spots_left || 0);
+      if (r.spots_left > 0 && (b.from_cents === null || r.price_cents < b.from_cents)) {
+        b.from_cents = r.price_cents;
+      }
+    });
+    return out;
+  }
+
+  function whereToCome() {
+    if (state.block && state.block.anchor_address) return shortAddress(state.block.anchor_address);
+    return 'one of our parking addresses';
+  }
+
+  function shortAddress(a) { return String(a || '').split(',')[0]; }
+
+  function renderBlocks(container, blocks) {
+    container.appendChild(make('p', 'bk-card-meta',
+      'Pick where you\u2019d like to park. You\u2019re booked for that address or a ' +
+      'driveway within 100m \u2014 a Talli warden will show you in.'));
+    blocks.forEach(function (b) {
+      var soldOut = b.spots_left <= 0;
+      var label = make('label', 'bk-card bk-card-tier' + (soldOut ? ' is-soldout' : ''));
+      var input = document.createElement('input');
+      input.type = 'radio';
+      input.name = 'bk-block';
+      input.value = b.block_id;
+      input.className = 'bk-radio';
+      input.disabled = soldOut;
+      input.addEventListener('change', function () {
+        state.block = b;
+        state.tier = null;
+        loadTiers(state.event.id);
+      });
+      var body = make('span', 'bk-card-body');
+      var head = make('span', 'bk-tier-head');
+      head.appendChild(make('span', 'bk-card-title', b.block_name));
+      if (b.from_cents !== null) head.appendChild(make('span', 'bk-tier-price', 'from ' + money(b.from_cents)));
+      body.appendChild(head);
+      if (b.anchor_address) {
+        body.appendChild(make('span', 'bk-card-meta', shortAddress(b.anchor_address) + ' or within 100m'));
+      }
+      var facts = make('span', 'bk-tier-facts');
+      facts.appendChild(make('span', 'bk-fact' + (soldOut ? ' bk-fact-warn' : ''),
+        soldOut ? 'Sold out online' : b.spots_left + ' left'));
+      body.appendChild(facts);
+      label.appendChild(input);
+      label.appendChild(body);
+      container.appendChild(label);
+    });
+  }
+
+  function blockBanner(b) {
+    var line = make('p', 'bk-card-meta');
+    line.appendChild(document.createTextNode(
+      b.block_name + (b.anchor_address ? ' \u2014 ' + shortAddress(b.anchor_address) + ' or within 100m. ' : '. ')));
+    var change = make('a', '', 'Change area');
+    change.href = '#';
+    change.addEventListener('click', function (e) {
+      e.preventDefault();
+      state.block = null;
+      state.tier = null;
+      el('bk-details').hidden = true;
+      el('bk-extras-step').hidden = true;
+      loadTiers(state.event.id);
+    });
+    line.appendChild(change);
+    return line;
+  }
+
   // The tier labels in the database read as "Standard — best value, expect to
   // wait". Split on the dash: the short name is the heading, the rest is the
   // explanation underneath.
@@ -396,7 +495,7 @@
           'p',
           'bk-soldout-note',
           'Sold out online — but there may still be space on the night. ' +
-          'Come to 86 Paice Ave and ask the marshal.'
+          'Come to ' + whereToCome() + ' and ask the warden.'
         )
       );
     }
@@ -642,7 +741,8 @@
     var form = el('bk-form');
     var payload = {
       event_id: state.event.id,
-      property_id: state.tier.property_id,
+      // The area, not the driveway: the system picks the site within it.
+      block_id: state.tier.block_id,
       tier_code: state.tier.code,
       name: form.name.value.trim(),
       email: form.email.value.trim(),

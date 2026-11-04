@@ -2377,3 +2377,17 @@ textarea.ad-input { resize: vertical; min-height: 56px; font-family: inherit; }
   font-family: var(--body);
   white-space: nowrap;
 }
+
+/* ------------------------------------------------ multi-site gate nights */
+/* Shown only when an event has more than one driveway selling. */
+.ad-site-row { display: flex; gap: 8px; align-items: center; margin: 0 0 10px; }
+.ad-site-row .ad-select { flex: 1; min-width: 0; }
+.ad-site-label { font-weight: 500; white-space: nowrap; }
+.ad-site-guide { white-space: nowrap; font-size: 0.9em; }
+.ad-site-notes { margin: -4px 0 10px; font-size: 0.9em; opacity: 0.8; }
+.ad-chip.is-site { border-style: dashed; }
+.ad-sites { border: 1px solid #ddd; border-radius: 10px; padding: 10px 12px; margin: 0 0 12px; }
+.ad-sites-head { font-weight: 500; margin-bottom: 6px; }
+.ad-site-line { display: flex; gap: 8px; align-items: center; padding: 4px 0; }
+.ad-site-name { flex: 1; min-width: 0; }
+.ad-chip.is-pending, .ad-chip.is-paused { color: #8a5a00; background: #fff4dc; border-color: #f0dcae; }
