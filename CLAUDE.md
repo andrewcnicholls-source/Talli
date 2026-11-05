@@ -126,10 +126,20 @@ Two things follow that are easy to get wrong:
   asserts they are still there; do not weaken those checks to make a
   refactor pass.
 
-Events are deliberately **not** yet filtered by host — there is one real
-host, and a filter written against a second host who does not exist is a
-filter nobody can prove. The identity is in the request now, which is the
-part that had to come first.
+Events are deliberately **not** filtered by host. What a person sees is
+decided by `host_user.scope`: `all` (Andrew, on the operator host — the one
+with `host.is_operator`) sees everything; `blocks` (a warden) sees only the
+properties in the blocks switched on for them in `staff_block_access`, and
+only the Arrivals tab. A warden with every grant switched off is refused
+(`NO_BLOCKS`), never widened to everything. gate-ops enforces this; the
+screen only stops offering what the server would refuse.
+
+A **block** is a cluster of nearby properties one warden covers and the thing
+customers book ("70 Gribblehurst or within 100m"). It is not a `zone`, which
+is an area within one property. `booking.property_id` is where the car is
+(updated at check-in); `booking.booked_property_id` is where it was booked.
+`supabase/test-only/seed-test-block.sql` adds an invented second block to the
+test project.
 
 ## Database permission policy
 

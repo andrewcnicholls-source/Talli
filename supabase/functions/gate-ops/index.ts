@@ -77,6 +77,14 @@ type Caller = {
   user_id: string
   email: string
   hosts: Array<{ host_id: string; host_name: string; role: string }>
+  // The host_user row actions are recorded against (checked_in_by,
+  // cash_collected_by). The operator's row when there is one.
+  me: string
+  // Andrew sees everything. A warden (scope 'blocks') sees only the blocks
+  // switched on for them in staff_block_access — and an empty list means
+  // nothing, never everything.
+  all: boolean
+  blocks: string[]
 }
 
 type Denied = { status: number; error: string; code: string }
@@ -119,6 +127,40 @@ async function callerFrom(req: Request): Promise<Caller | Denied> {
     }
   }
 
+  // What this person may see. Read from the table, never from the request.
+  const ids = hosts.map((r) => String(r.host_user_id))
+  const { data: scopeRows, error: scopeErr } = await db
+    .from('host_user')
+    .select('id, scope, host:host_id(is_operator)')
+    .in('id', ids)
+  if (scopeErr) throw scopeErr
+  const rowsScoped = (scopeRows ?? []) as Row[]
+  const operatorRows = rowsScoped.filter((r) => r.host?.is_operator === true)
+  const all = operatorRows.some((r) => r.scope === 'all')
+
+  let blocks: string[] = []
+  if (!all) {
+    const wardenIds = rowsScoped.filter((r) => r.scope === 'blocks').map((r) => String(r.id))
+    if (wardenIds.length) {
+      const { data: grants, error: gErr } = await db
+        .from('staff_block_access')
+        .select('block_id')
+        .in('host_user_id', wardenIds)
+        .eq('active', true)
+      if (gErr) throw gErr
+      blocks = [...new Set(((grants ?? []) as Row[]).map((g) => String(g.block_id)))]
+    }
+    // A host of their own driveway, or a warden with every block switched
+    // off, has no gate screen yet. Say so rather than show an empty one.
+    if (!blocks.length) {
+      return {
+        status: 403,
+        error: `${email} has no blocks to work on the gate screen right now.`,
+        code: 'NO_BLOCKS',
+      }
+    }
+  }
+
   return {
     user_id: user.id,
     email,
@@ -127,8 +169,38 @@ async function callerFrom(req: Request): Promise<Caller | Denied> {
       host_name: String(r.host_name),
       role: String(r.role),
     })),
+    me: String((operatorRows[0] ?? rowsScoped[0] ?? hosts[0]).id ?? hosts[0].host_user_id),
+    all,
+    blocks,
   }
 }
+
+// The properties a caller may work on, or null for "every one".
+async function allowedProperties(c: Caller): Promise<Set<string> | null> {
+  if (c.all) return null
+  const { data, error } = await db.from('property').select('id').in('block_id', c.blocks)
+  if (error) throw error
+  return new Set(((data ?? []) as Row[]).map((r) => String(r.id)))
+}
+
+// A warden may touch a booking that is, or was booked, at one of their sites.
+async function mayTouchBooking(allowed: Set<string> | null, bookingId: string) {
+  if (allowed === null) return true
+  const { data, error } = await db.from('booking')
+    .select('property_id, booked_property_id').eq('id', bookingId).maybeSingle()
+  if (error) throw error
+  if (!data) return false
+  return allowed.has(String(data.property_id)) ||
+    (data.booked_property_id !== null && allowed.has(String(data.booked_property_id)))
+}
+
+// The night's prices, capacity, templates and event set-up are Andrew's.
+// A warden works the gate: check-in, walk-ups, fixing a booking.
+const OPERATOR_ONLY = new Set([
+  'event_form', 'create_event', 'save_template', 'set_event_status',
+  'set_capacity', 'set_price', 'apply_price_template', 'set_reserve',
+  'set_offer_status',
+])
 
 const denied = (c: Caller | Denied): c is Denied =>
   typeof (c as Denied).status === 'number'
@@ -173,8 +245,8 @@ const optText = (v: unknown): string | null =>
 // Everything the gate screen draws, from one round trip. On a phone at the
 // end of a driveway, one request that sometimes carries a little too much
 // beats four that each might not arrive.
-async function nightState(eventId: string) {
-  const [listRes, tierRes, rateRes, chargeRes] = await Promise.all([
+async function nightState(eventId: string, allowed: Set<string> | null = null) {
+  const [listRes, tierRes, rateRes, chargeRes, siteRes] = await Promise.all([
     db.from('v_gate_list').select('*').eq('event_id', eventId),
     db.from('v_tier_availability').select('*').eq('event_id', eventId)
       .order('sort_order', { ascending: true }),
@@ -186,10 +258,18 @@ async function nightState(eventId: string) {
     // restatement written against one branch drops whatever another branch
     // added. This join costs one small query and cannot go stale.
     db.from('booking')
-      .select('id, surcharge_cents, vehicle_low_clearance, customer_email, hold_expires_at')
+      .select('id, surcharge_cents, vehicle_low_clearance, customer_email, hold_expires_at, ' +
+              'property_id, booked_property_id, checked_in_by, cash_collected_by')
+      .eq('event_id', eventId),
+    // The driveways selling this night, with their block, so the screen can
+    // offer "I'm at …" and say which site each car is at.
+    db.from('event_offer')
+      .select('property_id, status, property:property_id(name, address, site_guide_url, ' +
+              'fill_notes, block_id, block:block_id(name, sort_order, anchor_property_id))')
       .eq('event_id', eventId),
   ])
   if (listRes.error) throw listRes.error
+  if (siteRes.error) throw siteRes.error
   if (tierRes.error) throw tierRes.error
   if (chargeRes.error) throw chargeRes.error
 
@@ -197,7 +277,14 @@ async function nightState(eventId: string) {
   const lowCars = new Set<string>()
   const emails = new Map<string, string>()
   const onTheClock = new Set<string>()
+  const where = new Map<string, Row>()
   for (const b of (chargeRes.data ?? []) as Row[]) {
+    where.set(String(b.id), {
+      property_id: b.property_id,
+      booked_property_id: b.booked_property_id,
+      checked_in_by: b.checked_in_by,
+      cash_collected_by: b.cash_collected_by,
+    })
     surcharges.set(String(b.id), b.surcharge_cents ?? 0)
     if (b.vehicle_low_clearance) lowCars.add(String(b.id))
     // A walk-up with no email is given a made-up one so the column can stay
@@ -219,15 +306,42 @@ async function nightState(eventId: string) {
       // Two kinds of unpaid, and they mean different things. A hold with a
       // clock on it is somebody mid-checkout on the website; a walk-up saved
       // as "pay later" is a car in the yard that still owes money.
+      ...(where.get(String(r.booking_id)) ?? {}),
+      // The short code in the confirmation email, for searching at the gate.
+      reference: String(r.booking_id).slice(0, 8).toUpperCase(),
       owes: r.status === 'held' && r.payment_method === 'unpaid',
       in_checkout: r.status === 'held' && onTheClock.has(String(r.booking_id)),
     }))
+    // A warden sees the cars booked at, or parked at, their own sites.
+    .filter((r: Row) => allowed === null ||
+      allowed.has(String(r.property_id)) ||
+      (r.booked_property_id && allowed.has(String(r.booked_property_id))))
     .sort((a, b) => {
       if (a.arrived !== b.arrived) return a.arrived ? 1 : -1
       return String(a.arrival_from ?? '').localeCompare(String(b.arrival_from ?? ''))
     })
 
-  const tiers = (tierRes.data ?? []) as Row[]
+  const tiers = ((tierRes.data ?? []) as Row[])
+    .filter((t: Row) => allowed === null || allowed.has(String(t.property_id)))
+  const sites = ((siteRes.data ?? []) as Row[])
+    .filter((o: Row) => allowed === null || allowed.has(String(o.property_id)))
+    .map((o: Row) => ({
+      property_id: o.property_id,
+      status: o.status,
+      name: o.property?.name ?? null,
+      address: o.property?.address ?? null,
+      site_guide_url: o.property?.site_guide_url ?? null,
+      fill_notes: o.property?.fill_notes ?? null,
+      block_id: o.property?.block_id ?? null,
+      block_name: o.property?.block?.name ?? null,
+      is_anchor: o.property?.block?.anchor_property_id === o.property_id,
+      block_sort: o.property?.block?.sort_order ?? 0,
+    }))
+    .sort((a: Row, b: Row) =>
+      (a.block_sort - b.block_sort) ||
+      String(a.block_name ?? '').localeCompare(String(b.block_name ?? '')) ||
+      (Number(b.is_anchor) - Number(a.is_anchor)) ||
+      String(a.name ?? '').localeCompare(String(b.name ?? '')))
   const paid = rows.filter((r: Row) => r.status === 'paid')
   // What the car is worth to the till: the space, the extras, and the card
   // surcharge if they paid by card. A cash sale carries no surcharge, so this
@@ -258,6 +372,7 @@ async function nightState(eventId: string) {
   return {
     rows,
     tiers,
+    sites,
     card_surcharge_bps: rateRes.data?.card_surcharge_bps ?? 0,
     extras: [...extras.values()].sort((a, b) => a.name.localeCompare(b.name)),
     summary: {
@@ -320,7 +435,21 @@ Deno.serve(async (req) => {
   const action = String(body.action ?? '')
   const eventId = String(body.event_id ?? '')
 
+  if (!caller.all && OPERATOR_ONLY.has(action)) {
+    return json({ error: 'Only Andrew can change that.', code: 'OPERATOR_ONLY' }, 403)
+  }
+
   try {
+    const allowed = await allowedProperties(caller)
+    const bookingGuard = async () => {
+      const id = String(body.booking_id ?? '')
+      if (!id) return json({ error: 'booking_id is required' }, 400)
+      if (!(await mayTouchBooking(allowed, id))) {
+        return json({ error: 'That booking is not at one of your sites.', code: 'NOT_YOUR_SITE' }, 403)
+      }
+      return null
+    }
+
     switch (action) {
       // What the screen needs to open: who it just let in, and the list to
       // pick from. One round trip, because the alternative is a screen that
@@ -343,6 +472,9 @@ Deno.serve(async (req) => {
             hosts: caller.hosts,
             host_name: caller.hosts[0].host_name,
             role: caller.hosts[0].role,
+            // false for a warden: the screen hides Tonight and Insights.
+            operator: caller.all,
+            blocks: caller.blocks,
           },
           events: data,
         })
@@ -361,7 +493,7 @@ Deno.serve(async (req) => {
 
       case 'list': {
         if (!eventId) return json({ error: 'event_id is required' }, 400)
-        return json(await nightState(eventId))
+        return json(await nightState(eventId, allowed))
       }
 
       // What is still sellable right now, for the walk-up form.
@@ -375,7 +507,9 @@ Deno.serve(async (req) => {
           db.from('payment_setting').select('card_surcharge_bps').maybeSingle(),
         ])
         if (error) throw error
-        return json({ tiers: data, card_surcharge_bps: rate?.card_surcharge_bps ?? 0 })
+        const mine = ((data ?? []) as Row[])
+          .filter((t: Row) => allowed === null || allowed.has(String(t.property_id)))
+        return json({ tiers: mine, card_surcharge_bps: rate?.card_surcharge_bps ?? 0 })
       }
 
       // --------------------------------------------- making a new event
@@ -469,21 +603,35 @@ Deno.serve(async (req) => {
       // Ticking a car in records that it turned up, and nothing else. Where
       // it actually goes is the marshal's call standing in the driveway —
       // the database has no bays to have an opinion about.
+      //
+      // With several driveways in a block, the one place it does record is
+      // which driveway: the site the warden says they are standing at. That
+      // is what the host is paid on.
       case 'check_in': {
-        const id = String(body.booking_id ?? '')
-        if (!id) return json({ error: 'booking_id is required' }, 400)
-        const { error } = await db.rpc('check_in_booking', { p_booking_id: id })
-        if (error) throw error
+        const blocked = await bookingGuard()
+        if (blocked) return blocked
+        const id = String(body.booking_id)
+        const site = body.property_id ? String(body.property_id) : null
+        if (site && allowed !== null && !allowed.has(site)) {
+          return json({ error: 'That site is not one of yours.', code: 'NOT_YOUR_SITE' }, 403)
+        }
+        const { error } = await db.rpc('check_in_booking_at', {
+          p_booking_id: id,
+          p_property_id: site,
+          p_by: caller.me,
+        })
+        if (error) return json(named(error), 409)
         return json({ ok: true })
       }
 
       // Mis-taps happen, and happen most when it is busy.
       case 'undo_check_in': {
-        const id = String(body.booking_id ?? '')
-        if (!id) return json({ error: 'booking_id is required' }, 400)
+        const blocked = await bookingGuard()
+        if (blocked) return blocked
+        const id = String(body.booking_id)
         const { error } = await db
           .from('booking')
-          .update({ checked_in_at: null })
+          .update({ checked_in_at: null, checked_in_by: null })
           .eq('id', id)
         if (error) throw error
         return json({ ok: true })
@@ -492,8 +640,9 @@ Deno.serve(async (req) => {
       // One tap covers the whole bag. Nobody hands over a poncho and an
       // earplug pair as two separate transactions.
       case 'hand_over': {
-        const id = String(body.booking_id ?? '')
-        if (!id) return json({ error: 'booking_id is required' }, 400)
+        const blocked = await bookingGuard()
+        if (blocked) return blocked
+        const id = String(body.booking_id)
         const { data, error } = await db.rpc('set_addons_handed_over', {
           p_booking_id: id,
           p_handed: body.handed !== false,
@@ -509,6 +658,13 @@ Deno.serve(async (req) => {
         const price = priceCents(body.price_cents)
         if (price === false) {
           return json({ error: 'A price between $1 and $500, please.', code: 'BAD_PRICE' }, 400)
+        }
+        const sellAt = String(body.property_id ?? '')
+        if (allowed !== null && !allowed.has(sellAt)) {
+          return json({ error: 'That site is not one of yours.', code: 'NOT_YOUR_SITE' }, 403)
+        }
+        if (!String(body.vehicle_rego ?? '').trim()) {
+          return json({ error: 'Number plate first, please.', code: 'PLATE_REQUIRED' }, 400)
         }
         const { data, error } = await db.rpc('sell_at_gate', {
           ...(price !== null ? { p_price_cents: price } : {}),
@@ -530,6 +686,13 @@ Deno.serve(async (req) => {
           p_low_clearance: body.vehicle_low_clearance === true,
         })
         if (error) return json(named(error), 409)
+
+        // Who waved it in, and who is holding the cash for it.
+        const method = String(body.payment_method ?? 'cash')
+        await db.from('booking').update({
+          checked_in_by: caller.me,
+          cash_collected_by: method === 'cash' ? caller.me : null,
+        }).eq('id', data)
 
         // Extras sold with the space. Priced by the database, same as online.
         const addons = Array.isArray(body.addons) ? body.addons : []
@@ -573,8 +736,9 @@ Deno.serve(async (req) => {
       // valet customer who ended up in Priority frees the valet space and
       // takes a Priority one, with what they paid left exactly as it was.
       case 'edit_booking': {
-        const id = String(body.booking_id ?? '')
-        if (!id) return json({ error: 'booking_id is required' }, 400)
+        const blocked = await bookingGuard()
+        if (blocked) return blocked
+        const id = String(body.booking_id)
         const method = optText(body.payment_method)
         if (method !== null && !PAY_METHODS.includes(method)) {
           return json({ error: 'That is not a way to pay at the gate.' }, 400)
@@ -620,8 +784,9 @@ Deno.serve(async (req) => {
 
       // A "pay later" walk-up who drove off, or was never really there.
       case 'cancel_unpaid': {
-        const id = String(body.booking_id ?? '')
-        if (!id) return json({ error: 'booking_id is required' }, 400)
+        const blocked = await bookingGuard()
+        if (blocked) return blocked
+        const id = String(body.booking_id)
         const { error } = await db.rpc('cancel_unpaid_gate_booking', { p_booking_id: id })
         if (error) return json(named(error), 409)
         return json({ ok: true })
@@ -714,6 +879,24 @@ Deno.serve(async (req) => {
         })
         if (error) return json(named(error), 409)
         return json({ ok: true, reserve: data })
+      }
+
+      // A host's driveway goes on sale online for this event once Andrew
+      // has heard back from them: pending → confirmed. Paused stops online
+      // sales and leaves the gate working.
+      case 'set_offer_status': {
+        const status = String(body.status ?? '')
+        if (!['pending', 'confirmed', 'paused'].includes(status)) {
+          return json({ error: 'status must be pending, confirmed or paused' }, 400)
+        }
+        const { data, error } = await db.from('event_offer')
+          .update({ status })
+          .eq('event_id', eventId)
+          .eq('property_id', String(body.property_id ?? ''))
+          .select('status')
+        if (error) throw error
+        if (!data?.length) return json({ error: 'That site is not offered at this event' }, 404)
+        return json({ ok: true, status })
       }
 
       default:

@@ -167,7 +167,9 @@ async function sendConfirmationEmail(bookingId: string): Promise<void> {
     const [{ data: ev }, { data: property }, { data: tier }, { data: addons }] =
       await Promise.all([
         db.from('event').select('name, starts_at').eq('id', b.event_id).maybeSingle(),
-        db.from('property').select('name, address').eq('id', b.property_id).maybeSingle(),
+        db.from('property')
+          .select('name, address, block_id, block:block_id(anchor:anchor_property_id(address))')
+          .eq('id', b.property_id).maybeSingle(),
         db.from('offer_tier').select('label').eq('code', b.tier_code).limit(1).maybeSingle(),
         db.from('booking_addon').select('name, qty').eq('booking_id', b.id).order('code'),
       ])
@@ -175,7 +177,19 @@ async function sendConfirmationEmail(bookingId: string): Promise<void> {
     const reference = String(b.id).slice(0, 8).toUpperCase()
     const total = (b.amount_cents ?? 0) + (b.addons_cents ?? 0) + (b.surcharge_cents ?? 0)
     const spot = String(tier?.label ?? b.tier_code).split(/\s+—\s+/)[0]
-    const address = property?.address ?? '86 Paice Avenue, Sandringham'
+    // In a block with several driveways selling tonight, the customer is
+    // booked for the anchor "or within 100m" and the warden places them.
+    let address = property?.address ?? null
+    if (property?.block_id) {
+      const { data: sites } = await db.from('event_offer')
+        .select('property_id, property:property_id!inner(block_id)')
+        .eq('event_id', b.event_id)
+        .eq('property.block_id', property.block_id)
+      const anchor = (property as Row).block?.anchor?.address ?? address
+      if ((sites ?? []).length > 1 && anchor) {
+        address = `${anchor} — or a driveway within 100m. A Talli warden will show you where.`
+      }
+    }
     const extras = (addons ?? []).map((a: Row) =>
       a.qty > 1 ? `${a.name} × ${a.qty}` : String(a.name))
 

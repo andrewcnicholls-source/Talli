@@ -99,8 +99,17 @@
 
     <p class="ad-holds" id="ad-holds" hidden></p>
 
+    <!-- Only on nights with more than one driveway. Set once; a tap on
+         "Tick in" puts the car at this site. -->
+    <div class="ad-site-row" id="ad-site-row" hidden>
+      <label class="ad-site-label" for="ad-site">I'm at</label>
+      <select id="ad-site" class="ad-select"></select>
+      <a class="ad-site-guide" id="ad-site-guide" target="_blank" rel="noopener" hidden>Site guide</a>
+    </div>
+    <p class="ad-site-notes" id="ad-site-notes" hidden></p>
+
     <div class="ad-tools">
-      <input type="search" id="ad-search" class="ad-search" placeholder="Plate, name or phone…"
+      <input type="search" id="ad-search" class="ad-search" placeholder="Plate, ref, name or phone…"
              autocomplete="off" autocapitalize="characters" spellcheck="false">
       <button type="button" class="ad-sell-open" id="ad-sell-open">+ Walk-up</button>
     </div>
@@ -286,15 +295,17 @@
       <button type="button" class="ad-sheet-close" id="ad-sell-close" aria-label="Close">×</button>
     </div>
 
+    <!-- Plate first: it is how every car is found later in the night. -->
+    <label class="ad-label" for="ad-sell-rego">Number plate</label>
+    <input type="text" id="ad-sell-rego" name="rego" class="ad-input" required
+           autocapitalize="characters" spellcheck="false" maxlength="8">
+
     <!-- The selected spot carries its price with a pencil beside it: tap
          either to type the deal struck at the window, for this car only.
          The sign and every other car stay where they are. -->
+
     <label class="ad-label">Spot</label>
     <div class="ad-pick" id="ad-sell-tiers"></div>
-
-    <label class="ad-label" for="ad-sell-rego">License plate <span>optional</span></label>
-    <input type="text" id="ad-sell-rego" name="rego" class="ad-input"
-           autocapitalize="characters" spellcheck="false">
 
     <label class="ad-label">Extras <span>optional</span></label>
     <div class="ad-sell-extras" id="ad-sell-extras"></div>
