@@ -199,7 +199,7 @@ async function mayTouchBooking(allowed: Set<string> | null, bookingId: string) {
 const OPERATOR_ONLY = new Set([
   'event_form', 'create_event', 'save_template', 'set_event_status',
   'set_capacity', 'set_price', 'apply_price_template', 'set_reserve',
-  'set_offer_status',
+  'set_offer_status', 'site_options', 'add_offer',
 ])
 
 const denied = (c: Caller | Denied): c is Denied =>
@@ -897,6 +897,46 @@ Deno.serve(async (req) => {
         if (error) throw error
         if (!data?.length) return json({ error: 'That site is not offered at this event' }, 404)
         return json({ ok: true, status })
+      }
+
+      // The driveways that could join this event: every active property not
+      // already selling it, with its block, for the "Add a site" picker.
+      case 'site_options': {
+        if (!eventId) return json({ error: 'event_id is required' }, 400)
+        const [propRes, offerRes] = await Promise.all([
+          db.from('property')
+            .select('id, name, address, block:block_id(name, sort_order)')
+            .eq('active', true),
+          db.from('event_offer').select('property_id').eq('event_id', eventId),
+        ])
+        if (propRes.error) throw propRes.error
+        if (offerRes.error) throw offerRes.error
+        const taken = new Set(((offerRes.data ?? []) as Row[]).map((o) => String(o.property_id)))
+        const options = ((propRes.data ?? []) as Row[])
+          .filter((p) => !taken.has(String(p.id)))
+          .map((p) => ({
+            property_id: p.id,
+            name: p.name,
+            address: p.address,
+            block_name: p.block?.name ?? null,
+            block_sort: p.block?.sort_order ?? 0,
+          }))
+          .sort((a: Row, b: Row) => (a.block_sort - b.block_sort) ||
+            String(a.name).localeCompare(String(b.name)))
+        return json({ sites: options })
+      }
+
+      // A host's driveway joins the event as pending, with the event's types
+      // of space and no spaces yet. Counts are then set on Tonight, and it
+      // goes on sale with set_offer_status once the host has said yes.
+      case 'add_offer': {
+        if (!eventId) return json({ error: 'event_id is required' }, 400)
+        const { data, error } = await db.rpc('add_event_offer', {
+          p_event_id: eventId,
+          p_property_id: String(body.property_id ?? ''),
+        })
+        if (error) return json(named(error), 409)
+        return json({ ok: true, event_offer_id: data })
       }
 
       default:
