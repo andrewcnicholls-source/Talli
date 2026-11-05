@@ -853,7 +853,7 @@
       return;
     }
 
-    if (multiSite()) wrap.appendChild(siteBoard());
+    if (isOperator()) wrap.appendChild(siteBoard());
     tiers.forEach(function (t) { wrap.appendChild(tierCard(t)); });
   }
 
@@ -882,7 +882,50 @@
         }));
       box.appendChild(line);
     });
+
+    // Another driveway for this event. It joins as pending with no spaces:
+    // set its counts on its cards below, then put it on sale.
+    var add = make('div', 'ad-site-line');
+    var picker = document.createElement('select');
+    picker.className = 'ad-select';
+    picker.setAttribute('aria-label', 'Add a site to this event');
+    var first = document.createElement('option');
+    first.value = '';
+    first.textContent = 'Add a site…';
+    picker.appendChild(first);
+    picker.addEventListener('focus', function () { fillSiteOptions(picker); }, { once: true });
+    picker.addEventListener('change', function () {
+      var id = picker.value;
+      if (!id) return;
+      var label = picker.options[picker.selectedIndex].textContent;
+      call('add_offer', { event_id: state.eventId, property_id: id })
+        .then(function () {
+          toast(label + ' added — set its spaces, then put it on sale', 'good');
+          return loadList(true);
+        })
+        .catch(function (err) { toast(err.message, 'bad'); picker.value = ''; });
+    });
+    add.appendChild(picker);
+    box.appendChild(add);
     return box;
+  }
+
+  function fillSiteOptions(picker) {
+    call('site_options', { event_id: state.eventId })
+      .then(function (data) {
+        var sites = data.sites || [];
+        if (!sites.length) {
+          picker.options[0].textContent = 'Every site is already in this event';
+          return;
+        }
+        sites.forEach(function (s) {
+          var opt = document.createElement('option');
+          opt.value = s.property_id;
+          opt.textContent = (s.block_name ? s.block_name + ' · ' : '') + s.name;
+          picker.appendChild(opt);
+        });
+      })
+      .catch(function (err) { toast(err.message, 'bad'); });
   }
 
   // Everything about one type of space on one card: what it is, what it
