@@ -2393,5 +2393,23 @@ textarea.ad-input { resize: vertical; min-height: 56px; font-family: inherit; }
 .ad-chip.is-pending, .ad-chip.is-paused { color: #8a5a00; background: #fff4dc; border-color: #f0dcae; }
 
 /* ------------------------------------------------ booking page map */
-.bk-map { height: 260px; border-radius: 10px; margin: 4px 0 16px; z-index: 0; }
+.bk-map { height: 260px; border-radius: 16px; margin: 4px 0 16px; z-index: 0;
+          box-shadow: 0 1px 3px rgba(0,0,0,.08), 0 4px 16px rgba(0,0,0,.06); }
+.bk-map .leaflet-div-icon, .bk-map-pin, .bk-map-venue { background: none; border: 0; }
+.bk-map-pill { position: absolute; left: 0; top: 0; transform: translate(-50%, calc(-100% - 6px));
+  display: inline-block; padding: 5px 11px; border-radius: 999px;
+  background: #1f6b45; color: #fff; font: 600 13px/1.2 'Jost', system-ui, sans-serif;
+  white-space: nowrap; box-shadow: 0 2px 6px rgba(0,0,0,.25); cursor: pointer; }
+.bk-map-pill::after { content: ''; position: absolute; left: 50%; bottom: -5px; margin-left: -5px;
+  border: 5px solid transparent; border-bottom: 0; border-top-color: #1f6b45; }
+.bk-map-pin.is-chosen .bk-map-pill { background: #0f3d26; outline: 2px solid #fff;
+  transform: translate(-50%, calc(-100% - 6px)) scale(1.12); transform-origin: 50% 100%; }
+.bk-map-pin.is-chosen .bk-map-pill::after { border-top-color: #0f3d26; }
+.bk-map-pin.is-full .bk-map-pill { background: #9a9a9a; cursor: default; }
+.bk-map-pin.is-full .bk-map-pill::after { border-top-color: #9a9a9a; }
+.bk-map-venue { display: flex; align-items: center; gap: 6px; white-space: nowrap; pointer-events: none; }
+.bk-map-venue-dot { width: 28px; height: 28px; border-radius: 50%; background: #2e7d4f;
+  border: 3px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,.25); }
+.bk-map-venue-name { font: 600 14px/1 'Jost', system-ui, sans-serif; color: #1f6b45;
+  text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 3px #fff; }
 @media (min-width: 720px) { .bk-map { height: 340px; } }

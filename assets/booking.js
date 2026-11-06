@@ -417,38 +417,77 @@
     box.hidden = false;
     if (!map) {
       map = window.L.map(box, { scrollWheelZoom: false, tap: true });
-      window.L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      // A light, quiet basemap so the price pills are what stands out.
+      window.L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
         maxZoom: 19,
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        subdomains: 'abcd',
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> ' +
+          'contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
       }).addTo(map);
     }
     if (mapLayer) mapLayer.remove();
     mapLayer = window.L.layerGroup().addTo(map);
 
     var points = [EDEN_PARK];
-    window.L.circleMarker(EDEN_PARK, {
-      radius: 10, color: '#1f3d2b', weight: 2, fillColor: '#2e7d4f', fillOpacity: 0.9,
-    }).bindTooltip('Eden Park', { permanent: true, direction: 'top', offset: [0, -8] })
-      .addTo(mapLayer);
 
+    // Eden Park: a badge, not a pin. It is the thing everyone is walking to.
+    window.L.marker(EDEN_PARK, {
+      icon: window.L.divIcon({
+        className: 'bk-map-venue',
+        html: '<span class="bk-map-venue-dot" aria-hidden="true"></span>' +
+              '<span class="bk-map-venue-name">Eden Park</span>',
+        iconSize: null,
+        iconAnchor: [14, 14],
+      }),
+      keyboard: false,
+      interactive: false,
+    }).addTo(mapLayer);
+
+    // One price pill per area, at its anchor house: that is what a customer
+    // books ("70 Gribblehurst or within 100m"), and neighbouring driveways
+    // 20m apart would otherwise sit on top of each other. The other houses
+    // in the area show as small dots beside it. Grey when sold out online.
+    var areas = {};
     pins.forEach(function (p) {
+      var a = areas[p.block_id] || (areas[p.block_id] = {
+        block_id: p.block_id, block_name: p.block_name, spots: 0, from: null, at: null, houses: [],
+      });
       var at = [Number(p.lat), Number(p.lng)];
       points.push(at);
-      var full = (p.spots_left || 0) <= 0;
-      var chosen = state.block && state.block.block_id === p.block_id;
-      var marker = window.L.circleMarker(at, {
-        radius: chosen ? 9 : 7,
-        color: '#1a1a1a', weight: chosen ? 3 : 1.5,
-        fillColor: full ? '#9a9a9a' : '#d9822b', fillOpacity: 0.95,
-      }).bindPopup(
-        '<strong>' + escapeHtml(p.block_name) + '</strong><br>' +
-        (full ? 'Sold out online' : p.spots_left + ' space' + (p.spots_left === 1 ? '' : 's') + ' left')
-      ).addTo(mapLayer);
+      a.spots += Math.max(0, p.spots_left || 0);
+      if ((p.spots_left || 0) > 0 && (a.from === null || p.from_cents < a.from)) a.from = p.from_cents;
+      if (p.is_anchor || !a.at) a.at = at;
+      a.houses.push(at);
+    });
+
+    Object.keys(areas).forEach(function (id) {
+      var a = areas[id];
+      var full = a.spots <= 0;
+      var chosen = state.block && state.block.block_id === a.block_id;
+      a.houses.forEach(function (h) {
+        if (h === a.at) return;
+        window.L.circleMarker(h, {
+          radius: 5, color: '#fff', weight: 2,
+          fillColor: full ? '#9a9a9a' : '#1f6b45', fillOpacity: 1, interactive: false,
+        }).addTo(mapLayer);
+      });
+      var label = full ? 'Full' : money(a.from);
+      var marker = window.L.marker(a.at, {
+        icon: window.L.divIcon({
+          className: 'bk-map-pin' + (full ? ' is-full' : '') + (chosen ? ' is-chosen' : ''),
+          html: '<span class="bk-map-pill">' + escapeHtml(label) + '</span>',
+          iconSize: [0, 0],
+          iconAnchor: [0, 0],
+        }),
+        title: a.block_name + (full ? ' — sold out online' : ' — from ' + label + ', ' +
+          a.spots + ' space' + (a.spots === 1 ? '' : 's') + ' left'),
+        riseOnHover: true,
+      }).addTo(mapLayer);
       if (!full) {
         marker.on('click', function () {
-          if (state.block && state.block.block_id === p.block_id) return;
+          if (state.block && state.block.block_id === a.block_id) return;
           var b = blocksIn(state.blockRows || []).filter(function (x) {
-            return x.block_id === p.block_id;
+            return x.block_id === a.block_id;
           })[0];
           if (!b) return;
           state.block = b;
