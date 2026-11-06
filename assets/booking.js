@@ -416,7 +416,8 @@
     if (!pins.length) { box.hidden = true; return; }
     box.hidden = false;
     if (!map) {
-      map = window.L.map(box, { scrollWheelZoom: false, tap: true });
+      map = window.L.map(box, { scrollWheelZoom: false, tap: true, zoomControl: false });
+      window.L.control.zoom({ position: 'bottomright' }).addTo(map);
       // A light, quiet basemap so the price pills are what stands out.
       window.L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
         maxZoom: 19,
@@ -500,7 +501,19 @@
     // Leaflet measures the box when it is drawn; the step may have only just
     // been un-hidden, so measure again before fitting.
     map.invalidateSize();
-    map.fitBounds(window.L.latLngBounds(points), { padding: [28, 28], maxZoom: 16 });
+    // Centred on Eden Park, not just fitted around the pins: every house is
+    // mirrored through the stadium, so the frame shows as much ground above
+    // Eden Park as below it and the walk reads at a glance. Never closer
+    // than street level (16), never so far out the houses blur together (14).
+    var framed = [EDEN_PARK];
+    points.forEach(function (pt) {
+      framed.push(pt);
+      framed.push([2 * EDEN_PARK[0] - pt[0], 2 * EDEN_PARK[1] - pt[1]]);
+    });
+    map.fitBounds(window.L.latLngBounds(framed), {
+      paddingTopLeft: [40, 52], paddingBottomRight: [40, 24], maxZoom: 16,
+    });
+    if (map.getZoom() < 14) map.setView(EDEN_PARK, 14);
   }
 
   function escapeHtml(s) {
