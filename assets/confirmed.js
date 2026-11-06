@@ -52,6 +52,16 @@
     show(el('cf-problem'));
   }
 
+  // The anchor "or a driveway within 100m" on multi-driveway nights, else
+  // the house. Worked out by get-booking from the database.
+  function whereText(b) {
+    var w = b.where;
+    var addr = w && w.address ? w.address : (b.property ? b.property.address : null);
+    if (!addr) return null;
+    var shortAddr = String(addr).split(',')[0];
+    return w && w.nearby ? shortAddr + ', or a driveway within 100m' : shortAddr;
+  }
+
   function row(label, value) {
     if (!value) return null;
     var wrap = document.createElement('div');
@@ -97,6 +107,12 @@
 
     el('cf-reference').textContent = b.reference;
 
+    // "On the night" names the actual place, not a hardcoded house.
+    var come = el('cf-come-to');
+    if (come && whereText(b)) {
+      come.textContent = 'Come to ' + whereText(b) + ' — a Talli warden will meet you and show you where to park.';
+    }
+
     var details = el('cf-details');
     details.innerHTML = '';
 
@@ -106,7 +122,7 @@
       row('Event', b.event ? b.event.name : null),
       row('Date', b.event ? asDate(b.event.starts_at) + ', ' + asTime(b.event.starts_at) : null),
       row('Spot', parts[0]),
-      row('Where', b.property ? b.property.address : null),
+      row('Where', whereText(b)),
       row(
         'Arrive',
         b.arrival_from && b.arrival_until
