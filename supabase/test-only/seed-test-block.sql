@@ -68,7 +68,7 @@ select hu.id, b.id from host_user hu, block b
  where hu.email = 'warden.test@example.com' and b.name = 'Test Block'
 on conflict do nothing;
 
--- Invented positions a few hundred metres from Eden Park, for the booking
--- page map.
-update property set lat = -36.87110, lng = 174.73890 where id = '22222222-2222-2222-2222-2222222222a1';
-update property set lat = -36.87135, lng = 174.73960 where id = '22222222-2222-2222-2222-2222222222a2';
+-- Positions for the booking page map: Site A stands in for the Gribblehurst
+-- anchor, Site B a driveway about 20m along.
+update property set lat = -36.880692, lng = 174.742279 where id = '22222222-2222-2222-2222-2222222222a1';
+update property set lat = -36.880780, lng = 174.742480 where id = '22222222-2222-2222-2222-2222222222a2';

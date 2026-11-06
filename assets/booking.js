@@ -610,7 +610,7 @@
         if (h === a.at) return;
         window.L.circleMarker(h, {
           radius: 5, color: '#fff', weight: 2,
-          fillColor: a.full ? '#9a9a9a' : '#1f6b45', fillOpacity: 1, interactive: false,
+          fillColor: a.full ? '#9a9a9a' : '#2B4C7E', fillOpacity: 1, interactive: false,
         }).addTo(mapLayer);
       });
       var marker = window.L.marker(a.at, {
