@@ -41,6 +41,20 @@ const json = (body: unknown, status = 200) =>
     headers: { ...cors, 'Content-Type': 'application/json' },
   })
 
+async function whereToCome(eventId: string, property: Row | null) {
+  if (!property) return null
+  const own = property.address ?? null
+  if (!property.block_id) return { address: own, nearby: false }
+  const { data: sites } = await db.from('event_offer')
+    .select('property_id, property:property_id!inner(block_id)')
+    .eq('event_id', eventId)
+    .eq('property.block_id', property.block_id)
+  const anchor = property.block?.anchor?.address ?? own
+  return (sites ?? []).length > 1
+    ? { address: anchor, nearby: true }
+    : { address: own, nearby: false }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
   if (req.method !== 'POST') return json({ error: 'Use POST' }, 405)
@@ -78,7 +92,9 @@ Deno.serve(async (req) => {
   const [{ data: ev }, { data: property }, { data: tier }, { data: addons }] =
     await Promise.all([
       db.from('event').select('name, venue, starts_at').eq('id', booking.event_id).maybeSingle(),
-      db.from('property').select('name, address, walk_minutes').eq('id', booking.property_id)
+      db.from('property')
+        .select('name, address, walk_minutes, block_id, block:block_id(name, anchor:anchor_property_id(address))')
+        .eq('id', booking.property_id)
         .maybeSingle(),
       db.from('offer_tier').select('label').eq('code', booking.tier_code).limit(1).maybeSingle(),
       db.from('booking_addon').select('code, name, qty, amount_cents')
@@ -109,5 +125,10 @@ Deno.serve(async (req) => {
     must_depart_by: booking.must_depart_by,
     event: ev ?? null,
     property: property ?? null,
+    // Where to come, as the customer should read it. In a block with several
+    // driveways selling this event they are booked for the anchor "or within
+    // 100m" and a warden places them; otherwise it is the house itself. Same
+    // rule as the confirmation email.
+    where: await whereToCome(booking.event_id, property as Row | null),
   })
 })
