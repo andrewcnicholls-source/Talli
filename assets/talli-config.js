@@ -65,7 +65,7 @@
     // talli.co.nz and staging.talli.pages.dev referrers and to the Maps
     // JavaScript API, with a daily load quota. Empty means the page falls
     // back to the OpenStreetMap map.
-    googleMapsKey: '',
+    googleMapsKey: 'AIzaSyB1bDzRvnHDEXyQcvOtm4NhChJo3BLgaHM',
 
     // Six tiers is too much to put in front of someone on a phone. These three
     // carry the page; the rest sit behind "more options". Order is deliberate —
