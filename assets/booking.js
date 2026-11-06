@@ -406,15 +406,176 @@
   // cards below still sell everything, so the map just stays hidden.
   function loadMap(eventId) {
     var box = el('bk-map');
-    if (!box || !window.L) return;
+    if (!box || (!window.L && !CFG.googleMapsKey)) return;
     read('/v_event_site_map?event_id=eq.' + encodeURIComponent(eventId))
       .then(function (pins) { drawMap(box, pins || []); })
       .catch(function () { box.hidden = true; });
   }
 
+  // Google Maps when there is a key and it loads; otherwise OpenStreetMap.
+  // Decided once per page: the two cannot share the same box.
+  var mapKind = null;
+
   function drawMap(box, pins) {
     if (!pins.length) { box.hidden = true; return; }
     box.hidden = false;
+    if (mapKind === null) mapKind = CFG.googleMapsKey ? 'google' : 'osm';
+    if (mapKind === 'google') {
+      loadGoogleMaps()
+        .then(function () { drawGoogleMap(box, pins); })
+        .catch(function () { mapKind = 'osm'; drawOsmMap(box, pins); });
+      return;
+    }
+    drawOsmMap(box, pins);
+  }
+
+  /* ---- Google Maps ---- */
+
+  var googleReady = null;
+
+  function loadGoogleMaps() {
+    if (googleReady) return googleReady;
+    googleReady = new Promise(function (resolve, reject) {
+      if (window.google && window.google.maps) { resolve(); return; }
+      var cb = '__talliMapsReady';
+      window[cb] = function () { resolve(); };
+      // A key that is refused (quota spent, wrong referrer) calls this
+      // instead of failing the script load.
+      window.gm_authFailure = function () { reject(new Error('maps auth')); };
+      var s = document.createElement('script');
+      s.src = 'https://maps.googleapis.com/maps/api/js?key=' +
+        encodeURIComponent(CFG.googleMapsKey) + '&callback=' + cb + '&loading=async';
+      s.async = true;
+      s.onerror = function () { reject(new Error('maps script')); };
+      document.head.appendChild(s);
+      setTimeout(function () { reject(new Error('maps timeout')); }, 8000);
+    });
+    return googleReady;
+  }
+
+  var gmap = null;
+  var gOverlays = [];
+
+  // A piece of HTML pinned to a point: the price pills and the Eden Park
+  // badge, styled by the same CSS as the OpenStreetMap version.
+  function htmlOverlay(at, className, html, onClick) {
+    var g = window.google.maps;
+    var ov = new g.OverlayView();
+    var div = null;
+    ov.onAdd = function () {
+      div = document.createElement('div');
+      div.className = className;
+      div.innerHTML = html;
+      div.style.position = 'absolute';
+      if (onClick) {
+        div.style.cursor = 'pointer';
+        div.addEventListener('click', onClick);
+        this.getPanes().overlayMouseTarget.appendChild(div);
+      } else {
+        this.getPanes().overlayLayer.appendChild(div);
+      }
+    };
+    ov.draw = function () {
+      var px = this.getProjection().fromLatLngToDivPixel(new g.LatLng(at[0], at[1]));
+      if (px && div) { div.style.left = px.x + 'px'; div.style.top = px.y + 'px'; }
+    };
+    ov.onRemove = function () { if (div && div.parentNode) div.parentNode.removeChild(div); div = null; };
+    return ov;
+  }
+
+  function drawGoogleMap(box, pins) {
+    var g = window.google.maps;
+    if (!gmap) {
+      gmap = new g.Map(box, {
+        center: { lat: EDEN_PARK[0], lng: EDEN_PARK[1] },
+        zoom: 15,
+        disableDefaultUI: true,
+        zoomControl: true,
+        clickableIcons: false,
+        gestureHandling: 'cooperative',
+        // Quiet the map so the price pills are what stands out.
+        styles: [
+          { featureType: 'poi', stylers: [{ visibility: 'off' }] },
+          { featureType: 'poi.park', stylers: [{ visibility: 'on' }] },
+          { featureType: 'poi.sports_complex', stylers: [{ visibility: 'on' }] },
+          { featureType: 'transit.station', stylers: [{ visibility: 'simplified' }] },
+        ],
+      });
+    }
+    gOverlays.forEach(function (o) { o.setMap(null); });
+    gOverlays = [];
+
+    var m = mapModel(pins);
+    var add = function (o) { o.setMap(gmap); gOverlays.push(o); };
+
+    add(htmlOverlay(EDEN_PARK, 'bk-map-venue bk-map-venue-g',
+      '<span class="bk-map-venue-dot" aria-hidden="true"></span>' +
+      '<span class="bk-map-venue-name">Eden Park</span>'));
+    m.areas.forEach(function (a) {
+      a.houses.forEach(function (h) {
+        if (h === a.at) return;
+        add(htmlOverlay(h, 'bk-map-dot' + (a.full ? ' is-full' : ''), ''));
+      });
+      add(htmlOverlay(a.at,
+        'bk-map-pin' + (a.full ? ' is-full' : '') + (a.chosen ? ' is-chosen' : ''),
+        '<span class="bk-map-pill" title="' + escapeHtml(a.title) + '">' + escapeHtml(a.label) + '</span>',
+        a.full ? null : function () { pickArea(a.block_id); }));
+    });
+
+    var bounds = new g.LatLngBounds();
+    m.framed.forEach(function (pt) { bounds.extend({ lat: pt[0], lng: pt[1] }); });
+    gmap.fitBounds(bounds, { top: 52, left: 40, right: 40, bottom: 24 });
+    g.event.addListenerOnce(gmap, 'idle', function () {
+      if (gmap.getZoom() > 16) gmap.setZoom(16);
+      if (gmap.getZoom() < 14) { gmap.setCenter({ lat: EDEN_PARK[0], lng: EDEN_PARK[1] }); gmap.setZoom(14); }
+    });
+  }
+
+  // What both maps draw: one pill per area at its anchor house, the other
+  // houses as dots, and a frame centred on Eden Park (every point mirrored
+  // through the stadium, so there is as much ground above it as below).
+  function mapModel(pins) {
+    var byBlock = {};
+    var order = [];
+    var framed = [EDEN_PARK];
+    pins.forEach(function (p) {
+      var a = byBlock[p.block_id];
+      if (!a) {
+        a = byBlock[p.block_id] = {
+          block_id: p.block_id, block_name: p.block_name, spots: 0, from: null, at: null, houses: [],
+        };
+        order.push(a);
+      }
+      var at = [Number(p.lat), Number(p.lng)];
+      framed.push(at, [2 * EDEN_PARK[0] - at[0], 2 * EDEN_PARK[1] - at[1]]);
+      a.spots += Math.max(0, p.spots_left || 0);
+      if ((p.spots_left || 0) > 0 && (a.from === null || p.from_cents < a.from)) a.from = p.from_cents;
+      if (p.is_anchor || !a.at) a.at = at;
+      a.houses.push(at);
+    });
+    order.forEach(function (a) {
+      a.full = a.spots <= 0;
+      a.chosen = !!(state.block && state.block.block_id === a.block_id);
+      a.label = a.full ? 'Full' : money(a.from);
+      a.title = a.block_name + (a.full ? ' — sold out online' : ' — from ' + a.label + ', ' +
+        a.spots + ' space' + (a.spots === 1 ? '' : 's') + ' left');
+    });
+    return { areas: order, framed: framed };
+  }
+
+  function pickArea(blockId) {
+    if (state.block && state.block.block_id === blockId) return;
+    var b = blocksIn(state.blockRows || []).filter(function (x) { return x.block_id === blockId; })[0];
+    if (!b) return;
+    state.block = b;
+    state.tier = null;
+    loadTiers(state.event.id);
+  }
+
+  /* ---- OpenStreetMap (Leaflet) ---- */
+
+  function drawOsmMap(box, pins) {
+    if (!window.L) { box.hidden = true; return; }
     if (!map) {
       map = window.L.map(box, { scrollWheelZoom: false, tap: true, zoomControl: false });
       window.L.control.zoom({ position: 'bottomright' }).addTo(map);
@@ -429,7 +590,7 @@
     if (mapLayer) mapLayer.remove();
     mapLayer = window.L.layerGroup().addTo(map);
 
-    var points = [EDEN_PARK];
+    var m = mapModel(pins);
 
     // Eden Park: a badge, not a pin. It is the thing everyone is walking to.
     window.L.marker(EDEN_PARK, {
@@ -444,73 +605,31 @@
       interactive: false,
     }).addTo(mapLayer);
 
-    // One price pill per area, at its anchor house: that is what a customer
-    // books ("70 Gribblehurst or within 100m"), and neighbouring driveways
-    // 20m apart would otherwise sit on top of each other. The other houses
-    // in the area show as small dots beside it. Grey when sold out online.
-    var areas = {};
-    pins.forEach(function (p) {
-      var a = areas[p.block_id] || (areas[p.block_id] = {
-        block_id: p.block_id, block_name: p.block_name, spots: 0, from: null, at: null, houses: [],
-      });
-      var at = [Number(p.lat), Number(p.lng)];
-      points.push(at);
-      a.spots += Math.max(0, p.spots_left || 0);
-      if ((p.spots_left || 0) > 0 && (a.from === null || p.from_cents < a.from)) a.from = p.from_cents;
-      if (p.is_anchor || !a.at) a.at = at;
-      a.houses.push(at);
-    });
-
-    Object.keys(areas).forEach(function (id) {
-      var a = areas[id];
-      var full = a.spots <= 0;
-      var chosen = state.block && state.block.block_id === a.block_id;
+    m.areas.forEach(function (a) {
       a.houses.forEach(function (h) {
         if (h === a.at) return;
         window.L.circleMarker(h, {
           radius: 5, color: '#fff', weight: 2,
-          fillColor: full ? '#9a9a9a' : '#1f6b45', fillOpacity: 1, interactive: false,
+          fillColor: a.full ? '#9a9a9a' : '#1f6b45', fillOpacity: 1, interactive: false,
         }).addTo(mapLayer);
       });
-      var label = full ? 'Full' : money(a.from);
       var marker = window.L.marker(a.at, {
         icon: window.L.divIcon({
-          className: 'bk-map-pin' + (full ? ' is-full' : '') + (chosen ? ' is-chosen' : ''),
-          html: '<span class="bk-map-pill">' + escapeHtml(label) + '</span>',
+          className: 'bk-map-pin' + (a.full ? ' is-full' : '') + (a.chosen ? ' is-chosen' : ''),
+          html: '<span class="bk-map-pill">' + escapeHtml(a.label) + '</span>',
           iconSize: [0, 0],
           iconAnchor: [0, 0],
         }),
-        title: a.block_name + (full ? ' — sold out online' : ' — from ' + label + ', ' +
-          a.spots + ' space' + (a.spots === 1 ? '' : 's') + ' left'),
+        title: a.title,
         riseOnHover: true,
       }).addTo(mapLayer);
-      if (!full) {
-        marker.on('click', function () {
-          if (state.block && state.block.block_id === a.block_id) return;
-          var b = blocksIn(state.blockRows || []).filter(function (x) {
-            return x.block_id === a.block_id;
-          })[0];
-          if (!b) return;
-          state.block = b;
-          state.tier = null;
-          loadTiers(state.event.id);
-        });
-      }
+      if (!a.full) marker.on('click', function () { pickArea(a.block_id); });
     });
 
     // Leaflet measures the box when it is drawn; the step may have only just
     // been un-hidden, so measure again before fitting.
     map.invalidateSize();
-    // Centred on Eden Park, not just fitted around the pins: every house is
-    // mirrored through the stadium, so the frame shows as much ground above
-    // Eden Park as below it and the walk reads at a glance. Never closer
-    // than street level (16), never so far out the houses blur together (14).
-    var framed = [EDEN_PARK];
-    points.forEach(function (pt) {
-      framed.push(pt);
-      framed.push([2 * EDEN_PARK[0] - pt[0], 2 * EDEN_PARK[1] - pt[1]]);
-    });
-    map.fitBounds(window.L.latLngBounds(framed), {
+    map.fitBounds(window.L.latLngBounds(m.framed), {
       paddingTopLeft: [40, 52], paddingBottomRight: [40, 24], maxZoom: 16,
     });
     if (map.getZoom() < 14) map.setView(EDEN_PARK, 14);

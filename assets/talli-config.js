@@ -60,6 +60,13 @@
     supabaseUrl: env.supabaseUrl,
     anonKey: env.anonKey,
 
+    // Google Maps JavaScript API key for the booking page map. Public by
+    // design, like the anon keys: it is restricted in Google Cloud to the
+    // talli.co.nz and staging.talli.pages.dev referrers and to the Maps
+    // JavaScript API, with a daily load quota. Empty means the page falls
+    // back to the OpenStreetMap map.
+    googleMapsKey: '',
+
     // Six tiers is too much to put in front of someone on a phone. These three
     // carry the page; the rest sit behind "more options". Order is deliberate —
     // best value first, then the two upsells.
