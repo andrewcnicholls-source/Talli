@@ -33,3 +33,8 @@ comment on view v_event_site_map is
   'with its block and online spaces left.';
 
 grant select on v_event_site_map to anon, authenticated;
+
+-- 86 Paice Ave's position (OpenStreetMap, 6 Nov 2026), so the Paice Ave
+-- block is on the map from the start. Only fills an empty position.
+update property set lat = -36.879536, lng = 174.740911
+ where name = '86 Paice Ave' and lat is null;
