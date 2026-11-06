@@ -2414,3 +2414,9 @@ textarea.ad-input { resize: vertical; min-height: 56px; font-family: inherit; }
   border: 3px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,.25); }
 .bk-map-venue-name { font: 600 14px/1 'Jost', system-ui, sans-serif; color: #1f6b45;
   text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 3px #fff; }
+
+/* Google Maps version: the overlay div is the anchor point itself. */
+.bk-map-venue-g { transform: translate(-14px, -14px); }
+.bk-map-dot { width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%;
+  background: #1f6b45; border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,.3); }
+.bk-map-dot.is-full { background: #9a9a9a; }
