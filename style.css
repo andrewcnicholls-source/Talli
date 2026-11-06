@@ -2420,3 +2420,23 @@ textarea.ad-input { resize: vertical; min-height: 56px; font-family: inherit; }
 .bk-map-dot { width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%;
   background: var(--blue); border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,.3); }
 .bk-map-dot.is-full { background: #9a9a9a; }
+
+/* Sites: one driveway's usual spaces, online share and price difference. */
+#ad-site-form { padding: 0 16px 24px; }
+#ad-site-form > .ad-btn { margin-top: 14px; width: 100%; }
+.ad-site-meta { margin: 0 0 14px; color: var(--muted, #5b6472); font-size: 0.92rem; }
+.ad-site-grid {
+  display: grid;
+  grid-template-columns: 1fr 5.5rem 5.5rem;
+  gap: 8px 10px;
+  align-items: center;
+}
+.ad-site-h { font-size: 0.8rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+.ad-site-type { font-weight: 600; }
+.ad-site-grid .ad-num, .ad-site-offset .ad-num { width: 100%; text-align: center; }
+.ad-site-offset .ad-num { max-width: 8rem; }
+.ad-site-help { margin: 6px 0 0; font-size: 0.85rem; color: var(--muted, #5b6472); }
+.ad-site-offset, .ad-site-field { margin-top: 16px; }
+.ad-site-field .ad-input, .ad-site-field .ad-select { width: 100%; }
+.ad-site-apply { display: flex; gap: 8px; align-items: flex-start; margin-top: 16px; font-size: 0.92rem; }
+.ad-site-apply input { margin-top: 3px; }

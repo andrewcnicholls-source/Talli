@@ -200,6 +200,7 @@ const OPERATOR_ONLY = new Set([
   'event_form', 'create_event', 'save_template', 'set_event_status',
   'set_capacity', 'set_price', 'apply_price_template', 'set_reserve',
   'set_offer_status', 'site_options', 'add_offer',
+  'sites_setup', 'save_site', 'create_site',
 ])
 
 const denied = (c: Caller | Denied): c is Denied =>
@@ -826,6 +827,12 @@ Deno.serve(async (req) => {
           p_price_cents: Number(body.price_cents ?? 0),
         })
         if (error) return json(named(error), 409)
+        // A price on the reference site (Andrew's house) moves every other
+        // site in the event with it, each at its own offset.
+        const { data: ref } = await db.rpc('reference_property')
+        if (ref && String(ref) === String(body.property_id ?? '')) {
+          await db.rpc('apply_price_offsets', { p_event_id: eventId })
+        }
         return json({ ok: true, price_cents: data })
       }
 
@@ -843,6 +850,8 @@ Deno.serve(async (req) => {
           p_property_id: body.property_id ? String(body.property_id) : null,
         })
         if (error) return json(named(error), 409)
+        // A template sets one price for everyone; put each site's offset back.
+        await db.rpc('apply_price_offsets', { p_event_id: eventId })
         return json({ ok: true, applied: data })
       }
 
@@ -937,6 +946,88 @@ Deno.serve(async (req) => {
         })
         if (error) return json(named(error), 409)
         return json({ ok: true, event_offer_id: data })
+      }
+
+      // ---------------------------------------------- setting up sites
+
+      // Every driveway with its area, host, offset and usual counts, for the
+      // Sites tab. Short lists; one round trip.
+      case 'sites_setup': {
+        const [propRes, defRes, blockRes, refRes] = await Promise.all([
+          db.from('property')
+            .select('id, name, address, lat, lng, active, block_id, price_offset_cents, ' +
+                    'host:host_id(name), block:block_id(name, sort_order, anchor_property_id)')
+            .order('name', { ascending: true }),
+          db.from('property_tier_default').select('property_id, code, capacity, online'),
+          db.from('block').select('id, name, sort_order').eq('active', true)
+            .order('sort_order', { ascending: true }),
+          db.rpc('reference_property'),
+        ])
+        if (propRes.error) throw propRes.error
+        if (defRes.error) throw defRes.error
+        if (blockRes.error) throw blockRes.error
+        const ref = refRes.data ? String(refRes.data) : null
+        const defaults = new Map<string, Row[]>()
+        for (const d of (defRes.data ?? []) as Row[]) {
+          const list = defaults.get(String(d.property_id)) ?? []
+          list.push({ code: d.code, capacity: d.capacity, online: d.online })
+          defaults.set(String(d.property_id), list)
+        }
+        const sites = ((propRes.data ?? []) as Row[]).map((p) => ({
+          property_id: p.id,
+          name: p.name,
+          address: p.address,
+          lat: p.lat,
+          lng: p.lng,
+          active: p.active,
+          block_id: p.block_id,
+          block_name: p.block?.name ?? null,
+          block_sort: p.block?.sort_order ?? 0,
+          is_anchor: p.block?.anchor_property_id === p.id,
+          host_name: p.host?.name ?? null,
+          price_offset_cents: p.price_offset_cents ?? 0,
+          is_reference: String(p.id) === ref,
+          defaults: defaults.get(String(p.id)) ?? [],
+        })).sort((a: Row, b: Row) => (a.block_sort - b.block_sort) ||
+          String(a.name).localeCompare(String(b.name)))
+        return json({ sites, blocks: blockRes.data ?? [] })
+      }
+
+      // A site's usual counts per type and its price offset; optionally
+      // pushed to the upcoming events it is already in.
+      case 'save_site': {
+        const offset = Number(body.price_offset_cents ?? 0)
+        if (!Number.isInteger(offset)) {
+          return json({ error: 'The price difference must be whole cents.' }, 400)
+        }
+        const { data, error } = await db.rpc('save_site_setup', {
+          p_property_id: String(body.property_id ?? ''),
+          p_offset_cents: offset,
+          p_tiers: Array.isArray(body.tiers) ? body.tiers : [],
+          p_apply_upcoming: body.apply_upcoming === true,
+        })
+        if (error) return json(named(error), 409)
+        return json({ ok: true, ...(data as Row) })
+      }
+
+      // A new driveway: its host by name, and its area, new or existing.
+      case 'create_site': {
+        const lat = body.lat === null || body.lat === undefined || body.lat === '' ? null : Number(body.lat)
+        const lng = body.lng === null || body.lng === undefined || body.lng === '' ? null : Number(body.lng)
+        if ((lat !== null && !Number.isFinite(lat)) || (lng !== null && !Number.isFinite(lng))) {
+          return json({ error: 'That map position does not look right.' }, 400)
+        }
+        const { data, error } = await db.rpc('create_site', {
+          p_name: String(body.name ?? ''),
+          p_address: String(body.address ?? ''),
+          p_host_name: String(body.host_name ?? ''),
+          p_block_id: body.block_id ? String(body.block_id) : null,
+          p_new_block_name: body.new_block_name ? String(body.new_block_name) : null,
+          p_lat: lat,
+          p_lng: lng,
+        })
+        if (error) return json(named(error), 409)
+        return json({ ok: true, property_id: data })
       }
 
       default:
