@@ -2391,3 +2391,7 @@ textarea.ad-input { resize: vertical; min-height: 56px; font-family: inherit; }
 .ad-site-line { display: flex; gap: 8px; align-items: center; padding: 4px 0; }
 .ad-site-name { flex: 1; min-width: 0; }
 .ad-chip.is-pending, .ad-chip.is-paused { color: #8a5a00; background: #fff4dc; border-color: #f0dcae; }
+
+/* ------------------------------------------------ booking page map */
+.bk-map { height: 260px; border-radius: 10px; margin: 4px 0 16px; z-index: 0; }
+@media (min-width: 720px) { .bk-map { height: 340px; } }

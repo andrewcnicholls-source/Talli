@@ -67,3 +67,8 @@ insert into staff_block_access (host_user_id, block_id)
 select hu.id, b.id from host_user hu, block b
  where hu.email = 'warden.test@example.com' and b.name = 'Test Block'
 on conflict do nothing;
+
+-- Invented positions a few hundred metres from Eden Park, for the booking
+-- page map.
+update property set lat = -36.87110, lng = 174.73890 where id = '22222222-2222-2222-2222-2222222222a1';
+update property set lat = -36.87135, lng = 174.73960 where id = '22222222-2222-2222-2222-2222222222a2';
