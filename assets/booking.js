@@ -329,6 +329,8 @@
     el('bk-more-toggle').hidden = true;
     primary.appendChild(make('p', 'bk-empty', 'Loading options…'));
 
+    loadMap(eventId);
+
     read(
       '/v_block_tier_availability?event_id=eq.' + encodeURIComponent(eventId) +
       '&order=block_sort.asc,sort_order.asc'
@@ -390,6 +392,82 @@
         primary.innerHTML = '';
         primary.appendChild(make('p', 'bk-empty', err.message));
       });
+  }
+
+  /* ------------------------------------------------- the map */
+
+  // Eden Park's main entrance area. Every pin is placed against it.
+  var EDEN_PARK = [-36.8749, 174.7448];
+  var map = null;
+  var mapLayer = null;
+
+  // Every bookable house for this event, plus Eden Park, fitted to the
+  // frame. Tapping a house picks its area. A failure here is cosmetic: the
+  // cards below still sell everything, so the map just stays hidden.
+  function loadMap(eventId) {
+    var box = el('bk-map');
+    if (!box || !window.L) return;
+    read('/v_event_site_map?event_id=eq.' + encodeURIComponent(eventId))
+      .then(function (pins) { drawMap(box, pins || []); })
+      .catch(function () { box.hidden = true; });
+  }
+
+  function drawMap(box, pins) {
+    if (!pins.length) { box.hidden = true; return; }
+    box.hidden = false;
+    if (!map) {
+      map = window.L.map(box, { scrollWheelZoom: false, tap: true });
+      window.L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      }).addTo(map);
+    }
+    if (mapLayer) mapLayer.remove();
+    mapLayer = window.L.layerGroup().addTo(map);
+
+    var points = [EDEN_PARK];
+    window.L.circleMarker(EDEN_PARK, {
+      radius: 10, color: '#1f3d2b', weight: 2, fillColor: '#2e7d4f', fillOpacity: 0.9,
+    }).bindTooltip('Eden Park', { permanent: true, direction: 'top', offset: [0, -8] })
+      .addTo(mapLayer);
+
+    pins.forEach(function (p) {
+      var at = [Number(p.lat), Number(p.lng)];
+      points.push(at);
+      var full = (p.spots_left || 0) <= 0;
+      var chosen = state.block && state.block.block_id === p.block_id;
+      var marker = window.L.circleMarker(at, {
+        radius: chosen ? 9 : 7,
+        color: '#1a1a1a', weight: chosen ? 3 : 1.5,
+        fillColor: full ? '#9a9a9a' : '#d9822b', fillOpacity: 0.95,
+      }).bindPopup(
+        '<strong>' + escapeHtml(p.block_name) + '</strong><br>' +
+        (full ? 'Sold out online' : p.spots_left + ' space' + (p.spots_left === 1 ? '' : 's') + ' left')
+      ).addTo(mapLayer);
+      if (!full) {
+        marker.on('click', function () {
+          if (state.block && state.block.block_id === p.block_id) return;
+          var b = blocksIn(state.blockRows || []).filter(function (x) {
+            return x.block_id === p.block_id;
+          })[0];
+          if (!b) return;
+          state.block = b;
+          state.tier = null;
+          loadTiers(state.event.id);
+        });
+      }
+    });
+
+    // Leaflet measures the box when it is drawn; the step may have only just
+    // been un-hidden, so measure again before fitting.
+    map.invalidateSize();
+    map.fitBounds(window.L.latLngBounds(points), { padding: [28, 28], maxZoom: 16 });
+  }
+
+  function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
   }
 
   /* ------------------------------------------------- step 2a: the area */

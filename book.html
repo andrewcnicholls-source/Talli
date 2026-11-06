@@ -8,6 +8,7 @@
 <link rel="canonical" href="https://talli.co.nz/book">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Poiret+One&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/vendor/leaflet/leaflet.css">
 <link rel="stylesheet" href="style.css">
 <!-- Decides production vs test and marks the page. Must load in <head>,
      before anything paints, so the test styling is never a flash. -->
@@ -60,6 +61,10 @@
       <p class="bk-step-note">The difference is how quickly you can get out afterwards.</p>
 
       <p class="bk-step-note bk-surcharge-note" id="bk-tier-surcharge" hidden></p>
+
+      <!-- Every driveway selling this event, and Eden Park, fitted to the
+           frame. Hidden until there is at least one house with a position. -->
+      <div class="bk-map" id="bk-map" role="region" aria-label="Map of parking near Eden Park" hidden></div>
 
       <div class="bk-cards" id="bk-tiers"></div>
       <div class="bk-cards" id="bk-tiers-more" hidden></div>
@@ -221,6 +226,7 @@
   </div>
 </div>
 
+<script src="assets/vendor/leaflet/leaflet.js"></script>
 <script src="assets/booking.js"></script>
 </body>
 </html>
