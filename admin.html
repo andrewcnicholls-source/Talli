@@ -72,6 +72,8 @@
               role="tab" aria-selected="false" aria-controls="ad-pane-night">Tonight</button>
       <button type="button" class="ad-tab" id="ad-tab-insights"
               role="tab" aria-selected="false" aria-controls="ad-pane-insights">Insights</button>
+      <button type="button" class="ad-tab" id="ad-tab-sites"
+              role="tab" aria-selected="false" aria-controls="ad-pane-sites">Sites</button>
     </nav>
   </header>
 
@@ -185,6 +187,17 @@
   <!-- ----------------------------------------------------------- insights -->
   <!-- Looking back rather than working the night. Its own picker, because
        the one in the header only carries tonight and what is coming. -->
+  <!-- Each driveway's usual spaces, how many sell online, and its price
+       difference from the reference site (Andrew's house). Operator only
+       for now; the same form becomes the host's own page later. -->
+  <section id="ad-pane-sites" role="tabpanel" aria-labelledby="ad-tab-sites" hidden>
+    <div class="ad-insight-pick">
+      <label class="ad-label" for="ad-site-pick">Site</label>
+      <select id="ad-site-pick" class="ad-select"></select>
+    </div>
+    <div id="ad-site-form"></div>
+  </section>
+
   <section id="ad-pane-insights" role="tabpanel" aria-labelledby="ad-tab-insights" hidden>
     <div class="ad-insight-pick">
       <label class="ad-label" for="ad-insight-event">Night</label>
