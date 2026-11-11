@@ -1,8 +1,8 @@
 # Plan: events catalogue, blocks, and a gate screen that scales
 
-Revised 11 Nov 2026. First written from a read of `staging` at `4118276`
-and read-only queries against both Supabase projects; revised the same
-day after Andrew set the direction in § 3. Every "today" statement was
+Revised twice on 11 Nov 2026. First written from a read of `staging` at
+`4118276` and read-only queries against both Supabase projects; revised
+after Andrew set the direction in § 3. Every "today" statement was
 checked on that date; re-check before relying on one.
 
 This file is a brief for agents. Each workstream in § 6 is sized to be
@@ -59,37 +59,58 @@ Andrew uses "zone" two ways. Neither is the code's `zone`.
    price shown is the price paid. Andrew moves one price (a surge
    decision) and every block follows at its adjustment. Nobody edits an
    individual site's price.
-5. **Overselling is for walk-ups only.** A warden can sell Standard past
-   its count at the gate, and each extra car comes out of Priority's
-   availability. Never out of Valet. The website still stops selling
-   Standard at its count.
+5. **Overselling is for walk-ups only, and only Standard.** A warden can
+   sell Standard past its count at the gate, and each extra car comes
+   out of Priority's availability. Never out of Valet. Priority and
+   Valet are never sold past their own counts. The website still stops
+   selling Standard at its count.
 6. **Walk-up card payments go through a QR code.** The warden's screen
    shows a QR for a Stripe payment page with the exact amount; the
    customer pays on their own phone. Wardens must not need access to
    Andrew's Stripe account, which the current tap-to-pay route requires.
-   Walk-up payment type defaults to cash.
+   Walk-up payment type defaults to cash. Tap-to-pay stays for Andrew
+   alone because it is cheaper; opening it to wardens is wanted later
+   and is not in this plan.
 7. **One event is live at a time.** Andrew marks it live in the event
    manager. Arrivals has no event selector; it shows the live event.
 8. **A Sites page replaces the Sites tab and the site controls on
    Tonight** (§ 6, B3).
-9. **Wardens only ever have Arrivals,** so anything a warden must do on
-   the night — including recording a space lost to bad parking — lives
-   there.
+9. **Wardens have Arrivals and a Site guide, nothing else.** Anything a
+   warden must do on the night — including recording a space lost to
+   bad parking — lives on Arrivals. The Site guide is the per-site
+   directions QR and the marked-up pictures of where to park.
+10. **Where a car goes is decided when it arrives.** The warden's own
+    site is the default, and it can be any site in the block. An online
+    Standard booking is placed, in order: a free Standard space; then a
+    Priority space at the warden's current site; then a Priority space
+    at another site in the block. Never Valet.
+11. **Hosts are paid on the spaces they provide, not on which cars
+    happened to land on their driveway.** A night's parking takings for
+    a block are pooled and shared between its hosts in proportion to the
+    spaces each provided that night. Arrival order, where a car was
+    placed, and what price that buyer happened to pay must not change
+    what a host earns.
+12. **For sport, the series is the team.** "Blues", with each home game
+    a night.
+13. **The gate screen has one selector that everything follows:** all,
+    a block, or a site. Every tab adapts to it.
+14. **Automated tests are part of the workflow.** A change comes with
+    its tests, and they run on every pull request. The "no test
+    framework" rule in `CLAUDE.md` is retired. The tests need a way past
+    Google sign-in that exists on test only.
 
 ## 4. Still open — agents stop and ask, do not guess
 
 | # | Question | Default if Andrew says "your call" | Blocks |
 | --- | --- | --- | --- |
-| Q1 | For sport, is the series the team ("Blues", every home game a night) or the competition? | The team. | A1 |
-| Q2 | Does a Standard oversell take a Priority space at the same site only, or anywhere in the block? | Same site. | B5 |
-| Q3 | Can Priority or Valet ever be sold past their own count at the gate? | No. | B5 |
-| Q4 | Host pay. Andrew's note on pricing — "because they work as a block, you all benefit" — reads as takings pooled across a block and shared out, not paid per car per driveway. Which is it, and what is each host's share? | None. Must be answered. | B7 |
-| Q5 | Does the public page show how many walk-up spaces are held, or only that there are some? | Only that there are some. | A3 |
-| Q6 | Is tap-to-pay removed for everyone once the QR works, or kept for Andrew alone? | Kept for the operator, hidden from wardens. | B4 |
-| Q7 | Who supplies event pictures, and are they cleared for use? | Andrew uploads; nothing is scraped. | A1 |
-| Q8 | What is the per-site QR code for — a printed sign at the driveway, the confirmation email, or both? | Both: one stable link per site. | A4 |
-| Q9 | The second block: name, anchor address, its properties, each host, spaces per type, online share, the warden's Google email. | None. Needed for go-live only. | C3 |
-| Q10 | Which night is the first with the second block live? Sets the deadline. | — | C3 |
+| Q1 | What share of a block's pooled takings does Talli keep, and is it the same for every block? | None. Must be answered. | B7 |
+| Q2 | "Spaces provided": the spaces a site was confirmed for that night, whether or not they filled? And does a space lost on the night still count for its host? | Confirmed spaces, filled or not. A lost space still counts. | B7 |
+| Q3 | Are extras (ponchos and the like) and card surcharges outside the pool? | Yes, both are Talli's. | B7 |
+| Q4 | Does the public page show how many walk-up spaces are held, or only that there are some? | Only that there are some. | A3 |
+| Q5 | Who supplies event pictures, and are they cleared for use? | Andrew uploads; nothing is scraped. | A1 |
+| Q6 | **The QR sheet Andrew uses today did not reach this plan** — the attachment was not received. A4 needs it as the reference: add the file to `docs/plans/` or describe it. | Build from the description in A4. | A4 |
+| Q7 | The second block: name, anchor address, its properties, each host, spaces per type, online share, the warden's Google email. | None. Needed for go-live only. | C1 |
+| Q8 | Which night is the first with the second block live? Sets the deadline. | — | C1 |
 
 ## 5. Order of work
 
@@ -99,23 +120,28 @@ working in parallel on those two files as they are will spend their time
 on merge conflicts. So:
 
 ```
-P0  split the two big files, no behaviour change      (one agent, first)
+P0  one after the other
+ │    T0 test foundation and test sign-in
+ │    S0 split the two big files, no behaviour change
  │
 P1  foundations, one at a time — each restates shared database objects
  │    A1 series model   →   B1 block pricing   →   B2 live event
  │
-P2  in parallel
- │    customer: A2 event pages · A3 booking flow · A4 directions + QR
- │    gate:     B3 Sites page · B4 walk-up payments · B5 oversell and
- │              lost spaces · B6 Arrivals filter · B7 settlement ·
- │              B8 warden access
+P2  in parallel, each with its own tests
+ │    customer: A2 event pages · A3 booking flow · A4 site guide + QR
+ │    gate:     B3 Sites page · B4 walk-up payments · B5 placement,
+ │              oversell and lost spaces · B6 the selector ·
+ │              B7 settlement · B8 warden access
  │
-P3  C1 test fixtures and script · C2 browser tests · C3 go-live
+P3  C1 go-live
 ```
+
+T0 goes first so that S0 — a 4,000-line reshuffle that must change
+nothing — has something to prove it changed nothing.
 
 ## 6. Workstreams
 
-### P0 — `split-admin-and-gate-ops`
+### S0 — `split-admin-and-gate-ops`
 
 - `assets/admin.js` → native ES modules, one per tab plus shared
   helpers, loaded with `<script type="module">`. No bundler.
@@ -125,8 +151,8 @@ P3  C1 test fixtures and script · C2 browser tests · C3 go-live
 - `scripts/check.sh` greps these files by name for the auth checks, the
   bearer token and the absent passphrase. Move the assertions with the
   code; do not loosen them.
-- Done when: staging behaves identically on a phone, and
-  `scripts/check.sh` passes with every assertion still present.
+- Done when: the browser tests from T0 pass unchanged before and after,
+  and `scripts/check.sh` passes with every assertion still present.
 
 ### A1 — `event-series`
 
@@ -134,6 +160,7 @@ P3  C1 test fixtures and script · C2 browser tests · C3 go-live
   other), venue, summary, picture, sort order, active. Public read of
   active rows only.
 - `event.series_id` and `event.night_label` ("Night 2", "v Hurricanes").
+  For sport the series is the team.
   Backfill: every existing event gets a series; the three Bruno Mars
   shows share one.
 - Pictures in a public Supabase Storage bucket, uploaded from the event
@@ -173,26 +200,39 @@ P3  C1 test fixtures and script · C2 browser tests · C3 go-live
 - Walk-up state: `v_block_tier_availability` gains a boolean for "held
   for the gate and not yet sold". A type that is sold out online with
   that flag set reads "Sold out online — walk-up spaces on the night",
-  with the block's address. Never a count unless Q5 says so.
+  with the block's address. Never a count unless Q4 says so.
 - Old links keep working: `book.html?event=<id>` sends the visitor to
   the right series page with that night chosen.
 - Done when: on a phone, Bruno Mars night two can be booked in four
   taps to checkout, and a night sold out online shows walk-ups.
 
-### A4 — `directions-and-site-qr`
+### A4 — `site-guide-and-qr`
 
-- Each site and block gets a slug and a stable link, `/go/<slug>`, that
-  shows that place's address, map links, walking time and site guide.
-  Data comes from `property` and `block`, not from HTML.
-- The confirmation page and email link to the booked block's page.
-- `getting-here.html` with nothing chosen lists every active block.
-  `eden-park.html` loses its hard-coded "from 86 Paice Ave" walk time.
-- Sites page: a "QR code" button per site and per block that renders the
-  code for its link, to download or print. Vendor one small QR library
-  under `assets/vendor/`; B4 uses the same one.
+Andrew uses a QR sheet many times every event: the address, a picture of
+the place, and a code that opens directions to it. This makes that sheet
+a page, for every site, that wardens can reach. See Q6.
+
+- Each site and block gets a slug and a stable public link,
+  `/go/<slug>`: the address, a picture, map links that open navigation
+  to the right spot, walking time to the venue. Data comes from
+  `property` and `block`, not from HTML.
+- **Site guide**, the second page a warden has: for the site or block
+  chosen in the selector (B6), one screen with the address in large
+  type, the picture, and the QR for its `/go/` link, made to be held up
+  to a driver's window. Below it, the marked-up pictures of where and
+  how to park (`site_guide_url`, extended to several pictures with
+  captions) and the fill notes.
+- The same sheet prints to A4 from the Sites page, for a sign.
+- Pictures upload from the Sites page to a public Storage bucket.
+- The confirmation page and email link to the booked block's `/go/`
+  page. `getting-here.html` with nothing chosen lists every active
+  block. `eden-park.html` loses its hard-coded walk from 86 Paice Ave.
+- Vendor one small QR library under `assets/vendor/`; B4 uses the same.
 - The footer's "86 Paice Ave" is the company address and stays.
-- Done when: a booking in a second block never shows a Paice Ave
-  direction, and a printed code opens the right site on a phone.
+- A warden sees the guide only for sites in their blocks.
+- Done when: a warden opens the guide for their site in two taps, a
+  driver scanning it gets directions to that driveway, and a booking in
+  a second block never shows a Paice Ave direction.
 
 ### B1 — `block-pricing`
 
@@ -257,47 +297,70 @@ from Tonight. Operator only.
   screen shows that within a few seconds. Cancel and expiry return the
   space, using the existing unpaid-booking path.
 - The warden never signs in to Stripe. No Stripe key reaches a browser.
-- Tap-to-pay: per Q6.
+- Tap-to-pay is offered to the operator only and hidden from wardens.
 - Check `confirm_booking` and the confirmation email behave for a gate
   booking with a placeholder email address.
 - Done when: on staging with a test card, a walk-up scans, pays, and
   the warden's list shows paid, with the right surcharge.
 
-### B5 — `oversell-and-lost-spaces`
+### B5 — `placement-oversell-and-lost-spaces`
 
+- **Placement at check-in.** The warden's current site (from the
+  selector, B6) is the default, and any site in the block can be chosen.
+  For an online Standard booking the screen proposes, in order: a free
+  Standard space at the current site, then at another site in the
+  block; a Priority space at the current site; a Priority space at
+  another site. Never Valet. The warden can override the proposal.
 - **Standard spills into Priority, at the gate only.** `sell_at_gate`
-  accepts Standard past its count while Priority has room (scope per
-  Q2). Priority's availability, online and at the gate, becomes its
-  count minus its sales minus the Standard overflow. Valet is untouched.
-  Online `hold_booking` is unchanged.
-- The warden's sell form defaults to Standard and says when a sale is
-  taking a Priority space.
+  accepts Standard past its count while the block has Priority room,
+  taking it in the same order. Priority's availability, online and at
+  the gate, is its count minus its sales minus the Standard overflow.
+  Priority and Valet are never sold past their own counts. Online
+  `hold_booking` is unchanged.
+- The sell form defaults to Standard and says when a sale is taking a
+  Priority space, and at which site.
 - **Lost space:** a warden records "space lost" against a site and type
   with a reason (bad parking, blocked, host's own car). It takes no
   money and is not a booking: its own table, with who and when, and it
   can be undone. It reduces availability everywhere and shows as its own
   line in the night's totals.
-- Both are allowed to a `blocks`-scoped warden, only for their sites.
+- All of it is allowed to a `blocks`-scoped warden, only for their sites.
 - Done when: selling one Standard too many removes one Priority from
-  the booking page, and a lost space does the same and can be undone.
+  the booking page, a lost space does the same and can be undone, and
+  the proposal order above holds with two sites in a block.
 
-### B6 — `arrivals-filter`
+### B6 — `gate-selector`
 
-- A filter on Arrivals: all, one block, or one site. The list of
-  parkers, the counts and the money totals all follow it.
-- A warden is offered only their blocks and the sites in them. The
-  server already refuses the rest.
+- One selector at the top of the gate screen: all, one block, or one
+  site. Every tab follows it — the list of parkers, the counts and
+  money totals, the sell form's default site, the Site guide, and for
+  the operator the Sites page and the night's figures.
+- A warden is offered only their blocks and the sites in them, and has
+  no "all" unless they hold every block. The server already refuses the
+  rest; this does not replace that.
 - The choice is remembered per device.
-- Done when: totals for each site add up to the block, and blocks to all.
+- Done when: totals for each site add up to the block, and blocks to
+  all, on every tab.
 
 ### B7 — `host-settlement`
 
-- Blocked on Q4.
-- Editable host details: share, real email, payout notes. `create_site`
-  today hard-codes 50% and a placeholder address.
-- Per night, per block and per host: cars parked and booked, takings by
-  channel and payment type, amount owed, cash held by each warden.
-- Report only. No Stripe Connect here.
+- **The rule (§ 3.11):** for each night and block, pool the parking
+  takings, take Talli's share (Q1), and split the rest between the
+  block's hosts in proportion to the spaces each provided (Q2).
+- `booking.host_earnings_cents` and `platform_fee_cents` are written at
+  hold time from the booked site's host. Under this rule they are wrong
+  by design. Stop reading them; compute settlement from the night's
+  totals. Leave the columns in place.
+- A snapshot of "spaces provided" per site per night is taken when the
+  night closes, so a later change to a site's defaults cannot rewrite a
+  settled night.
+- Editable host details: real email, payout notes. `create_site` today
+  hard-codes a 50% share and a placeholder address.
+- Report, per night and per block: takings by channel and payment type,
+  the pool, each host's spaces and amount owed, cash held by each
+  warden. Report only. No Stripe Connect here.
+- Done when: on test, moving every car to one host's driveway, or
+  raising the price halfway through sales, changes no host's figure.
 
 ### B8 — `warden-access`
 
@@ -310,38 +373,79 @@ from Tonight. Operator only.
 - `scripts/check.sh`: assert every operator-only action is refused to a
   `blocks`-scoped caller.
 
-### C1 — `multi-block-fixtures`
+### T0 — `test-foundation`
 
-- Extend `supabase/test-only/seed-test-block.sql`: two blocks, two or
-  more sites each, different hosts, one warden per block, one series
-  with three nights, one night sold out online with gate spaces left.
-- A device-test script in `TESTING.md` covering every "done when" above.
+The tests, how they sign in, and where they run. Later workstreams add
+to these suites; they do not invent their own.
 
-### C2 — `browser-tests`  *(needs Andrew's go-ahead)*
+**Where they run.** Against a local Supabase stack started in CI
+(`supabase start`), built from `supabase/migrations/` from empty, with
+the edge functions served locally and the site served as static files.
+Not against the shared test project: that is Andrew's device-testing
+database, and a test run would trample whatever is on his phone.
 
-- Playwright, against the test project and a dedicated invented series:
-  catalogue → night → block → type → checkout → confirmation; price
-  charged equals price shown; sold-out-online shows walk-ups.
-- Gate screen tests need a host session without Google. That means a
-  test-project-only way to mint one, with a `scripts/check.sh` assertion
-  that it cannot exist on production.
-- This ends the "no test framework" rule in `CLAUDE.md`. Change the rule
-  in the same PR, and run the tests in CI beside `scripts/check.sh`.
-- It does not replace device testing on staging.
+Building from empty is itself the first test. `supabase/README.md`
+records that some migrations reached the test project as raw SQL and
+that the ledgers disagree, so the files may not replay cleanly. Fix
+that first, with new migrations and no edits to applied ones.
 
-### C3 — Go-live (Andrew)
+**Four suites.**
 
-1. Device-test staging against the script from C1.
+| Suite | Tool | Covers |
+| --- | --- | --- |
+| Database | pgTAP (`supabase test db`) | Two buyers for the last space: one wins. The gate reserve. Hold expiry returns the space. Block pricing and re-pricing. Standard spill into Priority, never Valet. Lost spaces. Settlement arithmetic. The event deletion guard. `anon` reads nothing from `booking`, `host`, `host_user`. Every view keeps `security_invoker`. |
+| Functions | `deno test` | `gate-ops` and `check-setup` refuse the anon key, a signed-in non-host, and a warden on an operator action or another block's booking. `create-checkout` never trusts an amount and refuses a price mismatch. `stripe-webhook` rejects a bad signature and handles a repeat once. Stripe is stubbed. |
+| Browser | Playwright | Customer: catalogue → night → block → type → checkout → confirmation; sold out online shows walk-ups; the right directions. Gate: check in, place at another site, sell cash, sell by QR, oversell, lost space, selector totals, warden sees one block. On phone, tablet and desktop sizes, with video kept on failure. |
+| Units | `node --test` | The front-end modules after S0. `scripts/check-auth.js` moves in here. |
+
+**Getting past Google sign-in.** No bypass in the server code.
+
+- Seeded test users — operator, a warden per block, a warden with every
+  grant off, and a signed-in non-host — are created in Supabase Auth
+  with a confirmed email and a password, on the local stack and the test
+  project. The tests sign in with the password grant and place the
+  session where `assets/talli-auth.js` keeps it.
+- `gate-ops` then does exactly what it does for a Google session:
+  resolve the token, require a confirmed email, look the email up in
+  `host_user`. The three checks are exercised, not skipped.
+- For device testing as a warden without a second Google account: on
+  the test site only, the sign-in screen offers "sign in as a test
+  user" with those same accounts.
+- **Production must stay Google-only.** The email-and-password provider
+  is left off there; that is dashboard configuration, so add it to
+  `DEPLOYMENT.md` § 0c. Guards: `scripts/check.sh` asserts the test
+  sign-in is behind `TALLI.isTest` and that no seeded address appears in
+  a migration; `/release-production` attempts a password sign-in against
+  production and stops unless it is refused as disabled.
+
+**Plumbing.**
+
+- A root `package.json` for development tools only. The site still has
+  no build step and nothing from `node_modules` is served; confirm
+  Cloudflare Pages still deploys the repository as it is.
+- `scripts/check.sh` stays the single command and gains the suites, with
+  a fast mode that skips the browser run. CI runs all of it on every
+  pull request to `staging` and `main`.
+- `CLAUDE.md`, `TESTING.md` and the `finish-agent` skill are updated to
+  say so.
+- Fixtures: extend `supabase/test-only/seed-test-block.sql` — two
+  blocks, two or more sites each, different hosts, one series with
+  three nights, one night sold out online with gate spaces left.
+- Done when: a pull request that breaks the last-space race, drops an
+  auth check, or changes a price shown fails CI, and the baseline suite
+  passes on `staging` as it stands today.
+
+### C1 — Go-live (Andrew)
+
+1. Device-test staging against the script in `TESTING.md`. Passing
+   automated tests do not replace this.
 2. `/release-production`: migrations and edge functions first, then
    Pages. This is the first release to carry blocks to production, so
    it is every migration from `20261105100000` onward. After it, check
-   `host.is_operator` is true for Talli Limited only, and that
-   `host.platform_share` holds what it should — production currently
-   has `0` for Talli Limited and `1` for the berm host, the reverse of
-   the column's description.
+   `host.is_operator` is true for Talli Limited only.
 3. On production: create series and pictures for the upcoming events.
 4. Sites page: set up the first block's informal driveways, then the
-   second block, its adjustments, and its sites.
+   second block, its adjustments, its sites and their pictures.
 5. Invite the warden. Tick the nights. Confirm each site for sale.
 6. One real booking in the new block, followed end to end.
 
@@ -350,6 +454,8 @@ from Tonight. Operator only.
 - Follow `CLAUDE.md`: a worktree on `feature/<task>`, PR base `staging`
   (not GitHub's default), `bash scripts/check.sh` is the validation
   command.
+- **A workstream is not done without tests.** Each "done when" above is
+  written to be a test: add it to the suites from T0, in the same PR.
 - Nothing here is released piecemeal. Do not run `/release-production`.
 - Develop against the **test** project only.
 - Migrations are additive. Any `create or replace view` re-asserts
@@ -359,6 +465,8 @@ from Tonight. Operator only.
   Start from the newest definition. P1 is sequential for this reason; in
   P2, B4 and B5 both touch the gate sale path and must agree who goes
   first.
+- No test, fixture or helper may weaken a server check to make itself
+  pass. If a test cannot sign in honestly, the test is wrong.
 - Prices come from the database. Nothing in a request body is an amount.
 - What a warden may do is enforced in `gate-ops`. The screen only stops
   offering what the server would refuse.

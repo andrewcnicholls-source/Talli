@@ -60,11 +60,22 @@ is Talli-only and refuses to run elsewhere.
 
 ### Validation
 
-`bash scripts/check.sh` is the project's only validation command, and
-CI runs the same script. There is no build, no bundler, no test
-framework and no linter — do not invent `npm test`, `npm run lint` or
-`npm run build`, and never report a check as passing without running
-it.
+Validation is part of the work, not a step after it. A change comes
+with tests for what it changes, and is not finished until they pass.
+
+`bash scripts/check.sh` is the one validation command, and CI runs the
+same script. Never report a check as passing without running it.
+
+Automated test suites — database, edge functions, browser — are being
+introduced by workstream T0 in `docs/plans/second-block-onboarding.md`,
+and will run through that same script. **Until T0 has merged they do
+not exist:** `scripts/check.sh` is all there is, so do not invent
+`npm test`, `npm run lint` or `npm run build`, and do not claim a test
+ran that could not have. Once T0 is in, add to its suites rather than
+starting another.
+
+There is still no build and no bundler: the site is served as the
+files in this repository.
 
 ### Staging is shared, and it is the real test
 
