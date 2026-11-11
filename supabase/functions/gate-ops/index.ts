@@ -273,7 +273,7 @@ async function nightState(eventId: string, allowed: Set<string> | null = null) {
     // The driveways selling this night, with their block, so the screen can
     // offer "I'm at …" and say which site each car is at.
     db.from('event_offer')
-      .select('property_id, status, property:property_id(name, address, site_guide_url, ' +
+      .select('property_id, status, property:property_id(name, address, lat, lng, site_guide_url, ' +
               'fill_notes, block_id, block:block_id(name, sort_order, anchor_property_id))')
       .eq('event_id', eventId),
   ])
@@ -339,6 +339,8 @@ async function nightState(eventId: string, allowed: Set<string> | null = null) {
       status: o.status,
       name: o.property?.name ?? null,
       address: o.property?.address ?? null,
+      lat: o.property?.lat ?? null,
+      lng: o.property?.lng ?? null,
       site_guide_url: o.property?.site_guide_url ?? null,
       fill_notes: o.property?.fill_notes ?? null,
       block_id: o.property?.block_id ?? null,
@@ -503,6 +505,21 @@ Deno.serve(async (req) => {
       case 'list': {
         if (!eventId) return json({ error: 'event_id is required' }, 400)
         return json(await nightState(eventId, allowed))
+      }
+
+      // The account a walk-up pays into by bank transfer, for the Site info
+      // tab. Any signed-in host or warden may read it: it is what they read
+      // out at the window. It is the one thing here the anon key cannot
+      // reach (bank_transfer_setting has no grant), so it comes only through
+      // this call, after the three checks every caller passes.
+      case 'bank_details': {
+        const { data, error } = await db.from('bank_transfer_setting')
+          .select('account_name, account_number').maybeSingle()
+        if (error) throw error
+        return json({
+          account_name: data?.account_name ?? null,
+          account_number: data?.account_number ?? null,
+        })
       }
 
       // What is still sellable right now, for the walk-up form.

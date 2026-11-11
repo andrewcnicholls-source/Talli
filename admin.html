@@ -74,6 +74,8 @@
               role="tab" aria-selected="false" aria-controls="ad-pane-insights">Insights</button>
       <button type="button" class="ad-tab" id="ad-tab-sites"
               role="tab" aria-selected="false" aria-controls="ad-pane-sites">Sites</button>
+      <button type="button" class="ad-tab" id="ad-tab-info"
+              role="tab" aria-selected="false" aria-controls="ad-pane-info">Site info</button>
     </nav>
   </header>
 
@@ -117,6 +119,32 @@
     </div>
 
     <div class="ad-list" id="ad-list"></div>
+  </section>
+
+  <!-- ------------------------------------------------------- site info -->
+  <!-- For the site chosen on Arrivals: where it is, said large enough to
+       read out at a car window, and the account a walk-up pays into when
+       they have no cash. Filled in by renderInfo(). Wardens see this and
+       Arrivals, nothing else. -->
+  <section id="ad-pane-info" class="ad-info" role="tabpanel" aria-labelledby="ad-tab-info" hidden>
+    <p class="ad-info-site" id="ad-info-site"></p>
+    <p class="ad-info-address" id="ad-info-address"></p>
+    <div class="ad-info-maps" id="ad-info-maps"></div>
+
+    <h2 class="ad-info-head">Pay by bank transfer</h2>
+    <p class="ad-empty" id="ad-info-bank-empty" hidden></p>
+    <dl class="ad-info-bank" id="ad-info-bank" hidden>
+      <dt>Account name</dt>
+      <dd id="ad-info-account-name"></dd>
+      <dt>Account number</dt>
+      <dd id="ad-info-account-number" class="ad-info-big"></dd>
+      <dt>Particulars</dt>
+      <dd>Their number plate</dd>
+      <dt>Reference</dt>
+      <dd id="ad-info-reference" class="ad-info-big"></dd>
+    </dl>
+    <p class="ad-hint">Sell it on Arrivals as &ldquo;Bank transfer&rdquo;. It is matched
+      to the car later, from the plate on the bank statement.</p>
   </section>
 
   <!-- --------------------------------------------------- tonight's state -->
