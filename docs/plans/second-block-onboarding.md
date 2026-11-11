@@ -1,6 +1,6 @@
 # Plan: events catalogue, blocks, and a gate screen that scales
 
-Revised twice on 11 Nov 2026. First written from a read of `staging` at
+Revised several times on 11 Nov 2026. First written from a read of `staging` at
 `4118276` and read-only queries against both Supabase projects; revised
 after Andrew set the direction in § 3. Every "today" statement was
 checked on that date; re-check before relying on one.
@@ -52,7 +52,7 @@ Andrew uses "zone" two ways. Neither is the code's `zone`.
    of park. Standard / Priority / Valet behave as a filter.
 3. **Sold out online is not sold out.** When the online share is gone
    but spaces are held for the gate, the page says walk-ups are still
-   available.
+   available. It says that there are some, never how many.
 4. **One price per block.** Each block has a price adjustment per type
    of park, measured from the reference site (86 Paice Ave), set when
    the block is set up. Every site in a block charges the same, so the
@@ -105,15 +105,25 @@ Andrew uses "zone" two ways. Neither is the code's `zone`.
     its tests, and they run on every pull request. The "no test
     framework" rule in `CLAUDE.md` is retired. The tests need a way past
     Google sign-in that exists on test only.
+15. **The second block is Gribblehurst Rd: number 70 and number 72.**
+    70 is the anchor. Its setup is what the test project holds for
+    "TEST Gribblehurst anchor", and 72 takes the test neighbour's: per
+    site, 3 Standard all sold online, and 2 Priority with 1 online and
+    1 held for the gate; Standard $40, Priority $50 as seeded; 70 at
+    -36.880692, 174.742279 and 72 about 20m along. No warden is named
+    yet: on test the block goes to the existing warden user, and on
+    production Andrew covers it until one is. Pictures come later, from
+    Andrew.
+16. **The first night with the second block is Robbie Williams,
+    24 Nov 2026.** See § 5a.
 
 ## 4. Still open — agents stop and ask, do not guess
 
 | # | Question | Default if Andrew says "your call" | Blocks |
 | --- | --- | --- | --- |
-| Q1 | Does the public page show how many walk-up spaces are held, or only that there are some? | Only that there are some. | A3 |
-| Q2 | Who supplies event pictures, and are they cleared for use? | Andrew uploads; nothing is scraped. | A1 |
-| Q3 | The second block: name, anchor address, its properties, each host, spaces per type, online share, the warden's Google email. | None. Needed for go-live only. | C1 |
-| Q4 | Which night is the first with the second block live? Sets the deadline. | — | C1 |
+| Q1 | What exactly is unfinished on staging? Nothing in the repository says, and § 5a cannot be scoped without it. | None. Must be answered. | § 5a |
+| Q2 | Who are the hosts of 70 and 72 Gribblehurst Rd (a name each is enough to start)? | Placeholder names, corrected before settlement. | § 5a |
+| Q3 | Are the seeded $40 and $50 the real Gribblehurst prices for Robbie Williams, or should the block be set as an adjustment from 86 Paice Ave's prices that night? | An adjustment, worked out from the two sets of prices on the day it is set up. | § 5a |
 
 ## 5. Order of work
 
@@ -141,6 +151,45 @@ P3  C1 go-live
 
 T0 goes first so that S0 — a 4,000-line reshuffle that must change
 nothing — has something to prove it changed nothing.
+
+## 5a. The first night: Robbie Williams, 24 Nov 2026
+
+That is thirteen days from the date of this plan. The whole of § 6 will
+not be built, tested and device-tested by then, and it should not be
+rushed onto a night with real money. So the first night runs on a small
+cut, and the rest follows after it.
+
+**For Robbie Williams — only this:**
+
+1. Finish whatever is unfinished on staging (Q1).
+2. The gate screen fix already on this branch: tapping a car listed
+   every site's copy of each parking type.
+3. Directions for a Gribblehurst booking. The confirmation page and
+   email already give the anchor address; `getting-here.html` is the
+   gap. The least that works: it takes a block and shows that block's
+   address and map links. The card and site guide (A4) can wait.
+4. Device-test staging with the Gribblehurst (test) block.
+5. Release: the five migrations from `20261105100000`, the four edge
+   functions, then Pages.
+6. On production: create the block and 70 and 72 from the Sites tab as
+   it is, add both to the Robbie Williams night, confirm for sale.
+
+**Worked around by hand that night, not built:**
+
+- *Price shown versus price charged (B1).* It can only go wrong when
+  two sites in one block have different adjustments. Give 70 and 72 the
+  same one and it cannot happen.
+- *Settlement (B7).* Work out the 30 / 20 / 50 from the night's totals
+  by hand.
+- *Warden.* Andrew covers the block; no invitation screen is needed.
+- *Walk-up card payments.* Cash, and Andrew's own tap-to-pay.
+
+**Not for that night:** the events catalogue, the Sites page, the
+selector, QR payments, overselling and lost spaces, the file split.
+T0 can start straight away in parallel, since it changes nothing the
+site serves, but it does not gate this release.
+
+Workstream order in § 5 applies to everything after the first night.
 
 ## 6. Workstreams
 
@@ -203,7 +252,7 @@ nothing — has something to prove it changed nothing.
 - Walk-up state: `v_block_tier_availability` gains a boolean for "held
   for the gate and not yet sold". A type that is sold out online with
   that flag set reads "Sold out online — walk-up spaces on the night",
-  with the block's address. Never a count unless Q1 says so.
+  with the block's address. Never a count.
 - Old links keep working: `book.html?event=<id>` sends the visitor to
   the right series page with that night chosen.
 - Done when: on a phone, Bruno Mars night two can be booked in four

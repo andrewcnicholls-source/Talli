@@ -459,6 +459,16 @@
     return state.tiers.filter(function (t) { return t.property_id === state.siteId; });
   }
 
+  // The types of space at the driveway one booking is at. Moving a car to
+  // another type is priced and counted there — the server looks the type
+  // up at the booking's own site — so the edit sheet must offer exactly
+  // those, not every site's copy of each type.
+  function tiersFor(r) {
+    if (!r || !r.property_id) return state.tiers;
+    var own = state.tiers.filter(function (t) { return t.property_id === r.property_id; });
+    return own.length ? own : state.tiers;
+  }
+
   function renderSitePicker() {
     var row = el('ad-site-row');
     var select = el('ad-site');
@@ -2152,7 +2162,7 @@
   // the moment the payment method does.
   function renderSellCharge() {
     var box = el('ad-sell-charge');
-    var tier = state.tiers.filter(function (t) { return t.code === state.sellTier; })[0];
+    var tier = tiersHere().filter(function (t) { return t.code === state.sellTier; })[0];
     if (!tier) {
       hide(box);
       return;
@@ -2355,7 +2365,7 @@
     var r = state.edit;
     var wrap = el('ad-edit-tiers');
     wrap.innerHTML = '';
-    var tiers = inGateOrder(state.tiers);
+    var tiers = inGateOrder(tiersFor(r));
 
     tiers.forEach(function (t) {
       var current = t.code === r.tier_code;
@@ -2415,7 +2425,7 @@
     var r = state.edit;
     var method = el('ad-edit-payment').value;
     var moved = state.editTier !== r.tier_code;
-    var tier = state.tiers.filter(function (t) { return t.code === state.editTier; })[0];
+    var tier = tiersFor(r).filter(function (t) { return t.code === state.editTier; })[0];
     var paid = r.status === 'paid';
     // What the database will land on by itself, before any deal typed here.
     var natural = moved && !paid && tier ? tier.price_cents : (r.amount_cents || 0);
