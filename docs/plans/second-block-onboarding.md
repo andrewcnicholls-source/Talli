@@ -108,7 +108,7 @@ Andrew uses "zone" two ways. Neither is the code's `zone`.
 | Q3 | Are extras (ponchos and the like) and card surcharges outside the pool? | Yes, both are Talli's. | B7 |
 | Q4 | Does the public page show how many walk-up spaces are held, or only that there are some? | Only that there are some. | A3 |
 | Q5 | Who supplies event pictures, and are they cleared for use? | Andrew uploads; nothing is scraped. | A1 |
-| Q6 | **The QR sheet Andrew uses today did not reach this plan** — the attachment was not received. A4 needs it as the reference: add the file to `docs/plans/` or describe it. | Build from the description in A4. | A4 |
+| Q6 | Today's code is drawn in the shape of a car by an outside QR design tool. Is a standard square code inside a car-shaped frame acceptable, or must the code itself be car-shaped? | A square code in a car frame: it scans more reliably and can be made for any site with no outside tool. | A4 |
 | Q7 | The second block: name, anchor address, its properties, each host, spaces per type, online share, the warden's Google email. | None. Needed for go-live only. | C1 |
 | Q8 | Which night is the first with the second block live? Sets the deadline. | — | C1 |
 
@@ -208,24 +208,33 @@ nothing — has something to prove it changed nothing.
 
 ### A4 — `site-guide-and-qr`
 
-Andrew uses a QR sheet many times every event: the address, a picture of
-the place, and a code that opens directions to it. This makes that sheet
-a page, for every site, that wardens can reach. See Q6.
+Andrew holds up a "Locate Us" card many times every event. The one in
+use is `docs/plans/reference/locate-us-qr-86-paice.jpg`: a QR code drawn
+as a car with a map pin at its centre, the words "Locate Us", and the
+address underneath. One scan opens Google Maps at the driveway. This
+makes that card something the system produces for every site, and that
+wardens can reach.
 
 - Each site and block gets a slug and a stable public link,
-  `/go/<slug>`: the address, a picture, map links that open navigation
-  to the right spot, walking time to the venue. Data comes from
+  `/go/<slug>`. **Scanning goes straight to navigation:** the link
+  redirects to Google Maps directions for that site's position, as the
+  card does today. The code never has to be reprinted if a position is
+  corrected. `/go/<slug>/info` is the page: address, picture, map links
+  for Google and Apple, walking time to the venue. Data comes from
   `property` and `block`, not from HTML.
+- **The card:** the code, a map pin at its centre, "Locate Us", and the
+  address in large type, in the look of the reference. See Q6 on the
+  car shape. Use high error correction so the pin does not cost scans,
+  and test every generated card with a phone camera at arm's length.
 - **Site guide**, the second page a warden has: for the site or block
-  chosen in the selector (B6), one screen with the address in large
-  type, the picture, and the QR for its `/go/` link, made to be held up
-  to a driver's window. Below it, the marked-up pictures of where and
+  chosen in the selector (B6), the card full-screen, made to be held up to a driver's
+  window. Below it, the marked-up pictures of where and
   how to park (`site_guide_url`, extended to several pictures with
   captions) and the fill notes.
-- The same sheet prints to A4 from the Sites page, for a sign.
+- The same card prints to A4 from the Sites page, for a sign.
 - Pictures upload from the Sites page to a public Storage bucket.
-- The confirmation page and email link to the booked block's `/go/`
-  page. `getting-here.html` with nothing chosen lists every active
+- The confirmation page and email link to the booked block's
+  `/go/<slug>/info` page. `getting-here.html` with nothing chosen lists every active
   block. `eden-park.html` loses its hard-coded walk from 86 Paice Ave.
 - Vendor one small QR library under `assets/vendor/`; B4 uses the same.
 - The footer's "86 Paice Ave" is the company address and stays.
