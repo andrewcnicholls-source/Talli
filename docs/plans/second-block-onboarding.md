@@ -109,21 +109,31 @@ Andrew uses "zone" two ways. Neither is the code's `zone`.
     70 is the anchor. Its setup is what the test project holds for
     "TEST Gribblehurst anchor", and 72 takes the test neighbour's: per
     site, 3 Standard all sold online, and 2 Priority with 1 online and
-    1 held for the gate; Standard $40, Priority $50 as seeded; 70 at
+    1 held for the gate; Standard $40, Priority $50, which are the real
+    prices for the first night; the host of 70 is Doyle, the host of 72
+    is not yet known; 70 at
     -36.880692, 174.742279 and 72 about 20m along. No warden is named
-    yet: on test the block goes to the existing warden user, and on
-    production Andrew covers it until one is. Pictures come later, from
+    yet; on test the block goes to the existing warden user. Pictures come later, from
     Andrew.
 16. **The first night with the second block is Robbie Williams,
     24 Nov 2026.** See § 5a.
+17. **Andrew cannot work both blocks on a night, so a warden runs one
+    without him.** That warden has no tap-to-pay. Until QR payments
+    exist they take cash or a bank transfer.
+18. **The warden's Site guide also carries the bank details** for a
+    transfer: account name, account number, and the reference to use,
+    which is the location.
+19. **"Unfinished" on staging means the things in this plan** — there is
+    no other half-built work to finish first.
 
 ## 4. Still open — agents stop and ask, do not guess
 
 | # | Question | Default if Andrew says "your call" | Blocks |
 | --- | --- | --- | --- |
-| Q1 | What exactly is unfinished on staging? Nothing in the repository says, and § 5a cannot be scoped without it. | None. Must be answered. | § 5a |
-| Q2 | Who are the hosts of 70 and 72 Gribblehurst Rd (a name each is enough to start)? | Placeholder names, corrected before settlement. | § 5a |
-| Q3 | Are the seeded $40 and $50 the real Gribblehurst prices for Robbie Williams, or should the block be set as an adjustment from 86 Paice Ave's prices that night? | An adjustment, worked out from the two sets of prices on the day it is set up. | § 5a |
+| Q1 | Who is the warden for the first night, which block do they take, and what Google account will they sign in with? | None. Needed before release. | § 5a |
+| Q2 | The bank account name and number wardens should show. Not to be written in this repository: Andrew enters them at release. | None. Needed before release. | § 5a |
+| Q3 | A transfer referenced only by location cannot be matched to a car. May the plate go in the bank's "particulars" field beside it? | Yes: reference = location, particulars = plate. | § 5a |
+| Q4 | Who is the host of 72 Gribblehurst Rd? | A placeholder name, corrected before the night is settled. | § 5a |
 
 ## 5. Order of work
 
@@ -159,35 +169,56 @@ not be built, tested and device-tested by then, and it should not be
 rushed onto a night with real money. So the first night runs on a small
 cut, and the rest follows after it.
 
-**For Robbie Williams — only this:**
+What shapes the cut: Andrew will be at one block and a warden, alone,
+at the other. That warden signs in with their own Google account, sees
+only their block, sells walk-ups, and cannot take a card.
 
-1. Finish whatever is unfinished on staging (Q1).
-2. The gate screen fix already on this branch: tapping a car listed
-   every site's copy of each parking type.
-3. Directions for a Gribblehurst booking. The confirmation page and
-   email already give the anchor address; `getting-here.html` is the
-   gap. The least that works: it takes a block and shows that block's
-   address and map links. The card and site guide (A4) can wait.
-4. Device-test staging with the Gribblehurst (test) block.
-5. Release: the five migrations from `20261105100000`, the four edge
+**Build for the first night — four small pieces, in this order:**
+
+| # | Branch | What |
+| --- | --- | --- |
+| R1 | `walk-up-defaults` | The walk-up form opens on cash. Bank transfer stays one tap away. Tap-to-pay is hidden from a `blocks`-scoped warden. Includes the fix already on the plan's branch: a car's edit sheet listed every site's copy of each parking type. |
+| R2 | `site-info-tab` | A second tab for wardens, "Site info", for the site chosen on Arrivals: the address in large type, the directions link, and the bank details — account name, account number, the reference (the location, Q3). The first slice of A4; the card, pictures and printing come later. `gate-ops` must allow a warden this one read and nothing else new. |
+| R3 | `bank-details-setting` | Where R2 reads from: two columns on `payment_setting`, returned only by `gate-ops` to a signed-in host or warden. Never in `assets/talli-config.js`, never readable with the anon key, never in this repository. Set by SQL at release; an edit screen comes with B3. |
+| R4 | `directions-per-block` | `getting-here.html` takes a block and shows that block's address and map links; the confirmation page and email link to it. Without it a Gribblehurst customer is sent to Paice Ave. |
+
+R1–R3 touch the gate screen and should be one agent, or three in
+sequence. R4 is independent.
+
+**Then:**
+
+1. Device-test staging with the Gribblehurst (test) block, signed in
+   once as the operator and once as the warden.
+2. Release: the migrations from `20261105100000` onward, the edge
    functions, then Pages.
-6. On production: create the block and 70 and 72 from the Sites tab as
-   it is, add both to the Robbie Williams night, confirm for sale.
+3. On production, from the Sites tab as it is: create the Gribblehurst
+   Rd block with 70 (host Doyle) as anchor and 72; 3 Standard and 2
+   Priority each, 1 Priority held for the gate; add both to the Robbie
+   Williams night at $40 and $50; confirm for sale.
+4. Invite the warden: one `host_user` row with `scope = 'blocks'` and
+   one `staff_block_access` row, as in
+   `supabase/test-only/seed-test-block.sql`. Enter the bank details.
+5. One real booking in the new block, followed end to end, and the
+   warden signs in on their own phone before the night.
 
 **Worked around by hand that night, not built:**
 
 - *Price shown versus price charged (B1).* It can only go wrong when
-  two sites in one block have different adjustments. Give 70 and 72 the
-  same one and it cannot happen.
+  two sites in one block have different adjustments. 70 and 72 are
+  priced the same, so it cannot happen.
 - *Settlement (B7).* Work out the 30 / 20 / 50 from the night's totals
-  by hand.
-- *Warden.* Andrew covers the block; no invitation screen is needed.
-- *Walk-up card payments.* Cash, and Andrew's own tap-to-pay.
+  by hand. Bank transfers are matched against the bank statement.
+- *Warden invitation (B8).* The two rows of SQL above.
+- *Overselling and lost spaces (B5).* The warden phones Andrew, who
+  adds a space on Tonight.
+
+**If there is time, and only if it is device-tested:** QR card payments
+(B4), so the lone warden can take a card. Otherwise cash and bank
+transfer, as decided.
 
 **Not for that night:** the events catalogue, the Sites page, the
-selector, QR payments, overselling and lost spaces, the file split.
-T0 can start straight away in parallel, since it changes nothing the
-site serves, but it does not gate this release.
+selector, the file split. T0 can start straight away in parallel, since
+it changes nothing the site serves, but it does not gate this release.
 
 Workstream order in § 5 applies to everything after the first night.
 
@@ -296,6 +327,9 @@ wardens can reach.
   window. Below it, the marked-up pictures of where and
   how to park (`site_guide_url`, extended to several pictures with
   captions) and the fill notes.
+- The Site guide also shows the bank transfer details — account name,
+  account number, the reference for that site — built first as R2 and
+  R3 in § 5a. The public `/go/` page never shows them.
 - The same card prints to A4 from the Sites page, for a sign.
 - Pictures upload from the Sites page to a public Storage bucket.
 - The confirmation page and email link to the booked block's
