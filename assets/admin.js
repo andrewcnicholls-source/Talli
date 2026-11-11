@@ -261,6 +261,7 @@
   function signedOut(err) {
     AUTH.forget();
     state.who = null;
+    state.bank = null;
     // A half-finished walk-up sale behind the card is a walk-up sale
     // somebody will try to submit again after signing back in.
     ['ad-new', 'ad-sell', 'ad-price', 'ad-check'].forEach(function (id) {
@@ -282,7 +283,8 @@
     el('ad-tab-sites').hidden = !op;
     el('ad-new-open').hidden = !op;
     offerTapToPay(op);
-    if (!op && state.tab !== 'gate') showTab('gate');
+    // Site info is a warden's second tab, and Andrew's too.
+    if (!op && state.tab !== 'gate' && state.tab !== 'info') showTab('gate');
   }
 
   // Tap to pay runs through Andrew's terminal and Andrew's Stripe account,
@@ -555,6 +557,7 @@
     renderPricePicker();
     renderExtras();
     renderMoney();
+    renderInfo();
     measureHead();
   }
 
@@ -2630,7 +2633,7 @@
   /* ---------------------------------------------------------------- tabs */
 
   var TABS = { gate: 'ad-pane-gate', night: 'ad-pane-night', insights: 'ad-pane-insights',
-    sites: 'ad-pane-sites' };
+    sites: 'ad-pane-sites', info: 'ad-pane-info' };
 
   function showTab(which) {
     state.tab = which;
@@ -2646,7 +2649,84 @@
     measureHead();
     if (which === 'insights') openInsights();
     if (which === 'sites') openSites();
+    if (which === 'info') openInfo();
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  /* --------------------------------------------------------- site info */
+
+  // The bank details come from gate-ops and nowhere else: the anon key
+  // cannot read them, and they are never in this repository. Fetched the
+  // first time the tab opens, and again if that failed.
+  function openInfo() {
+    renderInfo();
+    if (state.bank) return;
+    call('bank_details', {})
+      .then(function (data) {
+        state.bank = data;
+        state.bankFailed = false;
+        renderInfo();
+      })
+      .catch(function (err) {
+        if (fatal(err)) return;
+        state.bankFailed = true;
+        renderInfo();
+      });
+  }
+
+  // What the driver types into the reference field: the location, which is
+  // the block (the pool a night is settled by), or the site when it has no
+  // block. Banks in New Zealand take twelve characters there.
+  function bankReference(site) {
+    var where = (site && (site.block_name || site.name)) || '';
+    return where.replace(/\s*\(.*?\)\s*/g, ' ').trim().slice(0, 12).trim();
+  }
+
+  function renderInfo() {
+    var pane = el('ad-pane-info');
+    if (!pane || pane.hidden) return;
+    var site = currentSite() || state.sites[0] || null;
+
+    text(el('ad-info-site'), site
+      ? site.name + (site.block_name ? ' · ' + site.block_name : '') +
+        (multiSite() ? ' — change site on Arrivals' : '')
+      : 'No site selling tonight.');
+    text(el('ad-info-address'), site ? (site.address || site.name) : '');
+
+    var maps = el('ad-info-maps');
+    maps.innerHTML = '';
+    if (site) {
+      var to = site.lat != null && site.lng != null
+        ? site.lat + ',' + site.lng
+        : (site.address || site.name);
+      var google = make('a', '', 'Google Maps');
+      google.href = 'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(to);
+      var apple = make('a', '', 'Apple Maps');
+      apple.href = 'https://maps.apple.com/?daddr=' + encodeURIComponent(to);
+      [google, apple].forEach(function (a) {
+        a.target = '_blank';
+        a.rel = 'noopener';
+        maps.appendChild(a);
+      });
+    }
+
+    var bank = state.bank;
+    var empty = el('ad-info-bank-empty');
+    var list = el('ad-info-bank');
+    var ready = bank && bank.account_name && bank.account_number;
+    if (!ready) {
+      hide(list);
+      text(empty, state.bankFailed ? 'Could not load the bank details. Try the tab again.'
+        : bank ? 'Bank details are not set up yet. Ask Andrew.'
+        : 'Loading…');
+      show(empty);
+      return;
+    }
+    hide(empty);
+    text(el('ad-info-account-name'), bank.account_name);
+    text(el('ad-info-account-number'), bank.account_number);
+    text(el('ad-info-reference'), bankReference(site) || '—');
+    show(list);
   }
 
   /* ------------------------------------------------------------- sites */
@@ -2910,6 +2990,7 @@
     el('ad-site').addEventListener('change', function (e) { setSite(e.target.value); });
     el('ad-tab-insights').addEventListener('click', function () { showTab('insights'); });
     el('ad-tab-sites').addEventListener('click', function () { showTab('sites'); });
+    el('ad-tab-info').addEventListener('click', function () { showTab('info'); });
     el('ad-site-pick').addEventListener('change', function (e) { renderSiteForm(e.target.value); });
 
     el('ad-insight-event').addEventListener('change', function () {

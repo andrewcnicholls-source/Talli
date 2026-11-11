@@ -925,6 +925,49 @@ else
 fi
 
 # ---------------------------------------------------------------------
+head "Bank details reach a signed-in host or warden, and nobody else"
+# ---------------------------------------------------------------------
+# The account walk-ups pay into is shown on the warden's Site info tab.
+# It lives in bank_transfer_setting, which the anon key must not read —
+# not payment_setting, which the booking page reads with it — and the
+# real values are entered at release, never committed.
+BANK_MIG="$(grep -l 'create table if not exists bank_transfer_setting' supabase/migrations/*.sql | sed -n 1p)"
+if [ -z "$BANK_MIG" ]; then
+  fail "no migration creates bank_transfer_setting"
+else
+  if grep -q 'revoke all on bank_transfer_setting from public, anon, authenticated' "$BANK_MIG" &&
+     grep -q 'alter table bank_transfer_setting enable row level security' "$BANK_MIG"; then
+    pass "bank_transfer_setting has row level security and no grant to anon or authenticated"
+  else
+    fail "bank_transfer_setting may be readable with the anon key"
+  fi
+  if grep -lE '(grant[^;]*on (table )?(public\.)?bank_transfer_setting[^;]*to[^;]*(anon|authenticated)|create policy[^;]*on (public\.)?bank_transfer_setting)' \
+       supabase/migrations/*.sql >/dev/null 2>&1; then
+    fail "a migration grants or opens bank_transfer_setting to the anon key"
+  else
+    pass "no migration opens bank_transfer_setting to anon or authenticated"
+  fi
+fi
+if grep -q "account_name\|account_number\|bank_transfer_setting" assets/talli-config.js assets/booking.js; then
+  fail "bank details are referenced from a page the public loads"
+else
+  pass "the public pages never ask for the bank details"
+fi
+REAL_ACCT=$(git grep -nE '\b[0-9]{2}-[0-9]{4}-[0-9]{7}-[0-9]{2,3}\b' -- . ':!scripts/check.sh' \
+  | grep -vE '\b00-0000-0000000-00\b' || true)
+if [ -z "$REAL_ACCT" ]; then
+  pass "no bank account number is committed (only the all-zero test fixture)"
+else
+  fail "a bank account number is committed — enter it at release instead"
+  printf '      %s\n' "$REAL_ACCT"
+fi
+if grep -q "case 'bank_details'" supabase/functions/gate-ops/index.ts; then
+  pass "gate-ops serves the bank details after its sign-in checks"
+else
+  fail "gate-ops no longer serves the bank details — the Site info tab will be empty"
+fi
+
+# ---------------------------------------------------------------------
 head "Edge function TypeScript"
 # ---------------------------------------------------------------------
 # The functions import Stripe from esm.sh and supabase-js from jsr.io, so

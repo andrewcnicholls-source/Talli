@@ -1628,6 +1628,11 @@ footer a { color: var(--blue); }
   cursor: pointer;
 }
 .ad-tab.is-on { background: var(--white); color: var(--blue-deep); font-weight: 500; }
+/* Andrew has five tabs; on a phone they share the width rather than run
+   off the edge. A warden has two and never notices. */
+@media (max-width: 480px) {
+  .ad-tab { min-width: 0; padding: 11px 2px; font-size: 0.76rem; letter-spacing: 0.02em; }
+}
 
 /* ---------- Insights: looking back at a finished night ---------- */
 .ad-insight-pick { padding: 14px 16px 16px; }
@@ -2391,6 +2396,23 @@ textarea.ad-input { resize: vertical; min-height: 56px; font-family: inherit; }
 .ad-site-line { display: flex; gap: 8px; align-items: center; padding: 4px 0; }
 .ad-site-name { flex: 1; min-width: 0; }
 .ad-chip.is-pending, .ad-chip.is-paused { color: #8a5a00; background: #fff4dc; border-color: #f0dcae; }
+
+/* ------------------------------------------------ site info (wardens) */
+/* Read out at a car window, often in the dark: the address and the two
+   numbers a driver types into their banking app are the large type. */
+.ad-info { padding: 18px 16px 28px; }
+.ad-info-site { margin: 0 0 4px; color: var(--grey); font-size: 0.95rem; }
+.ad-info-address { margin: 0 0 14px; font-size: 1.6rem; line-height: 1.25; font-weight: 500; color: var(--ink); }
+.ad-info-maps { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 26px; }
+.ad-info-maps a {
+  flex: 1 1 140px; text-align: center; padding: 12px 10px; border-radius: 6px;
+  background: var(--blue); color: var(--white); text-decoration: none; font-weight: 500;
+}
+.ad-info-head { font-size: 1.05rem; margin: 0 0 10px; color: var(--blue-deep); }
+.ad-info-bank { margin: 0 0 14px; display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; align-items: baseline; }
+.ad-info-bank dt { color: var(--grey); font-size: 0.9rem; }
+.ad-info-bank dd { margin: 0; font-size: 1.1rem; overflow-wrap: anywhere; }
+.ad-info-bank dd.ad-info-big { font-size: 1.45rem; font-weight: 500; font-variant-numeric: tabular-nums; }
 
 /* ------------------------------------------------ booking page map */
 /* Square, so the ground around Eden Park reads the same in every direction. */

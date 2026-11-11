@@ -72,3 +72,10 @@ on conflict do nothing;
 -- anchor, Site B a driveway about 20m along.
 update property set lat = -36.880692, lng = 174.742279 where id = '22222222-2222-2222-2222-2222222222a1';
 update property set lat = -36.880780, lng = 174.742480 where id = '22222222-2222-2222-2222-2222222222a2';
+
+-- Invented bank details for the warden's Site info tab. The real account
+-- is entered on production at release and never written anywhere in this
+-- repository.
+update bank_transfer_setting
+   set account_name = 'TEST Talli', account_number = '00-0000-0000000-00', updated_at = now()
+ where id;
