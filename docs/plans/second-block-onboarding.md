@@ -93,7 +93,10 @@ Andrew uses "zone" two ways. Neither is the code's `zone`.
     its host: marginal spaces only exist if they can be filled, and a
     lost one was a bonus that did not come off. Extras are split 10%
     warden, 90% Talli, which also covers the cost of the goods. Card
-    surcharges are outside every pool and are Talli's.
+    surcharges are outside every pool and are Talli's. A refund comes
+    out of the pool for the night it was booked for. The system works
+    out the wardens' amount for a block; **Andrew allocates it between
+    the wardens himself**, so he can adjust it.
 12. **For sport, the series is the team.** "Blues", with each home game
     a night.
 13. **The gate screen has one selector that everything follows:** all,
@@ -107,14 +110,10 @@ Andrew uses "zone" two ways. Neither is the code's `zone`.
 
 | # | Question | Default if Andrew says "your call" | Blocks |
 | --- | --- | --- | --- |
-| Q1 | Who is "the warden" for the 20% when two people work one block, or one person covers two? And when Andrew works a block himself? | Split equally between the wardens who checked in or sold a car in that block that night. Andrew is paid as a warden like anyone else. | B7 |
-| Q2 | Is the extras 10% shared the same way as the parking 20%, or paid to whoever handed the item over? | The same way, per block. | B7 |
-| Q3 | Does a refund come out of the pool for the night it was booked for? | Yes. | B7 |
-| Q4 | Does the public page show how many walk-up spaces are held, or only that there are some? | Only that there are some. | A3 |
-| Q5 | Who supplies event pictures, and are they cleared for use? | Andrew uploads; nothing is scraped. | A1 |
-| Q6 | Today's code is drawn in the shape of a car by an outside QR design tool. Is a standard square code inside a car-shaped frame acceptable, or must the code itself be car-shaped? | A square code in a car frame: it scans more reliably and can be made for any site with no outside tool. | A4 |
-| Q7 | The second block: name, anchor address, its properties, each host, spaces per type, online share, the warden's Google email. | None. Needed for go-live only. | C1 |
-| Q8 | Which night is the first with the second block live? Sets the deadline. | — | C1 |
+| Q1 | Does the public page show how many walk-up spaces are held, or only that there are some? | Only that there are some. | A3 |
+| Q2 | Who supplies event pictures, and are they cleared for use? | Andrew uploads; nothing is scraped. | A1 |
+| Q3 | The second block: name, anchor address, its properties, each host, spaces per type, online share, the warden's Google email. | None. Needed for go-live only. | C1 |
+| Q4 | Which night is the first with the second block live? Sets the deadline. | — | C1 |
 
 ## 5. Order of work
 
@@ -204,7 +203,7 @@ nothing — has something to prove it changed nothing.
 - Walk-up state: `v_block_tier_availability` gains a boolean for "held
   for the gate and not yet sold". A type that is sold out online with
   that flag set reads "Sold out online — walk-up spaces on the night",
-  with the block's address. Never a count unless Q4 says so.
+  with the block's address. Never a count unless Q1 says so.
 - Old links keep working: `book.html?event=<id>` sends the visitor to
   the right series page with that night chosen.
 - Done when: on a phone, Bruno Mars night two can be booked in four
@@ -232,10 +231,17 @@ wardens can reach.
   Walking time to the venue sits with the directions. Data comes from
   `property` and `block`, not from HTML. Because the code points at the
   page, a printed card never needs reprinting if a position is fixed.
-- **The card:** the code, a map pin at its centre, "Locate Us", and the
-  address in large type, in the look of the reference. See Q6 on the
-  car shape. Use high error correction so the pin does not cost scans,
-  and test every generated card with a phone camera at arm's length.
+- **The card.** Many people do not scan it; they photograph it and
+  read it later. So it has to work as a picture, and be recognised at
+  a glance as Talli's parking:
+  - a car, as in the reference — a standard square code set inside a
+    car outline is fine, the car is there for recognition;
+  - the name "Talli Parking";
+  - "Locate Us" and the address in large type;
+  - the page's short web address printed in text, so a photo alone is
+    enough to get there.
+  Use high error correction, and test every generated card with a
+  phone camera at arm's length and from a photo of the card.
 - **Site guide**, the second page a warden has: for the site or block
   chosen in the selector (B6), the card full-screen, made to be held up to a driver's
   window. Below it, the marked-up pictures of where and
@@ -366,12 +372,18 @@ from Tonight. Operator only.
 
 - **The rule (§ 3.11),** per night and block:
   - Parking pool = parking takings, less refunds, excluding extras and
-    card surcharges. 30% Talli, 20% wardens (Q1), 50% hosts.
+    card surcharges. 30% Talli, 20% wardens, 50% hosts.
   - A host's part of the 50% = their spaces provided ÷ the block's
     spaces provided. Spaces provided = the spaces the site was
     confirmed for that night, filled or not, **minus spaces recorded as
     lost** (B5). Talli Limited is a host like any other for 86 Paice Ave.
-  - Extras pool = extras takings: 10% wardens (Q2), 90% Talli.
+  - Extras pool = extras takings: 10% wardens, 90% Talli.
+  - **Wardens' amount** for a block and night = 20% of parking plus 10%
+    of extras. The system stops there. Andrew allocates it between the
+    wardens on the settlement screen, which lists who checked in or
+    sold in that block as a starting point. The allocation must add up
+    to the amount, can be changed until the night is settled, and
+    records who set it.
   - Card surcharges: Talli, outside both pools.
   - The percentages are settings, not constants in code, and the values
     in force are stored with each settled night.
@@ -386,8 +398,8 @@ from Tonight. Operator only.
   Editable host details: real email, payout notes. `create_site` today
   writes a placeholder address.
 - Report, per night and per block: takings by channel and payment type,
-  both pools, each host's spaces and amount owed, each warden's amount
-  owed, and cash held by each warden. Report only. No Stripe Connect here.
+  both pools, each host's spaces and amount owed, the wardens' amount and
+  its allocation, and cash held by each warden. Report only. No Stripe Connect here.
 - Done when: on test, moving every car to one host's driveway, or
   raising the price halfway through sales, changes no host's figure;
   recording a lost space lowers only that host's; and every night's
