@@ -886,6 +886,45 @@ else
 fi
 
 # ---------------------------------------------------------------------
+head "A walk-up opens on cash, and a warden is never offered tap to pay"
+# ---------------------------------------------------------------------
+# A warden working a block alone has no terminal and no access to Andrew's
+# Stripe account. The form opening on tap to pay would have them recording
+# card sales nobody took. The screen stops offering it; gate-ops decides.
+SELL_FIRST=$(python3 - <<'PY2'
+import re
+s = open('admin.html', encoding='utf-8').read()
+m = re.search(r'<select id="ad-sell-payment"[^>]*>(.*?)</select>', s, re.S)
+opts = re.findall(r'<option value="([^"]+)"([^>]*)>', m.group(1)) if m else []
+sel = [v for v, a in opts if 'selected' in a]
+print((sel[0] if sel else (opts[0][0] if opts else '')))
+PY2
+)
+if [ "$SELL_FIRST" = "cash" ]; then
+  pass "the walk-up form opens on cash"
+else
+  fail "the walk-up form opens on '${SELL_FIRST:-nothing}', not cash"
+fi
+
+if grep -q "offerTapToPay(op)" assets/admin.js; then
+  pass "the gate screen takes tap to pay out of a warden's lists"
+else
+  fail "applyRole no longer hides tap to pay from a warden"
+fi
+
+GATE=supabase/functions/gate-ops/index.ts
+if grep -q "if (!caller.all && body.payment_method === 'tap_to_pay')" "$GATE"; then
+  pass "gate-ops refuses a warden's walk-up sold by tap to pay"
+else
+  fail "gate-ops sells by tap to pay for a warden"
+fi
+if grep -q "if (!caller.all && method === 'tap_to_pay')" "$GATE"; then
+  pass "gate-ops refuses a warden moving a booking onto tap to pay"
+else
+  fail "gate-ops lets a warden record a booking as tap to pay"
+fi
+
+# ---------------------------------------------------------------------
 head "Edge function TypeScript"
 # ---------------------------------------------------------------------
 # The functions import Stripe from esm.sh and supabase-js from jsr.io, so

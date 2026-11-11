@@ -281,7 +281,33 @@
     el('ad-tab-insights').hidden = !op;
     el('ad-tab-sites').hidden = !op;
     el('ad-new-open').hidden = !op;
+    offerTapToPay(op);
     if (!op && state.tab !== 'gate') showTab('gate');
+  }
+
+  // Tap to pay runs through Andrew's terminal and Andrew's Stripe account,
+  // which a warden has neither of. So a warden is not offered it, on the
+  // walk-up form or when fixing a booking. The option is taken out of the
+  // list rather than hidden, because Safari on a phone shows a hidden
+  // <option> anyway. gate-ops refuses it from a warden as well; this only
+  // stops offering what the server would refuse.
+  var tapOptions = null;
+
+  function offerTapToPay(yes) {
+    if (!tapOptions) {
+      tapOptions = ['ad-sell-payment', 'ad-edit-payment'].map(function (id) {
+        var select = el(id);
+        var opt = select.querySelector('option[value="tap_to_pay"]');
+        return { select: select, opt: opt, next: opt.nextSibling };
+      });
+    }
+    tapOptions.forEach(function (t) {
+      if (yes && !t.opt.parentNode) t.select.insertBefore(t.opt, t.next);
+      if (!yes && t.opt.parentNode) t.select.removeChild(t.opt);
+    });
+    // A walk-up half-typed by Andrew on this phone before a warden signed in.
+    var sell = el('ad-sell-payment');
+    if (!yes && !sell.value) sell.value = 'cash';
   }
 
   function renderWho() {
@@ -2325,6 +2351,7 @@
     // Card, cash, bank transfer, or not yet — nothing else is taken now. A
     // booking recorded some other way before that (free, other) is shown as
     // it was, greyed out, rather than silently reading as the first option.
+    // For a warden that includes tap to pay, which is not in their list.
     [].slice.call(pay.querySelectorAll('option.is-legacy')).forEach(function (o) {
       o.remove();
     });
