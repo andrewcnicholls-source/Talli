@@ -84,12 +84,16 @@ Andrew uses "zone" two ways. Neither is the code's `zone`.
     Standard booking is placed, in order: a free Standard space; then a
     Priority space at the warden's current site; then a Priority space
     at another site in the block. Never Valet.
-11. **Hosts are paid on the spaces they provide, not on which cars
-    happened to land on their driveway.** A night's parking takings for
-    a block are pooled and shared between its hosts in proportion to the
-    spaces each provided that night. Arrival order, where a car was
+11. **A block's takings are pooled and split 30 / 20 / 50.** For each
+    night and block, parking takings are pooled: 30% Talli, 20% the
+    warden, 50% the hosts. The hosts' half is shared in proportion to
+    the spaces each provided that night. Arrival order, where a car was
     placed, and what price that buyer happened to pay must not change
-    what a host earns.
+    what a host earns. A space lost on the night does **not** count for
+    its host: marginal spaces only exist if they can be filled, and a
+    lost one was a bonus that did not come off. Extras are split 10%
+    warden, 90% Talli, which also covers the cost of the goods. Card
+    surcharges are outside every pool and are Talli's.
 12. **For sport, the series is the team.** "Blues", with each home game
     a night.
 13. **The gate screen has one selector that everything follows:** all,
@@ -103,9 +107,9 @@ Andrew uses "zone" two ways. Neither is the code's `zone`.
 
 | # | Question | Default if Andrew says "your call" | Blocks |
 | --- | --- | --- | --- |
-| Q1 | What share of a block's pooled takings does Talli keep, and is it the same for every block? | None. Must be answered. | B7 |
-| Q2 | "Spaces provided": the spaces a site was confirmed for that night, whether or not they filled? And does a space lost on the night still count for its host? | Confirmed spaces, filled or not. A lost space still counts. | B7 |
-| Q3 | Are extras (ponchos and the like) and card surcharges outside the pool? | Yes, both are Talli's. | B7 |
+| Q1 | Who is "the warden" for the 20% when two people work one block, or one person covers two? And when Andrew works a block himself? | Split equally between the wardens who checked in or sold a car in that block that night. Andrew is paid as a warden like anyone else. | B7 |
+| Q2 | Is the extras 10% shared the same way as the parking 20%, or paid to whoever handed the item over? | The same way, per block. | B7 |
+| Q3 | Does a refund come out of the pool for the night it was booked for? | Yes. | B7 |
 | Q4 | Does the public page show how many walk-up spaces are held, or only that there are some? | Only that there are some. | A3 |
 | Q5 | Who supplies event pictures, and are they cleared for use? | Andrew uploads; nothing is scraped. | A1 |
 | Q6 | Today's code is drawn in the shape of a car by an outside QR design tool. Is a standard square code inside a car-shaped frame acceptable, or must the code itself be car-shaped? | A square code in a car frame: it scans more reliably and can be made for any site with no outside tool. | A4 |
@@ -211,17 +215,23 @@ nothing — has something to prove it changed nothing.
 Andrew holds up a "Locate Us" card many times every event. The one in
 use is `docs/plans/reference/locate-us-qr-86-paice.jpg`: a QR code drawn
 as a car with a map pin at its centre, the words "Locate Us", and the
-address underneath. One scan opens Google Maps at the driveway. This
+address underneath. This
 makes that card something the system produces for every site, and that
 wardens can reach.
 
-- Each site and block gets a slug and a stable public link,
-  `/go/<slug>`. **Scanning goes straight to navigation:** the link
-  redirects to Google Maps directions for that site's position, as the
-  card does today. The code never has to be reprinted if a position is
-  corrected. `/go/<slug>/info` is the page: address, picture, map links
-  for Google and Apple, walking time to the venue. Data comes from
-  `property` and `block`, not from HTML.
+- Each site and block gets a slug and a stable public page on the
+  Talli site, `/go/<slug>`. **Scanning opens that page, not Google Maps
+  directly:** Andrew sends people to the website on purpose, for the
+  directions and to bring them back to book next time. So the page has
+  two jobs, in this order on a phone:
+  1. Directions: the address, a picture, and large "Open in Google
+     Maps" and "Open in Apple Maps" buttons to that site's position —
+     one tap from scan to navigation.
+  2. Next time: the upcoming events with parking at this block, each
+     linking to its series page (A2).
+  Walking time to the venue sits with the directions. Data comes from
+  `property` and `block`, not from HTML. Because the code points at the
+  page, a printed card never needs reprinting if a position is fixed.
 - **The card:** the code, a map pin at its centre, "Locate Us", and the
   address in large type, in the look of the reference. See Q6 on the
   car shape. Use high error correction so the pin does not cost scans,
@@ -234,14 +244,15 @@ wardens can reach.
 - The same card prints to A4 from the Sites page, for a sign.
 - Pictures upload from the Sites page to a public Storage bucket.
 - The confirmation page and email link to the booked block's
-  `/go/<slug>/info` page. `getting-here.html` with nothing chosen lists every active
+  `/go/<slug>` page. `getting-here.html` with nothing chosen lists every active
   block. `eden-park.html` loses its hard-coded walk from 86 Paice Ave.
 - Vendor one small QR library under `assets/vendor/`; B4 uses the same.
 - The footer's "86 Paice Ave" is the company address and stays.
 - A warden sees the guide only for sites in their blocks.
 - Done when: a warden opens the guide for their site in two taps, a
-  driver scanning it gets directions to that driveway, and a booking in
-  a second block never shows a Paice Ave direction.
+  driver scanning it lands on that site's page and reaches navigation
+  in one more tap, the page offers the next events to book, and a
+  booking in a second block never shows a Paice Ave direction.
 
 ### B1 — `block-pricing`
 
@@ -353,9 +364,17 @@ from Tonight. Operator only.
 
 ### B7 — `host-settlement`
 
-- **The rule (§ 3.11):** for each night and block, pool the parking
-  takings, take Talli's share (Q1), and split the rest between the
-  block's hosts in proportion to the spaces each provided (Q2).
+- **The rule (§ 3.11),** per night and block:
+  - Parking pool = parking takings, less refunds, excluding extras and
+    card surcharges. 30% Talli, 20% wardens (Q1), 50% hosts.
+  - A host's part of the 50% = their spaces provided ÷ the block's
+    spaces provided. Spaces provided = the spaces the site was
+    confirmed for that night, filled or not, **minus spaces recorded as
+    lost** (B5). Talli Limited is a host like any other for 86 Paice Ave.
+  - Extras pool = extras takings: 10% wardens (Q2), 90% Talli.
+  - Card surcharges: Talli, outside both pools.
+  - The percentages are settings, not constants in code, and the values
+    in force are stored with each settled night.
 - `booking.host_earnings_cents` and `platform_fee_cents` are written at
   hold time from the booked site's host. Under this rule they are wrong
   by design. Stop reading them; compute settlement from the night's
@@ -363,13 +382,16 @@ from Tonight. Operator only.
 - A snapshot of "spaces provided" per site per night is taken when the
   night closes, so a later change to a site's defaults cannot rewrite a
   settled night.
-- Editable host details: real email, payout notes. `create_site` today
-  hard-codes a 50% share and a placeholder address.
+- `host.platform_share` no longer decides anything; stop reading it.
+  Editable host details: real email, payout notes. `create_site` today
+  writes a placeholder address.
 - Report, per night and per block: takings by channel and payment type,
-  the pool, each host's spaces and amount owed, cash held by each
-  warden. Report only. No Stripe Connect here.
+  both pools, each host's spaces and amount owed, each warden's amount
+  owed, and cash held by each warden. Report only. No Stripe Connect here.
 - Done when: on test, moving every car to one host's driveway, or
-  raising the price halfway through sales, changes no host's figure.
+  raising the price halfway through sales, changes no host's figure;
+  recording a lost space lowers only that host's; and every night's
+  shares add up to its takings to the cent.
 
 ### B8 — `warden-access`
 
