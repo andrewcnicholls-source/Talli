@@ -108,6 +108,13 @@
     el('cf-reference').textContent = b.reference;
 
     // "On the night" names the actual place, not a hardcoded house.
+    // Directions to the block they booked, not the default Paice Ave page.
+    var block = b.property && b.property.block_id;
+    var directions = el('cf-directions');
+    if (directions && block) {
+      directions.href = 'getting-here.html?block=' + encodeURIComponent(block);
+    }
+
     var come = el('cf-come-to');
     if (come && whereText(b)) {
       come.textContent = 'Come to ' + whereText(b) + ' — a Talli warden will meet you and show you where to park.';
