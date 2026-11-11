@@ -26,6 +26,7 @@
 // =====================================================================
 
 import { createClient } from 'jsr:@supabase/supabase-js@2'
+import Stripe from 'https://esm.sh/stripe@18?target=denonext'
 
 const db = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -35,11 +36,40 @@ const db = createClient(
 
 const ALLOWED_ORIGIN = Deno.env.get('ALLOWED_ORIGIN') ?? '*'
 
+// ---------------------------------------------------------------------
+//  CARD BY QR (plan B4)
+//
+//  A walk-up paying by card scans a QR on the warden's phone and pays on
+//  their own. The warden never signs in to Stripe and no Stripe key ever
+//  reaches a browser: this function makes the Checkout Session, for what
+//  the database says the booking owes, and hands back only its link.
+//
+//  Where Stripe sends the driver afterwards is fixed per project and never
+//  read from a secret, for the reason create-checkout gives (8 Sep 2026): a
+//  test payment must never land on the live site, nor a real one on staging.
+// ---------------------------------------------------------------------
+const TEST_PROJECT_REF = 'uhdoverwvlxvyyctskle'
+const IS_TEST = (Deno.env.get('SUPABASE_URL') ?? '').includes(TEST_PROJECT_REF)
+const SITE_URL = IS_TEST ? 'https://staging.talli.pages.dev' : 'https://talli.co.nz'
+
+// Stripe will not make a session that ends sooner than 30 minutes out.
+const CARD_LINK_MINUTES = 31
+
+let _stripe: Stripe | null = null
+function stripeOrNull(): Stripe | null {
+  if (_stripe) return _stripe
+  const key = Deno.env.get('STRIPE_SECRET_KEY')
+  if (!key) return null
+  _stripe = new Stripe(key)
+  return _stripe
+}
+
 // This function has no TEST-PROJECT FALLBACKS block any more, and should
 // never grow one back. The only thing it used to fall back to was a known
 // gate passphrase on test; access is now a signed-in host on both projects,
 // which is the same code path in both places and therefore the one actually
-// exercised by device testing.
+// exercised by device testing. (IS_TEST below picks only where Stripe sends
+// a walk-up after paying by QR. It decides nothing about who gets in.)
 
 const cors = {
   'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
@@ -519,6 +549,133 @@ Deno.serve(async (req) => {
         return json({
           account_name: data?.account_name ?? null,
           account_number: data?.account_number ?? null,
+        })
+      }
+
+      // A Stripe link for a walk-up who owes, shown on the screen as a QR.
+      // Owing means the pay-later state: held, no hold clock. The amount is
+      // the booking's own space and extras plus the card surcharge, worked
+      // out here from the database; nothing from the request is an amount.
+      // An open link for the same amount is handed back again rather than
+      // made twice. One for a different amount is expired first, so the
+      // driver can never pay an old figure as well as the new one.
+      case 'card_link': {
+        const blocked = await bookingGuard()
+        if (blocked) return blocked
+        const id = String(body.booking_id)
+        const stripe = stripeOrNull()
+        if (!stripe) {
+          return json({ error: 'Card payments are not set up on this project.',
+            code: 'NO_STRIPE' }, 503)
+        }
+        const { data: bk, error: bErr } = await db.from('booking')
+          .select('id, status, channel, payment_method, hold_expires_at, amount_cents, ' +
+                  'addons_cents, currency, customer_email, vehicle_rego, tier_code, ' +
+                  'event_id, property_id, stripe_checkout_session_id')
+          .eq('id', id).maybeSingle()
+        if (bErr) throw bErr
+        const b = bk as Row | null
+        if (!b || b.channel !== 'gate' || b.status !== 'held' ||
+            b.payment_method !== 'unpaid' || b.hold_expires_at) {
+          return json({ error: 'Only a walk-up who still owes can pay by QR.',
+            code: 'NOT_OWING' }, 409)
+        }
+
+        const base = (b.amount_cents ?? 0) + (b.addons_cents ?? 0)
+        const { data: sur, error: sErr } = await db.rpc('card_surcharge_cents', {
+          p_base_cents: base, p_payment_method: 'stripe',
+        })
+        if (sErr) throw sErr
+        const surcharge = Number(sur ?? 0)
+        const total = base + surcharge
+        if (total <= 0) {
+          return json({ error: 'Nothing to pay on that booking.', code: 'NOTHING_OWED' }, 409)
+        }
+
+        const old = String(b.stripe_checkout_session_id ?? '')
+        if (old.startsWith('cs_')) {
+          try {
+            const was = await stripe.checkout.sessions.retrieve(old)
+            if (was.status === 'open' && was.amount_total === total && was.url) {
+              return json({ ok: true, url: was.url, amount_cents: total,
+                expires_at: was.expires_at, reused: true })
+            }
+            if (was.status === 'open') await stripe.checkout.sessions.expire(old)
+          } catch (err) {
+            // A session Stripe no longer knows is no risk of paying twice.
+            console.error('card_link: old session', old, err)
+          }
+        }
+
+        const [{ data: ev }, { data: tier }, { data: lines }] = await Promise.all([
+          db.from('event').select('name').eq('id', b.event_id).maybeSingle(),
+          db.from('offer_tier').select('label').eq('code', b.tier_code).limit(1).maybeSingle(),
+          db.from('booking_addon').select('name, qty, amount_cents').eq('booking_id', id).order('code'),
+        ])
+        const currency = String(b.currency ?? 'nzd').toLowerCase()
+        const spot = String(tier?.label ?? b.tier_code).split(/\s+—\s+/)[0]
+        const items: Stripe.Checkout.SessionCreateParams.LineItem[] = [{
+          quantity: 1,
+          price_data: {
+            currency,
+            unit_amount: b.amount_cents ?? 0,
+            product_data: {
+              name: `${spot} parking — ${ev?.name ?? 'Talli Parking'}`,
+              description: b.vehicle_rego ? `Vehicle ${b.vehicle_rego}` : undefined,
+            },
+          },
+        }]
+        for (const line of (lines ?? []) as Row[]) {
+          if (!line.amount_cents) continue
+          items.push({ quantity: 1, price_data: { currency, unit_amount: line.amount_cents,
+            product_data: { name: line.qty > 1 ? `${line.name} × ${line.qty}` : line.name } } })
+        }
+        if (surcharge > 0) {
+          items.push({ quantity: 1, price_data: { currency, unit_amount: surcharge,
+            product_data: { name: 'Card payment surcharge',
+              description: 'What it costs us to accept a card. Cash does not attract it.' } } })
+        }
+
+        const email = b.customer_email && !isGateAddress(String(b.customer_email))
+          ? String(b.customer_email) : undefined
+        const expiresAt = Math.floor(Date.now() / 1000) + CARD_LINK_MINUTES * 60
+        const session = await stripe.checkout.sessions.create({
+          mode: 'payment',
+          customer_email: email,
+          expires_at: expiresAt,
+          line_items: items,
+          metadata: { booking_id: id, source: 'gate_qr' },
+          payment_intent_data: { metadata: { booking_id: id, source: 'gate_qr' } },
+          success_url: `${SITE_URL}/booking-confirmed.html?session_id={CHECKOUT_SESSION_ID}`,
+          cancel_url: `${SITE_URL}/`,
+        })
+        if (session.amount_total !== total) {
+          await stripe.checkout.sessions.expire(session.id)
+          console.error('card_link: Stripe total', session.amount_total, 'expected', total)
+          return json({ error: 'The card amount did not add up. Take cash or a transfer.',
+            code: 'AMOUNT_MISMATCH' }, 502)
+        }
+        const { error: uErr } = await db.from('booking')
+          .update({ stripe_checkout_session_id: session.id }).eq('id', id)
+        if (uErr) {
+          await stripe.checkout.sessions.expire(session.id)
+          throw uErr
+        }
+        return json({ ok: true, url: session.url, amount_cents: total,
+          expires_at: session.expires_at })
+      }
+
+      // Has the QR been paid yet? Polled by the screen while it shows one.
+      case 'card_status': {
+        const blocked = await bookingGuard()
+        if (blocked) return blocked
+        const { data: st, error: stErr } = await db.from('booking')
+          .select('status, payment_method').eq('id', String(body.booking_id)).maybeSingle()
+        if (stErr) throw stErr
+        return json({
+          paid: st?.status === 'paid',
+          status: st?.status ?? null,
+          payment_method: st?.payment_method ?? null,
         })
       }
 

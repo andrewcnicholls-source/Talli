@@ -992,6 +992,39 @@ else
 fi
 
 # ---------------------------------------------------------------------
+head "Card by QR: the database sets the amount, and a parked car keeps its space"
+# ---------------------------------------------------------------------
+# A walk-up paying by QR is a car already parked. The amount comes from the
+# booking, never the screen; an expired or failed link must leave the
+# booking owing, never release it; and only the webhook may mark it paid.
+GATE=supabase/functions/gate-ops/index.ts
+HOOK=supabase/functions/stripe-webhook/index.ts
+if awk "/case 'card_link'/,/case 'card_status'/" "$GATE" | grep -q "db.rpc('card_surcharge_cents'" &&
+   ! awk "/case 'card_link'/,/case 'card_status'/" "$GATE" | grep -qE "body\.(amount|price|total)"; then
+  pass "card_link prices the QR from the booking, not the request"
+else
+  fail "card_link takes an amount from the request, or no longer asks the database for the surcharge"
+fi
+if awk "/case 'checkout.session.expired'/,/release_booking/" "$HOOK" | grep -q "if (isGateQr(obj)) return ok" &&
+   awk "/case 'checkout.session.async_payment_failed'/,/release_booking/" "$HOOK" | grep -q "if (isGateQr(obj))"; then
+  pass "an expired or failed QR link leaves the walk-up owing, never releases the space"
+else
+  fail "stripe-webhook can release a parked walk-up's space when its QR link expires or fails"
+fi
+QR_MIG="$(grep -l 'function confirm_gate_card_payment' supabase/migrations/*.sql | sort | tail -1)"
+if [ -n "$QR_MIG" ] && grep -q "from public, anon, authenticated" "$QR_MIG" &&
+   grep -q "stripe_checkout_session_id is distinct from p_session_id" "$QR_MIG"; then
+  pass "only the webhook can mark a QR payment, and only for the session made for it"
+else
+  fail "confirm_gate_card_payment is callable from the browser, or not tied to its session"
+fi
+if grep -q "if (isGateAddress(String(b.customer_email))) return" "$HOOK"; then
+  pass "a walk-up's made-up gate+ address is never emailed"
+else
+  fail "the confirmation email can go to a walk-up's placeholder address"
+fi
+
+# ---------------------------------------------------------------------
 head "Edge function TypeScript"
 # ---------------------------------------------------------------------
 # The functions import Stripe from esm.sh and supabase-js from jsr.io, so

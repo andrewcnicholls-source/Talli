@@ -382,6 +382,9 @@
     <select id="ad-sell-payment" name="payment" class="ad-select">
       <option value="cash" selected>Cash</option>
       <option value="bank_transfer">Bank transfer</option>
+      <!-- The driver pays on their own phone: no terminal, no Stripe login.
+           Saved as owing first, then the QR sheet opens. -->
+      <option value="card_qr">Card &mdash; they scan a QR</option>
       <option value="tap_to_pay">Card (tap to pay)</option>
       <option value="unpaid">Not paid yet &mdash; take it later</option>
     </select>
@@ -483,8 +486,29 @@
     <p class="ad-sheet-error" id="ad-edit-error" role="alert" hidden></p>
 
     <button type="submit" class="btn btn-primary" id="ad-edit-submit">Save</button>
+    <button type="button" class="btn btn-outline" id="ad-edit-qr" hidden>Take card by QR</button>
     <button type="button" class="btn btn-outline" id="ad-edit-cancel" hidden>Cancel this booking</button>
   </form>
+</div>
+
+<!-- --------------------------------------------------- card by QR -->
+<!-- A walk-up who owes pays by card on their own phone. gate-ops makes the
+     Stripe link for what the booking owes; this only draws it. The sheet
+     watches for the payment and says so the moment it lands. -->
+<div class="ad-sheet" id="ad-qr" hidden>
+  <div class="ad-sheet-card ad-qr-card">
+    <div class="ad-sheet-head">
+      <h2 id="ad-qr-title">Scan to pay by card</h2>
+      <button type="button" class="ad-sheet-close" id="ad-qr-close" aria-label="Close">&times;</button>
+    </div>
+    <p class="ad-qr-amount" id="ad-qr-amount"></p>
+    <div class="ad-qr-code" id="ad-qr-code" aria-label="QR code for the card payment"></div>
+    <p class="ad-qr-status" id="ad-qr-status" role="status"></p>
+    <p class="ad-hint" id="ad-qr-hint">Hold the phone up to the driver. They pay on their own
+      phone; this changes to Paid by itself. If they give up, close this:
+      the car is saved as owing, to pay another way.</p>
+    <button type="button" class="btn btn-primary" id="ad-qr-done">Close</button>
+  </div>
 </div>
 
 <!-- ------------------------------------------------------ set a price -->
@@ -522,6 +546,7 @@
 
 <div class="ad-toast" id="ad-toast" role="status" hidden></div>
 
+<script src="assets/vendor/qrcode-generator/qrcode.js"></script>
 <script src="assets/admin.js"></script>
 </body>
 </html>
