@@ -104,7 +104,9 @@
   // card sales — the terminal here, and every sale on the website — pay it.
   // Mirrors card_surcharge_cents() in the database; the database still decides
   // what the booking records.
-  var CARD_METHODS = ['stripe', 'tap_to_pay'];
+  // card_qr is the walk-up form's name for "card, on their own phone": it
+  // is recorded as 'stripe' once paid, and carries the same surcharge.
+  var CARD_METHODS = ['stripe', 'tap_to_pay', 'card_qr'];
 
   function surchargeOn(cents, paymentMethod) {
     if (!state.surchargeBps) return 0;
@@ -264,9 +266,10 @@
     state.bank = null;
     // A half-finished walk-up sale behind the card is a walk-up sale
     // somebody will try to submit again after signing back in.
-    ['ad-new', 'ad-sell', 'ad-price', 'ad-check'].forEach(function (id) {
+    ['ad-new', 'ad-sell', 'ad-price', 'ad-check', 'ad-qr'].forEach(function (id) {
       hide(el(id));
     });
+    stopCardWatch();
     showSignIn(err && err.message, err && err.code);
   }
 
@@ -1313,7 +1316,8 @@
   // tin — so those four always show, even at $0. A $0 line is an answer;
   // a missing one is a question.
   var CHANNELS = [
-    ['stripe', 'Online', true],
+    // The Stripe payout: website bookings and walk-ups who paid by QR.
+    ['stripe', 'Stripe (online + QR)', true],
     ['tap_to_pay', 'PayWave', true],
     ['bank_transfer', 'Bank transfer', true],
     ['cash', 'Cash', true],
@@ -2201,7 +2205,8 @@
     var later = method === 'unpaid';
     el('ad-sell-later-hint').hidden = !later;
     text(el('ad-sell-charge-total-label'), later ? 'They will owe' : 'Charge them');
-    text(el('ad-sell-submit'), later ? 'Save — they pay later' : 'Take the money');
+    text(el('ad-sell-submit'), later ? 'Save — they pay later'
+      : method === 'card_qr' ? 'Save and show the QR' : 'Take the money');
     var extras = sellExtrasTotal();
     // The sign price unless a deal was typed on the tile. A half-typed
     // number falls back to the sign here, as it does when the box is left.
@@ -2278,11 +2283,16 @@
       return { code: code, qty: state.sellExtras[code] };
     });
 
+    // Card by QR is sold as owing, then paid on the driver's phone. Until
+    // Stripe says so, owing is the truth, and it is what is left behind if
+    // they give up.
+    var byQr = form.payment.value === 'card_qr';
+
     call('sell', {
       event_id: state.eventId,
       property_id: tier.property_id,
       tier_code: tier.code,
-      payment_method: form.payment.value,
+      payment_method: byQr ? 'unpaid' : form.payment.value,
       vehicle_rego: form.rego.value.trim() || null,
       name: form.sellname.value.trim() || null,
       phone: form.sellphone.value.trim() || null,
@@ -2295,6 +2305,11 @@
         var plate = form.rego.value.trim().toUpperCase();
         var later = form.payment.value === 'unpaid';
         clearSell();
+        if (byQr) {
+          if (data.addons_failed) toast('Saved, but the extras did not save — add them by hand', 'bad');
+          openCardQr(data.booking_id, plate);
+          return loadList(true);
+        }
         if (data.addons_failed) {
           toast('Space sold, but the extras did not save — take that cash', 'bad');
         } else {
@@ -2371,13 +2386,18 @@
     if (online || r.in_checkout) {
       text(payHint, r.in_checkout
         ? 'They are still paying on the website. This fills in when they finish.'
-        : 'Paid by card on the website — Stripe holds that record.');
+        : r.channel === 'gate'
+          ? 'Paid by card by QR — Stripe holds that record.'
+          : 'Paid by card on the website — Stripe holds that record.');
       show(payHint);
     } else {
       hide(payHint);
     }
 
     el('ad-edit-cancel').hidden = !r.owes;
+    // A walk-up who owes can still pay by card, on their own phone. Not one
+    // mid-checkout on the website: that is already a Stripe payment.
+    el('ad-edit-qr').hidden = !(r.owes && r.channel === 'gate');
 
     // What they paid for the space, editable on the selected tile. Not for a
     // website sale: that price is whatever Stripe charged, and Stripe is the
@@ -2572,6 +2592,95 @@
         text(box, err.message);
         show(box);
       });
+  }
+
+  /* -------------------------------------------------------- card by QR */
+
+  // gate-ops makes the Stripe link for what the booking owes; this draws it
+  // and watches for the payment. Closing the sheet changes nothing: the
+  // booking stays owing, and the link stays good until Stripe expires it.
+  var cardWatch = null;
+
+  function stopCardWatch() {
+    if (cardWatch) clearTimeout(cardWatch.timer);
+    cardWatch = null;
+  }
+
+  function drawQr(url) {
+    var box = el('ad-qr-code');
+    box.innerHTML = '';
+    if (typeof window.qrcode !== 'function') {
+      box.appendChild(make('p', 'ad-empty', 'The QR could not be drawn. Close and try again.'));
+      return;
+    }
+    // Error correction L: a Stripe link is long, and the fewer, larger
+    // squares scan more easily from one phone screen to another.
+    var qr = window.qrcode(0, 'L');
+    qr.addData(url);
+    qr.make();
+    box.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 4, scalable: true });
+  }
+
+  function cardState(kind, message) {
+    var sheet = el('ad-qr');
+    sheet.classList.toggle('is-paid', kind === 'paid');
+    text(el('ad-qr-status'), message);
+    el('ad-qr-hint').hidden = kind !== 'waiting';
+    text(el('ad-qr-done'), kind === 'paid' ? 'Done' : 'Close');
+  }
+
+  function openCardQr(bookingId, plate) {
+    stopCardWatch();
+    var watch = { bookingId: bookingId, timer: null };
+    cardWatch = watch;
+    text(el('ad-qr-title'), 'Scan to pay by card' + (plate ? ' — ' + plate : ''));
+    text(el('ad-qr-amount'), '');
+    el('ad-qr-code').innerHTML = '';
+    cardState('making', 'Making the card link…');
+    hide(el('ad-edit'));
+    show(el('ad-qr'));
+
+    call('card_link', { booking_id: bookingId })
+      .then(function (data) {
+        if (cardWatch !== watch) return;
+        text(el('ad-qr-amount'), money(data.amount_cents) + ' including the card surcharge');
+        drawQr(data.url);
+        cardState('waiting', 'Waiting for them to pay…');
+        pollCard(watch);
+      })
+      .catch(function (err) {
+        if (cardWatch !== watch || fatal(err)) return;
+        cardState('error', err.message + ' The car is saved as owing.');
+      });
+  }
+
+  function pollCard(watch) {
+    watch.timer = setTimeout(function () {
+      if (cardWatch !== watch) return;
+      call('card_status', { booking_id: watch.bookingId })
+        .then(function (data) {
+          if (cardWatch !== watch) return;
+          if (data.paid) {
+            el('ad-qr-code').innerHTML = '';
+            cardState('paid', 'Paid by card ✓');
+            toast('Paid by card', 'good');
+            stopCardWatch();
+            return loadList(true);
+          }
+          pollCard(watch);
+        })
+        .catch(function (err) {
+          if (cardWatch !== watch || fatal(err)) return;
+          pollCard(watch);   // a dropped request on a driveway is not a failure
+        });
+    }, 3000);
+  }
+
+  function closeCardQr() {
+    var wasWaiting = !!cardWatch;
+    stopCardWatch();
+    hide(el('ad-qr'));
+    if (wasWaiting) loadList(true);
   }
 
   /* ------------------------------------------------- configuration check */
@@ -3020,6 +3129,12 @@
     el('ad-edit-form').addEventListener('submit', submitEdit);
     el('ad-edit-payment').addEventListener('change', renderEditCharge);
     el('ad-edit-cancel').addEventListener('click', cancelUnpaid);
+    el('ad-edit-qr').addEventListener('click', function () {
+      var r = state.edit;
+      if (r && r.owes) openCardQr(r.booking_id, r.vehicle_rego);
+    });
+    el('ad-qr-close').addEventListener('click', closeCardQr);
+    el('ad-qr-done').addEventListener('click', closeCardQr);
 
     el('ad-pricepick-select').addEventListener('change', paintPricePick);
     el('ad-pricepick-apply').addEventListener('click', applyPricePick);

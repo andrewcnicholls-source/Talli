@@ -94,6 +94,47 @@ async function bookingIdFrom(obj: Record<string, any>): Promise<string | null> {
 
 const RESEND_ENDPOINT = 'https://api.resend.com/emails'
 
+// sell_at_gate's stand-in for a walk-up who gave no email.
+const isGateAddress = (email: string) => /^gate\+[0-9a-f]+@talli\.co\.nz$/i.test(email)
+
+// A walk-up paying by card on their own phone, from the QR on the warden's
+// screen (gate-ops card_link). Its booking is a car already parked, so
+// nothing that happens to the link may ever release the space.
+const isGateQr = (obj: Record<string, any>) => obj?.metadata?.source === 'gate_qr'
+
+async function confirmGateQr(bookingId: string, obj: Record<string, any>) {
+  const { data: result, error } = await db.rpc('confirm_gate_card_payment', {
+    p_booking_id: bookingId,
+    p_session_id: String(obj.id ?? ''),
+    p_payment_intent_id: obj.payment_intent ?? null,
+    p_email: obj.customer_details?.email ?? null,
+  })
+  if (error) throw error
+  if (result === 'not_owing' || result === 'no_booking') {
+    // Paid by card after the warden had already taken cash, or after the
+    // link was replaced. The money is real; a person has to refund one.
+    await note(bookingId,
+      `CARD PAID BY QR BUT THE BOOKING WAS NOT OWING (${result}) — session ${obj.id}, ` +
+      `${((obj.amount_total ?? 0) / 100).toFixed(2)} ${String(obj.currency ?? '').toUpperCase()}. ` +
+      `Check how they paid and refund one payment.`)
+    console.error('gate QR paid but not owing', bookingId, result)
+    return result
+  }
+  // What Stripe took against what the booking now says it was owed.
+  const { data: now } = await db.from('booking')
+    .select('amount_cents, addons_cents, surcharge_cents').eq('id', bookingId).maybeSingle()
+  const recorded = now
+    ? (now.amount_cents ?? 0) + (now.addons_cents ?? 0) + (now.surcharge_cents ?? 0)
+    : null
+  if (recorded !== null && obj.amount_total != null && recorded !== obj.amount_total) {
+    await note(bookingId,
+      `Card by QR took ${(obj.amount_total / 100).toFixed(2)} but the booking records ` +
+      `${(recorded / 100).toFixed(2)}. Check before settling the night.`)
+  }
+  if (result === 'paid') await sendConfirmationEmail(bookingId)
+  return result
+}
+
 // The site the confirmation email links back to, for directions. Fixed per
 // project, never taken from a secret: a test booking must never link to the
 // live site, nor a real one to staging (see create-checkout, 8 Sep 2026).
@@ -152,6 +193,9 @@ async function sendConfirmationEmail(bookingId: string): Promise<void> {
   // Only a booking that actually holds a bay gets told that it does.
   if (b.status !== 'paid') return
   if (!b.customer_email) return
+  // A walk-up who gave no email has a made-up gate+… address. Mailing it
+  // reaches our own inbox, not the driver.
+  if (isGateAddress(String(b.customer_email))) return
   if (b.confirmation_email_sent_at) return
 
   // Claim the send. Whoever's update matches the row owns it; a concurrent
@@ -393,6 +437,14 @@ Deno.serve(async (req) => {
         const bookingId = await bookingIdFrom(obj)
         if (!bookingId) return ok('no booking_id in metadata')
 
+        if (isGateQr(obj)) {
+          if (obj.payment_status === 'unpaid') {
+            await note(bookingId, 'Card by QR completed, awaiting payment settlement.')
+            return ok('gate QR completed but unpaid, waiting')
+          }
+          return ok(`gate QR: ${await confirmGateQr(bookingId, obj)}`)
+        }
+
         // Delayed-notification methods complete the session while still
         // unpaid; they settle later via async_payment_succeeded. Anything
         // that is not explicitly unpaid is fulfillable now.
@@ -430,6 +482,7 @@ Deno.serve(async (req) => {
       case 'checkout.session.async_payment_succeeded': {
         const bookingId = await bookingIdFrom(obj)
         if (!bookingId) return ok('no booking_id in metadata')
+        if (isGateQr(obj)) return ok(`gate QR: ${await confirmGateQr(bookingId, obj)}`)
         await db.rpc('confirm_booking', {
           p_booking_id: bookingId,
           p_payment_intent_id: obj.payment_intent ?? null,
@@ -441,6 +494,10 @@ Deno.serve(async (req) => {
       case 'checkout.session.async_payment_failed': {
         const bookingId = await bookingIdFrom(obj)
         if (!bookingId) return ok('no booking_id in metadata')
+        if (isGateQr(obj)) {
+          await note(bookingId, 'Card by QR failed to settle. They still owe.')
+          return ok('gate QR failed; booking still owes')
+        }
         await db.rpc('release_booking', {
           p_booking_id: bookingId, p_status: 'cancelled',
         })
@@ -451,6 +508,9 @@ Deno.serve(async (req) => {
       case 'checkout.session.expired': {
         const bookingId = await bookingIdFrom(obj)
         if (!bookingId) return ok('no booking_id in metadata')
+        // The car is parked. An unused QR link leaves the booking owing,
+        // exactly like a pay-later walk-up; it never puts the space back.
+        if (isGateQr(obj)) return ok('gate QR link expired; booking still owes')
         await db.rpc('release_booking', {
           p_booking_id: bookingId, p_status: 'expired',
         })
