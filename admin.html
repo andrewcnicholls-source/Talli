@@ -66,6 +66,11 @@
     </div>
 
     <nav class="ad-tabs" role="tablist">
+      <!-- First, on the left: where you are and how a walk-up pays, the
+           two things a warden reads out at a car window. Arrivals is
+           still the tab the screen opens on. -->
+      <button type="button" class="ad-tab" id="ad-tab-info"
+              role="tab" aria-selected="false" aria-controls="ad-pane-info">Site info</button>
       <button type="button" class="ad-tab is-on" id="ad-tab-gate"
               role="tab" aria-selected="true" aria-controls="ad-pane-gate">Arrivals</button>
       <button type="button" class="ad-tab" id="ad-tab-night"
@@ -74,8 +79,6 @@
               role="tab" aria-selected="false" aria-controls="ad-pane-insights">Insights</button>
       <button type="button" class="ad-tab" id="ad-tab-sites"
               role="tab" aria-selected="false" aria-controls="ad-pane-sites">Sites</button>
-      <button type="button" class="ad-tab" id="ad-tab-info"
-              role="tab" aria-selected="false" aria-controls="ad-pane-info">Site info</button>
     </nav>
   </header>
 
