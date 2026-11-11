@@ -239,6 +239,14 @@ const isGateAddress = (email: string) => /^gate\+[0-9a-f]+@talli\.co\.nz$/i.test
 
 const PAY_METHODS = ['cash', 'tap_to_pay', 'bank_transfer', 'free', 'other', 'unpaid']
 
+// Tap to pay goes through Andrew's terminal and his Stripe account. A warden
+// has neither, so a warden cannot record a sale as taken that way. The screen
+// does not offer it to them; this is the check that decides.
+const TAP_REFUSED = {
+  error: 'Tap to pay is Andrew\'s. Take cash or a bank transfer.',
+  code: 'OPERATOR_ONLY',
+}
+
 // Absent means "leave it"; a string, even an empty one, means "set it".
 const optText = (v: unknown): string | null =>
   v === undefined || v === null ? null : String(v)
@@ -667,6 +675,9 @@ Deno.serve(async (req) => {
         if (!String(body.vehicle_rego ?? '').trim()) {
           return json({ error: 'Number plate first, please.', code: 'PLATE_REQUIRED' }, 400)
         }
+        if (!caller.all && body.payment_method === 'tap_to_pay') {
+          return json(TAP_REFUSED, 403)
+        }
         const { data, error } = await db.rpc('sell_at_gate', {
           ...(price !== null ? { p_price_cents: price } : {}),
           p_event_id: eventId,
@@ -743,6 +754,14 @@ Deno.serve(async (req) => {
         const method = optText(body.payment_method)
         if (method !== null && !PAY_METHODS.includes(method)) {
           return json({ error: 'That is not a way to pay at the gate.' }, 400)
+        }
+        // A booking Andrew already took by tap to pay can still be fixed by a
+        // warden (a plate, a phone number) without its method changing. What
+        // a warden cannot do is move one onto tap to pay.
+        if (!caller.all && method === 'tap_to_pay') {
+          const { data: was } = await db.from('booking')
+            .select('payment_method').eq('id', id).maybeSingle()
+          if (was?.payment_method !== 'tap_to_pay') return json(TAP_REFUSED, 403)
         }
         const low = body.vehicle_low_clearance
         const { data, error } = await db.rpc('edit_booking_at_gate', {

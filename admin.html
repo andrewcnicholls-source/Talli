@@ -345,10 +345,13 @@
          else is captured, then the money changes hands. It sits straight
          above what to charge, which moves the moment it is picked. -->
     <label class="ad-label" for="ad-sell-payment">Paid by</label>
+    <!-- Opens on cash: most walk-ups pay cash, and a warden working a
+         block alone has no terminal. Tap to pay is Andrew's and is taken
+         out of this list for a warden (applyRole in admin.js). -->
     <select id="ad-sell-payment" name="payment" class="ad-select">
-      <option value="tap_to_pay">Card (tap to pay)</option>
-      <option value="cash">Cash</option>
+      <option value="cash" selected>Cash</option>
       <option value="bank_transfer">Bank transfer</option>
+      <option value="tap_to_pay">Card (tap to pay)</option>
       <option value="unpaid">Not paid yet &mdash; take it later</option>
     </select>
     <p class="ad-hint" id="ad-sell-later-hint" hidden>Saves the car and ticks it in.
@@ -431,9 +434,9 @@
          everything else about the car is right. -->
     <label class="ad-label" for="ad-edit-payment">Paid by</label>
     <select id="ad-edit-payment" name="payment" class="ad-select">
-      <option value="tap_to_pay">Card (tap to pay)</option>
       <option value="cash">Cash</option>
       <option value="bank_transfer">Bank transfer</option>
+      <option value="tap_to_pay">Card (tap to pay)</option>
       <option value="unpaid">Not paid yet</option>
       <option value="stripe" disabled>Card online</option>
     </select>
