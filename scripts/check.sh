@@ -968,6 +968,30 @@ else
 fi
 
 # ---------------------------------------------------------------------
+head "A customer is sent to the block they booked, not to Paice Ave"
+# ---------------------------------------------------------------------
+# getting-here.html on its own is 86 Paice Ave. The confirmation page and
+# email must hand it the booked block, and the page must drop the Paice
+# Ave directions if it cannot show that block.
+if grep -q "getting-here.html?block=" assets/confirmed.js; then
+  pass "the confirmation page links to directions for the booked block"
+else
+  fail "the confirmation page's directions ignore the booked block"
+fi
+if grep -q 'getting-here` +' supabase/functions/stripe-webhook/index.ts &&
+   grep -q '?block=${encodeURIComponent(String(property.block_id))}' supabase/functions/stripe-webhook/index.ts; then
+  pass "the confirmation email links to directions for the booked block"
+else
+  fail "the confirmation email's directions ignore the booked block"
+fi
+if grep -q '<script src="assets/getting-here.js">' getting-here.html &&
+   grep -q "function noDirections" assets/getting-here.js; then
+  pass "getting-here takes a block, and hides Paice Ave when it cannot show it"
+else
+  fail "getting-here.html no longer handles ?block="
+fi
+
+# ---------------------------------------------------------------------
 head "Edge function TypeScript"
 # ---------------------------------------------------------------------
 # The functions import Stripe from esm.sh and supabase-js from jsr.io, so

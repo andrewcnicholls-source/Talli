@@ -93,6 +93,13 @@ async function bookingIdFrom(obj: Record<string, any>): Promise<string | null> {
 // =====================================================================
 
 const RESEND_ENDPOINT = 'https://api.resend.com/emails'
+
+// The site the confirmation email links back to, for directions. Fixed per
+// project, never taken from a secret: a test booking must never link to the
+// live site, nor a real one to staging (see create-checkout, 8 Sep 2026).
+const TEST_PROJECT_REF = 'uhdoverwvlxvyyctskle'
+const IS_TEST = (Deno.env.get('SUPABASE_URL') ?? '').includes(TEST_PROJECT_REF)
+const SITE_URL = IS_TEST ? 'https://staging.talli.pages.dev' : 'https://talli.co.nz'
 const TZ = 'Pacific/Auckland'
 
 const FROM_EMAIL = Deno.env.get('TALLI_FROM_EMAIL') ??
@@ -190,6 +197,11 @@ async function sendConfirmationEmail(bookingId: string): Promise<void> {
         address = `${anchor} — or a driveway within 100m. A Talli warden will show you where.`
       }
     }
+    // Directions to the block they booked. Without a block it is the
+    // default page, which is 86 Paice Ave.
+    const directions = `${SITE_URL}/getting-here` +
+      (property?.block_id ? `?block=${encodeURIComponent(String(property.block_id))}` : '')
+
     const extras = (addons ?? []).map((a: Row) =>
       a.qty > 1 ? `${a.name} × ${a.qty}` : String(a.name))
 
@@ -238,6 +250,7 @@ async function sendConfirmationEmail(bookingId: string): Promise<void> {
       `Reference: ${reference}`,
       '',
       ...shown.map(([k, v]) => `${k}: ${v}`),
+      `Directions: ${directions}`,
       ...(extras.length ? ['', 'Already paid for:', ...extras.map((e) => `  ${e}`),
         '  Ask the marshal for these when you pull in.'] : []),
       '',
@@ -263,6 +276,9 @@ async function sendConfirmationEmail(bookingId: string): Promise<void> {
           white-space:nowrap">${esc(k)}</td>
       <td style="padding:6px 0"><strong>${esc(v)}</strong></td></tr>`).join('')}
   </table>
+  <p style="margin:0 0 20px"><a href="${esc(directions)}"
+     style="display:inline-block;padding:10px 16px;border-radius:6px;background:#2B4C7E;
+     color:#fff;text-decoration:none">Directions &amp; map</a></p>
   ${extras.length ? `<h2 style="font-size:15px;margin:0 0 6px">Already paid for</h2>
   <ul style="margin:0 0 6px;padding-left:20px">
     ${extras.map((e) => `<li>${esc(e)}</li>`).join('')}

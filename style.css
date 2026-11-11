@@ -141,6 +141,8 @@ a:focus-visible, button:focus-visible {
   padding: 48px 24px;
 }
 .wrap.tight { padding-top: 8px; padding-bottom: 32px; }
+/* Getting Here for a booked block: who meets you, said before the buttons. */
+.gh-note { margin: 0 0 16px; font-size: 1.05rem; line-height: 1.5; }
 
 .section-label {
   font-size: 0.76rem;
