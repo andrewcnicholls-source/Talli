@@ -71,7 +71,7 @@ TALLI_BRANCH_PREFIX="feature/"
 #  release-production calls these out explicitly in its release summary.
 # ---------------------------------------------------------------------
 TALLI_PAYMENT_PATHS="supabase/functions/create-checkout supabase/functions/stripe-webhook supabase/functions/check-setup assets/booking.js assets/confirmed.js booking-confirmed.html"
-TALLI_BOOKING_PATHS="assets/booking.js assets/admin.js supabase/functions/gate-ops supabase/functions/get-booking book.html admin.html"
+TALLI_BOOKING_PATHS="assets/booking.js assets/admin supabase/functions/gate-ops supabase/functions/get-booking book.html admin.html"
 
 # Things Cloudflare Pages does NOT deploy. Changes here need a separate,
 # deliberate release step against Supabase.

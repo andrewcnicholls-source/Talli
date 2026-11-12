@@ -1,0 +1,321 @@
+/* Talli Parking — gate screen: night.js
+
+   The night being worked: the event pickers, loading the list, which
+   driveway this phone is at, and the headline numbers.
+ */
+
+import { ARRIVAL_ORDER, TZ, asDate, call, el, hide, make, money, show,
+  state, text, toast } from './core.js';
+import { renderList } from './arrivals.js';
+import { renderBoard, renderExtras, renderMoney, renderPricePicker,
+  renderPrices, renderStatus, statusMeta } from './tonight.js';
+import { measureHead } from './tabs.js';
+import { renderInfo } from './site-info.js';
+
+/* ------------------------------------------------------------- events */
+
+// The calendar day an event falls on, at the ground. There is only ever
+// one event a day, so the day is what identifies "tonight" — not the
+// kickoff instant, which passes while the night is still being worked.
+export function dayKey(iso) {
+  var parts = {};
+  new Intl.DateTimeFormat('en-NZ', {
+    timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(new Date(iso)).forEach(function (p) { parts[p.type] = p.value; });
+  return parts.year + '-' + parts.month + '-' + parts.day;
+}
+
+export function todayKey() { return dayKey(new Date()); }
+
+var FINISHED = ['closed', 'cancelled'];
+
+// What the header picker carries: tonight and everything ahead, plus any
+// earlier night still not closed off — that one needs a tap, and hiding
+// it is how it stays on sale for ever. Finished nights are under Insights.
+function headerEvents() {
+  var today = todayKey();
+  return state.events.filter(function (ev) {
+    return dayKey(ev.starts_at) >= today ||
+      FINISHED.indexOf(ev.status) === -1 ||
+      ev.id === state.eventId;
+  });
+}
+
+// Redrawn on its own whenever an event is made or its status moves, so
+// the name in the picker never disagrees with the badge below it.
+export function renderEventOptions() {
+  var sel = el('ad-event');
+  sel.innerHTML = '';
+  var events = headerEvents();
+  if (!events.length) {
+    sel.appendChild(new Option(state.events.length ? 'Nothing coming up' : 'No events yet', ''));
+    return;
+  }
+  events.forEach(function (ev) {
+    var label = asDate(ev.starts_at) + ' — ' + ev.name +
+      (ev.status !== 'on_sale' ? ' (' + statusMeta(ev.status)[1].toLowerCase() + ')' : '');
+    sel.appendChild(new Option(label, ev.id));
+  });
+  if (state.eventId) sel.value = state.eventId;
+}
+
+export function renderEvents() {
+  // Default to tonight's event, and keep it until midnight: kickoff
+  // passing is the middle of the night's work, not the end of it. Failing
+  // that, the next one coming. A cancelled night is passed over if there
+  // is anything else on the same day or later.
+  var today = todayKey();
+  var ahead = state.events.filter(function (e) { return dayKey(e.starts_at) >= today; });
+  var pick = ahead.filter(function (e) { return e.status !== 'cancelled'; })[0] ||
+    ahead[0] || headerEvents().slice(-1)[0] || null;
+
+  state.eventId = pick ? pick.id : null;
+  renderEventOptions();
+  if (!state.eventId) {
+    renderStatus();
+    return;
+  }
+  el('ad-event').value = state.eventId;
+  loadList();
+}
+
+/* ---------------------------------------------------- the whole night */
+
+export function loadList(quiet) {
+  if (!state.eventId) return;
+  if (!quiet) el('ad-list').setAttribute('aria-busy', 'true');
+
+  return call('list', { event_id: state.eventId })
+    .then(function (data) {
+      state.rows = data.rows || [];
+      state.tiers = data.tiers || [];
+      state.sites = data.sites || [];
+      pickSite();
+      state.extras = data.extras || [];
+      state.summary = data.summary || null;
+      state.surchargeBps = data.card_surcharge_bps || 0;
+      renderAll();
+    })
+    .catch(function (err) { toast(err.message, 'bad'); })
+    .finally(function () { el('ad-list').removeAttribute('aria-busy'); });
+}
+
+/* ------------------------------------------------- which driveway */
+
+export function multiSite() { return state.sites.length > 1; }
+
+function siteKey() { return 'talli.gate.site.' + state.eventId; }
+
+// Sticky per event, per phone: set once at the start of the night.
+function pickSite() {
+  var ids = state.sites.map(function (s) { return s.property_id; });
+  if (state.siteId && ids.indexOf(state.siteId) > -1) return;
+  var saved = null;
+  try { saved = window.localStorage.getItem(siteKey()); } catch (e) { saved = null; }
+  if (saved && ids.indexOf(saved) > -1) { state.siteId = saved; return; }
+  var anchor = state.sites.filter(function (s) { return s.is_anchor; })[0];
+  state.siteId = (anchor || state.sites[0] || {}).property_id || null;
+}
+
+export function setSite(id) {
+  state.siteId = id;
+  try { window.localStorage.setItem(siteKey(), id); } catch (e) { /* private mode */ }
+  renderAll();
+}
+
+export function siteName(id) {
+  var s = state.sites.filter(function (x) { return x.property_id === id; })[0];
+  return s ? s.name : '';
+}
+
+export function currentSite() {
+  return state.sites.filter(function (x) { return x.property_id === state.siteId; })[0] || null;
+}
+
+// The types of space sold at the driveway this phone is at. With one
+// site, that is every type tonight, exactly as before.
+export function tiersHere() {
+  if (!multiSite() || !state.siteId) return state.tiers;
+  return state.tiers.filter(function (t) { return t.property_id === state.siteId; });
+}
+
+// The types of space at the driveway one booking is at. Moving a car to
+// another type is priced and counted there — the server looks the type
+// up at the booking's own site — so the edit sheet must offer exactly
+// those, not every site's copy of each type.
+export function tiersFor(r) {
+  if (!r || !r.property_id) return state.tiers;
+  var own = state.tiers.filter(function (t) { return t.property_id === r.property_id; });
+  return own.length ? own : state.tiers;
+}
+
+function renderSitePicker() {
+  var row = el('ad-site-row');
+  var select = el('ad-site');
+  if (!row || !select) return;
+  row.hidden = !multiSite();
+  if (!multiSite()) return;
+  select.innerHTML = '';
+  var group = null;
+  var groupName = null;
+  state.sites.forEach(function (s) {
+    if (s.block_name !== groupName) {
+      groupName = s.block_name;
+      group = document.createElement('optgroup');
+      group.label = groupName || 'Sites';
+      select.appendChild(group);
+    }
+    var opt = document.createElement('option');
+    opt.value = s.property_id;
+    var here = arrivedAt(s.property_id);
+    opt.textContent = s.name + (s.is_anchor ? ' (anchor)' : '') +
+      ' — ' + here + '/' + capacityAt(s.property_id) + ' in' +
+      (s.status !== 'confirmed' ? ' · ' + s.status : '');
+    opt.selected = s.property_id === state.siteId;
+    group.appendChild(opt);
+  });
+  var site = currentSite();
+  var guide = el('ad-site-guide');
+  if (guide) {
+    guide.hidden = !(site && site.site_guide_url);
+    if (site && site.site_guide_url) guide.href = site.site_guide_url;
+  }
+  var notes = el('ad-site-notes');
+  if (notes) {
+    notes.hidden = !(site && site.fill_notes);
+    text(notes, site && site.fill_notes ? site.fill_notes : '');
+  }
+}
+
+export function capacityAt(id) {
+  return state.tiers.filter(function (t) { return t.property_id === id; })
+    .reduce(function (n, t) { return n + (t.capacity || 0); }, 0);
+}
+
+export function arrivedAt(id) {
+  return state.rows.filter(function (r) {
+    return r.arrived && r.property_id === id;
+  }).length;
+}
+
+function renderAll() {
+  renderSitePicker();
+  renderStats();
+  renderSplit();
+  renderList();
+  renderStatus();
+  renderBoard();
+  renderPrices();
+  renderPricePicker();
+  renderExtras();
+  renderMoney();
+  renderInfo();
+  measureHead();
+}
+
+function renderStats() {
+  var s = state.summary;
+  if (!s) return;
+  text(el('ad-stat-arrived'), s.arrived + '/' + s.total);
+  text(el('ad-stat-free'), String(s.free));
+  text(el('ad-stat-taken'), money(s.taken_cents));
+
+  var holds = el('ad-holds');
+  var notes = [];
+  if (s.owing > 0) {
+    notes.push(s.owing + ' walk-up' + (s.owing === 1 ? '' : 's') +
+      ' still to pay — ' + money(s.owing_cents) + '.');
+  }
+  if (s.unpaid_holds > 0) {
+    notes.push(s.unpaid_holds + ' unpaid hold' + (s.unpaid_holds === 1 ? '' : 's') +
+      ' — people mid-checkout, not confirmed bookings.');
+  }
+  if (s.extras_pending > 0) {
+    notes.push(s.extras_pending + ' pre-paid item' + (s.extras_pending === 1 ? '' : 's') +
+      ' still to hand over.');
+  }
+  if (notes.length) {
+    text(holds, notes.join(' '));
+    show(holds);
+  } else {
+    hide(holds);
+  }
+}
+
+// The tier as a class, so a Priority row and the Priority tally are the
+// same colour without either of them naming it.
+export function tierClass(code) {
+  return code ? ' is-tier-' + String(code).replace(/[^a-z0-9]+/gi, '-').toLowerCase() : '';
+}
+
+// Where a tier sits in the arrivals running order. Anything the fixture
+// sells that the order does not name falls in behind, alphabetically.
+function byArrivalOrder(a, b) {
+  var ai = ARRIVAL_ORDER.indexOf(a);
+  var bi = ARRIVAL_ORDER.indexOf(b);
+  if (ai === -1 && bi === -1) return a.localeCompare(b);
+  if (ai === -1) return 1;
+  if (bi === -1) return -1;
+  return ai - bi;
+}
+
+// Bookings in tier order, each tier's rows left in the order the server
+// sent them — not arrived first, then earliest arrival window. Grouping
+// reorders the sections, never the queue inside one.
+export function byTier(rows) {
+  var seen = {};
+  var groups = [];
+  rows.forEach(function (r) {
+    var code = r.tier_code || 'other';
+    if (!seen[code]) {
+      seen[code] = { code: code, rows: [], arrived: 0 };
+      groups.push(seen[code]);
+    }
+    seen[code].rows.push(r);
+    if (r.arrived) seen[code].arrived += 1;
+  });
+  groups.sort(function (x, y) { return byArrivalOrder(x.code, y.code); });
+  return groups;
+}
+
+// Arrived over booked, per tier. The headline already says 6/10; what it
+// cannot say is that the four still out are all Valet, which is the
+// difference between a queue that clears itself and four sets of keys
+// arriving at once. Counted off the rows rather than asked of the server,
+// so it stays true between refreshes and always adds up to the headline —
+// unpaid holds included, exactly as the headline counts them.
+function renderSplit() {
+  var wrap = el('ad-split');
+  wrap.innerHTML = '';
+
+  var seen = {};
+  var codes = [];
+  state.rows.forEach(function (r) {
+    var code = r.tier_code || 'other';
+    if (!seen[code]) { seen[code] = { arrived: 0, total: 0 }; codes.push(code); }
+    seen[code].total += 1;
+    if (r.arrived) seen[code].arrived += 1;
+  });
+
+  if (!codes.length) {
+    hide(wrap);
+    return;
+  }
+
+  // Left to right in the order the list below is grouped, so the chip and
+  // the section it summarises are never in different places.
+  codes.sort(byArrivalOrder);
+
+  codes.forEach(function (code) {
+    var n = seen[code];
+    var done = n.arrived === n.total;
+    var item = make('div', 'ad-split-item' + tierClass(code) + (done ? ' is-done' : ''));
+    item.appendChild(make('span', 'ad-split-num', n.arrived + '/' + n.total));
+    item.appendChild(make('span', 'ad-split-key', code.replace(/_/g, ' ')));
+    item.title = n.arrived + ' of ' + n.total + ' ' + code.replace(/_/g, ' ') +
+      ' in' + (done ? '' : ', ' + (n.total - n.arrived) + ' still to come');
+    wrap.appendChild(item);
+  });
+
+  show(wrap);
+}
