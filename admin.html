@@ -380,7 +380,7 @@
     <label class="ad-label" for="ad-sell-payment">Paid by</label>
     <!-- Opens on cash: most walk-ups pay cash, and a warden working a
          block alone has no terminal. Tap to pay is Andrew's and is taken
-         out of this list for a warden (applyRole in admin.js). -->
+         out of this list for a warden (applyRole in assets/admin/session.js). -->
     <select id="ad-sell-payment" name="payment" class="ad-select">
       <option value="cash" selected>Cash</option>
       <option value="bank_transfer">Bank transfer</option>
@@ -549,6 +549,6 @@
 <div class="ad-toast" id="ad-toast" role="status" hidden></div>
 
 <script src="assets/vendor/qrcode-generator/qrcode.js"></script>
-<script src="assets/admin.js"></script>
+<script type="module" src="assets/admin/main.js"></script>
 </body>
 </html>

@@ -5,7 +5,7 @@
 is at the top of the file). Vendored so the gate screen can draw a QR code
 with no network call and no build step.
 
-Used by the walk-up "Card by QR" sheet in `assets/admin.js`. The plan's
+Used by the walk-up "Card by QR" sheet in `assets/admin/card-qr.js`. The plan's
 site guide (A4) uses the same copy.
 
 To update: `npm pack qrcode-generator@<version>`, copy `package/qrcode.js`

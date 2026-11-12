@@ -134,17 +134,24 @@ head "Edge function test-fallbacks are still gated on the test project"
 # because they compare the project's own SUPABASE_URL against the test
 # ref. Lose that comparison in a merge and the fallbacks become live on
 # production.
+#
+# Every .ts file, not just index.ts: a function split across files (gate-ops,
+# plan S0) defines IS_TEST in a shared module. A file that only imports it
+# is fine; one that declares it must key it on the project ref.
 found_is_test=0
-for fn in supabase/functions/*/index.ts; do
-  [ -f "$fn" ] || continue
-  if grep -q 'IS_TEST' "$fn"; then
+for fn in $(find supabase/functions -name '*.ts' -not -path '*/node_modules/*' | sort); do
+  if grep -qE '(const|let|var) IS_TEST\b' "$fn"; then
     found_is_test=1
+    label=${fn#supabase/functions/}
     if grep -q "TEST_PROJECT_REF = '$TALLI_STAGING_SUPABASE_REF'" "$fn" \
        && grep -q "IS_TEST = (Deno.env.get('SUPABASE_URL')" "$fn"; then
-      pass "$(basename "$(dirname "$fn")"): IS_TEST keyed on the test project ref"
+      pass "$label: IS_TEST keyed on the test project ref"
     else
-      fail "$(basename "$(dirname "$fn")"): uses IS_TEST but not keyed on SUPABASE_URL + $TALLI_STAGING_SUPABASE_REF"
+      fail "$label: declares IS_TEST but not keyed on SUPABASE_URL + $TALLI_STAGING_SUPABASE_REF"
     fi
+  elif grep -q 'IS_TEST' "$fn" && ! grep -qE "import \{[^}]*\bIS_TEST\b" "$fn"; then
+    found_is_test=1
+    fail "${fn#supabase/functions/}: uses IS_TEST without declaring or importing it"
   fi
 done
 [ "$found_is_test" -eq 1 ] || skip "no edge function uses IS_TEST"
@@ -241,9 +248,12 @@ head "The gate screen is behind a signed-in host"
 # of them fails open — the screen keeps working perfectly for whoever is
 # signed in, and also for everyone else. Nothing else in this repository
 # would notice.
-GUARDED_FNS="gate-ops check-setup"
-for name in $GUARDED_FNS; do
-  fn="supabase/functions/$name/index.ts"
+# gate-ops is split by area (plan S0); its checks live in auth.ts, which
+# index.ts runs before any handler — asserted further down.
+GUARDED_FNS="gate-ops:auth.ts check-setup:index.ts"
+for entry in $GUARDED_FNS; do
+  name=${entry%%:*}
+  fn="supabase/functions/$name/${entry#*:}"
   if [ ! -f "$fn" ]; then
     fail "$name: the function is missing"
     continue
@@ -296,12 +306,52 @@ fi
 # The anon key IS still the right credential for the public extras
 # catalogue further down that file, so this looks for the token and for
 # the absence of the passphrase rather than banning the anon key outright.
-if grep -q "Authorization: 'Bearer ' + token" assets/admin.js \
-   && grep -q "AUTH.accessToken()" assets/admin.js \
-   && ! grep -q "passphrase" assets/admin.js; then
+# The gate screen is ES modules under assets/admin/ (plan S0); every call
+# goes through post() in core.js. The passphrase check covers every module.
+if grep -q "Authorization: 'Bearer ' + token" assets/admin/core.js \
+   && grep -q "AUTH.accessToken()" assets/admin/core.js \
+   && ! grep -rq "passphrase" assets/admin/; then
   pass "the gate screen sends the signed-in host's token, not a shared secret"
 else
-  fail "assets/admin.js is not sending the signed-in host's access token"
+  fail "assets/admin/core.js is not sending the signed-in host's access token"
+fi
+
+# gate-ops is split by area (plan S0): auth.ts holds the checks, handlers/
+# holds the actions, and index.ts is the one door between them. The split
+# is only as safe as that door, so hold it to three things.
+GO=supabase/functions/gate-ops
+# 1. One entry point. A handler file with its own Deno.serve, or one that
+#    is handed the raw request, could answer before anyone is checked.
+others=$(grep -l "Deno.serve(" $(find "$GO" -name '*.ts' ! -path "$GO/index.ts") 2>/dev/null || true)
+if [ "$(grep -c "^Deno.serve(" "$GO/index.ts")" = "1" ] && [ -z "$others" ] \
+   && ! grep -qE "\breq\b|Request" "$GO"/handlers/*.ts; then
+  pass "gate-ops: index.ts is the only entry point, and no handler sees the request"
+else
+  fail "gate-ops: a second Deno.serve, or a handler reading the request directly"
+fi
+# 2. Order. In index.ts: resolve the caller, refuse the denied, refuse a
+#    warden an operator action — and only then call a handler.
+order=$(awk '
+  /caller = await callerFrom\(req\)/ && !a { a = NR }
+  /if \(denied\(caller\)\)/ && !b { b = NR }
+  /OPERATOR_ONLY\.has\(action\)/ && !c { c = NR }
+  /await handler\(/ && !d { d = NR }
+  END { print (a && b && c && d && a < b && b < c && c < d) ? "ok" : "bad" }' "$GO/index.ts")
+if [ "$order" = "ok" ]; then
+  pass "gate-ops: every handler runs after the caller is resolved, checked and scoped"
+else
+  fail "gate-ops: index.ts can reach a handler before callerFrom, denied() or OPERATOR_ONLY"
+fi
+# 3. OPERATOR_ONLY names real actions. A misspelt entry fails open: the
+#    action it meant to protect is then open to every warden.
+missing=""
+for a in $(awk '/^export const OPERATOR_ONLY/,/\]\)/' "$GO/auth.ts" | grep -oE "'[a-z_]+'" | tr -d "'"); do
+  grep -q "^  async $a(" "$GO"/handlers/*.ts || missing="$missing $a"
+done
+if [ -z "$missing" ] && awk '/^export const OPERATOR_ONLY/,/\]\)/' "$GO/auth.ts" | grep -q "'create_event'"; then
+  pass "gate-ops: every OPERATOR_ONLY action is a real handler"
+else
+  fail "gate-ops: OPERATOR_ONLY names actions no handler has:${missing:- (list not found)}"
 fi
 
 # RLS on, no policy, is what keeps host_user unreadable if a grant is ever
@@ -984,13 +1034,13 @@ else
   fail "the walk-up form opens on '${SELL_FIRST:-nothing}', not cash"
 fi
 
-if grep -q "offerTapToPay(op)" assets/admin.js; then
+if grep -q "offerTapToPay(op)" assets/admin/session.js; then
   pass "the gate screen takes tap to pay out of a warden's lists"
 else
   fail "applyRole no longer hides tap to pay from a warden"
 fi
 
-GATE=supabase/functions/gate-ops/index.ts
+GATE=supabase/functions/gate-ops/handlers/arrivals.ts
 if grep -q "if (!caller.all && body.payment_method === 'tap_to_pay')" "$GATE"; then
   pass "gate-ops refuses a warden's walk-up sold by tap to pay"
 else
@@ -1039,7 +1089,7 @@ else
   fail "a bank account number is committed — enter it at release instead"
   printf '      %s\n' "$REAL_ACCT"
 fi
-if grep -q "case 'bank_details'" supabase/functions/gate-ops/index.ts; then
+if grep -q "async bank_details(" supabase/functions/gate-ops/handlers/sites.ts; then
   pass "gate-ops serves the bank details after its sign-in checks"
 else
   fail "gate-ops no longer serves the bank details — the Site info tab will be empty"
@@ -1075,10 +1125,10 @@ head "Card by QR: the database sets the amount, and a parked car keeps its space
 # A walk-up paying by QR is a car already parked. The amount comes from the
 # booking, never the screen; an expired or failed link must leave the
 # booking owing, never release it; and only the webhook may mark it paid.
-GATE=supabase/functions/gate-ops/index.ts
+GATE=supabase/functions/gate-ops/handlers/arrivals.ts
 HOOK=supabase/functions/stripe-webhook/index.ts
-if awk "/case 'card_link'/,/case 'card_status'/" "$GATE" | grep -q "db.rpc('card_surcharge_cents'" &&
-   ! awk "/case 'card_link'/,/case 'card_status'/" "$GATE" | grep -qE "body\.(amount|price|total)"; then
+if awk "/async card_link\(/,/async card_status\(/" "$GATE" | grep -q "db.rpc('card_surcharge_cents'" &&
+   ! awk "/async card_link\(/,/async card_status\(/" "$GATE" | grep -qE "body\.(amount|price|total)"; then
   pass "card_link prices the QR from the booking, not the request"
 else
   fail "card_link takes an amount from the request, or no longer asks the database for the surcharge"

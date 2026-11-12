@@ -1,7 +1,7 @@
 # Talli
 
 Static site (plain HTML/CSS/JS) backed by Supabase. Booking flow lives in
-`assets/booking.js`, admin views in `assets/admin.js`, shared config in
+`assets/booking.js`, admin views in `assets/admin/` (ES modules, entry `main.js`), shared config in
 `assets/talli-config.js`.
 
 ## How work gets done here
