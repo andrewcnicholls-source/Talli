@@ -2,12 +2,21 @@
 # =====================================================================
 #  Talli — the validation command.
 #
-#  There is no build, no bundler, no test framework: the site is static
-#  files served as-is. So "validation" here means the checks that can
-#  actually catch something in a repository shaped like this one, and
-#  nothing more. Every check below is real. None of them are stubs.
+#  There is no build and no bundler: the site is static files served
+#  as-is. Validation is two things. First, static checks that read the
+#  repository. Then the automated suites (plan T0): units, then the
+#  database, the edge functions and the browser against a LOCAL Supabase
+#  stack built from supabase/migrations/ from empty. Every check below is
+#  real. None of them are stubs.
 #
-#      bash scripts/check.sh
+#      bash scripts/check.sh            everything
+#      bash scripts/check.sh --fast     everything but the browser run
+#      bash scripts/check.sh --static   static checks and units only, no
+#                                       stack (no Docker needed)
+#
+#  The stack suites need Docker and `npm ci --prefix tests`. Without them
+#  they are reported as SKIPPED, loudly, and never as passed. In CI
+#  (CI=true) a skipped suite is a failure.
 #
 #  Exits 0 if everything passed, 1 if anything failed. CI runs exactly
 #  this script, so a green run locally means a green run on the PR.
@@ -21,6 +30,15 @@ ROOT="$(pwd)"
 PASS=0
 FAIL=0
 SKIP=0
+
+MODE=full
+for arg in "$@"; do
+  case "$arg" in
+    --fast)   MODE=fast ;;
+    --static) MODE=static ;;
+    *) printf 'unknown option: %s (use --fast or --static)\n' "$arg" >&2; exit 2 ;;
+  esac
+done
 
 pass() { printf '  \033[32m✓\033[0m %s\n' "$1"; PASS=$((PASS + 1)); }
 fail() { printf '  \033[31m✗\033[0m %s\n' "$1"; FAIL=$((FAIL + 1)); }
@@ -132,23 +150,66 @@ done
 [ "$found_is_test" -eq 1 ] || skip "no edge function uses IS_TEST"
 
 # ---------------------------------------------------------------------
-head "Token handling"
+head "Unit tests"
 # ---------------------------------------------------------------------
-# assets/talli-auth.js holds the host's session: capturing it off the
-# redirect, refreshing it before it dies, and dropping it when it is
-# refused. Every one of those fails quietly — either nobody can get in on
-# a matchday, or a session outlives its welcome. scripts/check-auth.js
-# runs it against a fake window and a fake fetch. Still no test framework:
-# one file, plain node, no dependencies, no network.
+# tests/units: plain node, no network, no browser, no stack. Token
+# handling in assets/talli-auth.js lives here (it was scripts/check-auth.js
+# until T0): capturing the session off the redirect, refreshing it before
+# it dies, dropping it when refused. Each fails quietly — nobody gets in
+# on a matchday, or a session outlives its welcome.
 if command -v node >/dev/null 2>&1; then
-  if out=$(node scripts/check-auth.js 2>&1); then
-    pass "assets/talli-auth.js behaves ($(printf '%s' "$out" | grep -c '^  ok') checks)"
+  if out=$(node --test 'tests/units/*.test.js' 2>&1); then
+    pass "unit tests ($(printf '%s' "$out" | sed -n 's/^# pass //p') passed)"
   else
-    fail "assets/talli-auth.js does not behave"
-    printf '%s\n' "$out" | grep 'FAIL' | sed 's/^/      /'
+    fail "unit tests failed"
+    printf '%s\n' "$out" | grep -E '^not ok|^# (pass|fail)' | sed 's/^/      /'
   fi
 else
-  skip "node not installed — token handling is NOT checked"
+  skip "node not installed — unit tests NOT run"
+fi
+
+# ---------------------------------------------------------------------
+head "Test sign-in stays on the test site"
+# ---------------------------------------------------------------------
+# The test site offers "sign in as a test user", by password, so device
+# testing can see the gate as a warden. That must never reach
+# talli.co.nz. Three guards, any one of which is enough on its own:
+# the file returns first thing off the test site, the password call
+# refuses off the test site, and production's password provider is off
+# (DEPLOYMENT.md § 0c, checked by /release-production).
+TU="assets/talli-test-users.js"
+if [ -f "$TU" ]; then
+  # The first statement after reading the config must be the guard.
+  first=$(awk 'seen && NF { print; exit } /var CFG = window.TALLI/ { seen = 1 }' "$TU")
+  if printf '%s' "$first" | grep -q 'if (!CFG.isTest) return;'; then
+    pass "$TU does nothing off the test site"
+  else
+    fail "$TU no longer returns first thing off the test site (found: $first)"
+  fi
+else
+  pass "no test-user sign-in file"
+fi
+if grep -A3 'function signInWithPassword' assets/talli-auth.js | grep -q 'if (!CFG.isTest)'; then
+  pass "TalliAuth.signInWithPassword refuses off the test site"
+else
+  fail "TalliAuth.signInWithPassword has lost its test-site guard"
+fi
+
+# The seeded accounts are fixtures. In a migration they would be created
+# on production.
+seeded=$(grep -oE "[a-z.]+\.test@example\.com" supabase/test-only/seed-test-users.sql | sort -u)
+hits=""
+for addr in $seeded; do
+  f=$(grep -l -F "$addr" supabase/migrations/*.sql 2>/dev/null)
+  [ -n "$f" ] && hits="$hits $addr:$f"
+done
+if grep -q -F "talli-test-only" supabase/migrations/*.sql 2>/dev/null; then
+  hits="$hits password"
+fi
+if [ -z "$hits" ]; then
+  pass "no seeded test account appears in a migration"
+else
+  fail "a seeded test account is in a migration:$hits"
 fi
 
 # ---------------------------------------------------------------------
@@ -1045,6 +1106,110 @@ if command -v deno >/dev/null 2>&1; then
   fi
 else
   skip "deno not installed — edge function TypeScript is NOT typechecked"
+fi
+
+# ---------------------------------------------------------------------
+head "Automated suites against a local stack"
+# ---------------------------------------------------------------------
+# Database (pgTAP), edge functions (node --test over HTTP) and browser
+# (Playwright), against `supabase start` on this machine — never the
+# shared test project, which is Andrew's device-testing database.
+# The database is rebuilt from supabase/migrations/ and the test-only
+# fixtures on every run, so a migration that does not replay fails here.
+SB="tests/node_modules/.bin/supabase"
+SUITES_EXCLUDE="studio,imgproxy,logflare,vector,supavisor,mailpit,realtime,postgres-meta,storage-api"
+
+missing() {
+  if [ "${CI:-}" = "true" ]; then fail "$1"; else skip "$1"; fi
+}
+
+run_stack_suites() {
+  if [ ! -x "$SB" ]; then
+    missing "tests/node_modules is not installed (npm ci --prefix tests) — database, functions and browser suites NOT run"
+    return
+  fi
+  if ! docker info >/dev/null 2>&1; then
+    missing "Docker is not running — database, functions and browser suites NOT run"
+    return
+  fi
+
+  if ! "$SB" status --workdir . >/dev/null 2>&1; then
+    printf '      starting the local stack (first run pulls images; minutes)\n'
+    if ! out=$("$SB" start --workdir . -x "$SUITES_EXCLUDE" 2>&1); then
+      fail "the local stack would not start"
+      printf '%s\n' "$out" | tail -15 | sed 's/^/      /'
+      return
+    fi
+  fi
+
+  if out=$("$SB" db reset --workdir . 2>&1); then
+    pass "every migration replays from empty, and the fixtures load"
+  else
+    fail "the database does not rebuild from supabase/migrations/"
+    printf '%s\n' "$out" | tail -15 | sed 's/^/      /'
+    return
+  fi
+
+  local envs
+  envs=$("$SB" status --workdir . -o env 2>/dev/null)
+  eval "$(printf '%s\n' "$envs" | grep -E '^(API_URL|ANON_KEY|SERVICE_ROLE_KEY|FUNCTIONS_URL|JWT_SECRET)=' | sed 's/^/export /')"
+
+  if out=$("$SB" test db --workdir . 2>&1); then
+    pass "database suite ($(printf '%s' "$out" | sed -n 's/^Files=[0-9]*, Tests=\([0-9]*\).*/\1/p') assertions)"
+  else
+    fail "database suite failed"
+    printf '%s\n' "$out" | grep -E 'not ok|#   |Failed|Result' | sed 's/^/      /'
+  fi
+
+  # After the reset, PostgREST has to reload its picture of the schema
+  # before the functions can call into it. Wait until it can see the
+  # function every gate request starts with.
+  for _ in $(seq 1 60); do
+    code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$API_URL/rest/v1/rpc/host_access_for" \
+      -H "apikey: $SERVICE_ROLE_KEY" -H "Authorization: Bearer $SERVICE_ROLE_KEY" \
+      -H 'Content-Type: application/json' -d '{"p_user_id":null,"p_email":""}')
+    [ "$code" = "200" ] && break
+    sleep 1
+  done
+
+  # The edge runtime keeps workers warm; restart it so the functions
+  # under test are the files on disk now.
+  docker restart supabase_edge_runtime_talli >/dev/null 2>&1 || true
+  # And wait for each function to boot, so a cold start is not a failure.
+  for fn in supabase/functions/*/; do
+    fn=$(basename "$fn")
+    for _ in $(seq 1 60); do
+      code=$(curl -s -o /dev/null -w '%{http_code}' -X OPTIONS "$FUNCTIONS_URL/$fn" \
+        -H "apikey: $ANON_KEY" -H "Authorization: Bearer $ANON_KEY")
+      # Any answer from the function itself; 5xx is the runtime still booting.
+      case "$code" in 2*|4*) break ;; esac
+      sleep 1
+    done
+  done
+
+  if out=$(node --test --test-concurrency=1 'tests/functions/*.test.js' 2>&1); then
+    pass "functions suite ($(printf '%s' "$out" | sed -n 's/^# pass //p') passed)"
+  else
+    fail "functions suite failed"
+    printf '%s\n' "$out" | grep -E '^not ok|^# (pass|fail)|AssertionError|code:' | sed -n 1,30p | sed 's/^/      /'
+  fi
+
+  if [ "$MODE" = "fast" ]; then
+    skip "browser suite NOT run (--fast)"
+    return
+  fi
+  if out=$(cd tests && npx playwright test 2>&1); then
+    pass "browser suite ($(printf '%s' "$out" | sed -n 's/^ *\([0-9]*\) passed.*/\1/p') passed, phone, tablet and desktop)"
+  else
+    fail "browser suite failed (videos in tests/test-results/)"
+    printf '%s\n' "$out" | grep -E '✘|[0-9]+ (failed|flaky|passed)|Error:' | sed -n 1,30p | sed 's/^/      /'
+  fi
+}
+
+if [ "$MODE" = "static" ]; then
+  missing "--static: database, functions and browser suites NOT run"
+else
+  run_stack_suites
 fi
 
 # ---------------------------------------------------------------------

@@ -1,0 +1,13 @@
+{
+  "name": "talli-tests",
+  "private": true,
+  "description": "Development tools for Talli's test suites. Nothing here is served: the site is the files in the repository root, with no build step. See TESTING.md.",
+  "scripts": {
+    "stack:start": "supabase start --workdir .. -x studio,imgproxy,logflare,vector,supavisor,mailpit,realtime,postgres-meta,storage-api",
+    "stack:stop": "supabase stop --workdir .."
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "supabase": "2.122.1"
+  }
+}

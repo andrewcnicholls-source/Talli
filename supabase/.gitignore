@@ -1,0 +1,8 @@
+# Supabase CLI working state for the local stack
+.branches
+.temp
+
+# dotenvx
+.env.keys
+.env.local
+.env.*.local

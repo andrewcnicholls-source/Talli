@@ -321,6 +321,32 @@ summary, and additionally:
 - **Never put a real payment through to test a release.** Card
   `4242 4242 4242 4242` belongs on staging and nowhere else.
 
+### Production sign-in is Google only — check it every release
+
+The test site offers "sign in as a test user", by password, with
+invented accounts whose password is in this repository
+(`supabase/test-only/seed-test-users.sql`). That is safe only because
+production's email-and-password provider is **off** (DEPLOYMENT.md
+§ 0c). It is a dashboard switch, so nothing in git can prove it. Ask
+production itself, with an address that does not exist and the public
+anon key from `assets/talli-config.js`:
+
+```bash
+PROD_ANON=$(sed -n "/var PRODUCTION = {/,/};/p" assets/talli-config.js \
+  | grep -oE "'eyJ[A-Za-z0-9_.-]+'|'[A-Za-z0-9_-]{40,}'" | tr -d "'\n")
+curl -s -X POST \
+  "https://$TALLI_PRODUCTION_SUPABASE_REF.supabase.co/auth/v1/token?grant_type=password" \
+  -H "apikey: $PROD_ANON" -H 'Content-Type: application/json' \
+  -d '{"email":"release-check@example.invalid","password":"not-a-password"}'
+```
+
+The only acceptable answer names the provider as disabled:
+`"error_code":"email_provider_disabled"`. Anything else — above all
+`invalid_credentials`, which means the provider is on and merely
+refused this one address — **stop the release** and tell the user to
+switch the Email provider off for the production project. Do not
+release with it on; the test accounts' password is public.
+
 ### Booking-critical changes
 
 Check against `$TALLI_BOOKING_PATHS`. Flag them; they need the booking
@@ -352,8 +378,10 @@ to wait. If they say to release anyway, that is their call — proceed,
 but record in the summary that device testing was **not** done, and
 never write that it was.
 
-Do not tick a box because a check in `scripts/check.sh` passed. Those
-checks do not open a browser.
+Do not tick a box because a check in `scripts/check.sh` passed. Its
+browser suite drives Chromium at phone, tablet and desktop sizes
+against a local stack — not Safari, not a real phone, not the staging
+site, and not a real Stripe page.
 
 ## 7. Present the release summary and get explicit confirmation
 

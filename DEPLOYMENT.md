@@ -648,6 +648,26 @@ select id, 'someone@example.com' from host where name = 'Talli Limited';
 An unclaimed row is just an invitation — it becomes access the first
 time that person signs in, and never before.
 
+**Email and password: on for `talli-test`, OFF for production.** The
+test site's sign-in card also offers "sign in as a test user" — the
+invented accounts in `supabase/test-only/seed-test-users.sql`, by
+password — so device testing can see the gate screen as a warden
+without a second Google account, and so the automated tests can sign
+in at all (plan T0). Their password is in this repository. That is
+only safe because production refuses password sign-in outright.
+
+| Project | Authentication → Sign In / Providers → **Email** | Authentication → Sign In / Providers → **Allow new users to sign up** |
+| --- | --- | --- |
+| `talli-test` | **Enabled** | **Off** — every account is seeded |
+| production | **Disabled**, and it stays disabled | Off |
+
+Then run `supabase/test-only/seed-test-users.sql` against the **test**
+project (SQL Editor). It is re-runnable and creates the accounts and
+their `host_user` rows. Never against production.
+
+`/release-production` asks production for a password sign-in before
+every release and stops unless the answer is `email_provider_disabled`.
+
 ### 1. Make `staging` the default branch
 
 The single highest-value change here. GitHub currently defaults every

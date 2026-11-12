@@ -1,0 +1,98 @@
+# =====================================================================
+#  The LOCAL Supabase stack the automated tests run against.
+#
+#      npx --prefix tests supabase start      (needs Docker)
+#
+#  This file configures `supabase start` on a developer's machine and in
+#  CI. It configures neither hosted project: nothing here reaches
+#  talli-test or production unless someone runs `supabase config push`,
+#  which nobody should. Auth providers, redirect URLs and secrets on the
+#  hosted projects are dashboard settings — DEPLOYMENT.md § 0c.
+#
+#  The stack is built from supabase/migrations/ from empty on every
+#  start, which is itself a test: a migration that does not replay is
+#  found here, not on release night. Then the test-only fixtures below
+#  are loaded. Never the shared test project: a test run would trample
+#  whatever Andrew has open on his phone.
+# =====================================================================
+project_id = "talli"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 17
+
+[db.seed]
+enabled = true
+# Order matters: the calendar, then the second block on it, then the
+# people who sign in, then the two nights the tests book.
+sql_paths = [
+  "./test-only/reset-test-data.sql",
+  "./test-only/seed-test-block.sql",
+  "./test-only/seed-test-users.sql",
+  "./test-only/seed-test-nights.sql",
+]
+
+[auth]
+enabled = true
+# The site, served by the browser tests.
+site_url = "http://127.0.0.1:4173"
+additional_redirect_urls = ["http://127.0.0.1:4173/admin"]
+jwt_expiry = 3600
+enable_refresh_token_rotation = true
+# Nobody signs themselves up: every account is seeded.
+enable_signup = false
+
+[auth.rate_limit]
+# The suites sign in dozens of times a minute from one address.
+sign_in_sign_ups = 1000
+token_refresh = 1000
+
+[auth.email]
+# Locally, password sign-in is how the tests become a host or a warden.
+# On production this provider is OFF and must stay off (DEPLOYMENT.md
+# § 0c; /release-production checks). `enable_signup` here is what
+# switches the provider on at all; nobody can sign up through it,
+# because [auth] enable_signup above is off.
+enable_signup = true
+enable_confirmations = false
+
+[edge_runtime]
+enabled = true
+policy = "per_worker"
+deno_version = 2
+
+# Stand-ins, so the payment functions start up locally. Neither is a
+# credential: the key is refused by Stripe if it ever reaches it, and the
+# signing secret is the one the functions suite signs its fake webhook
+# deliveries with. Real keys live in each hosted project's secrets.
+[edge_runtime.secrets]
+STRIPE_SECRET_KEY = "sk_test_local_stack_not_a_key"
+STRIPE_WEBHOOK_SIGNING_SECRET = "whsec_local_stack_not_a_secret"
+
+# Matches the hosted project: Stripe cannot send a Supabase JWT, and the
+# function checks Stripe's signature instead.
+[functions.stripe-webhook]
+verify_jwt = false
+
+[studio]
+enabled = false
+
+[inbucket]
+enabled = false
+
+[realtime]
+enabled = false
+
+[storage]
+enabled = false
+
+[analytics]
+enabled = false
