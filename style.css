@@ -858,6 +858,17 @@ footer a { color: var(--blue); }
 @media (min-width: 520px) { .btn-google { width: 100%; } }
 .ad-google-mark { width: 18px; height: 18px; flex: none; }
 
+/* Test site only (assets/talli-test-users.js). */
+.ad-lock-test {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 10px;
+}
+.ad-lock-test p { margin-bottom: 0; }
+.ad-lock-test .btn { width: 100%; }
+
 .ad-lock-error {
   background: #FFF4F0;
   color: var(--orange-flag);

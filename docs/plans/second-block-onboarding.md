@@ -561,6 +561,38 @@ that first, with new migrations and no edits to applied ones.
   auth check, or changes a price shown fails CI, and the baseline suite
   passes on `staging` as it stands today.
 
+**Status, 12 Nov 2026: built** (branch `claude/blissful-tesla-bgz5sc`).
+What differs from the brief above, and why:
+
+- **The ledger worry did not bite.** Every migration replays from empty
+  on a local stack as it stands; no repair migration was needed.
+  `check.sh` now proves that on every run.
+- **The tools' `package.json` is `tests/package.json`, not the root.**
+  Cloudflare Pages installs dependencies when it finds a root
+  `package.json`, and could upload `node_modules` as site files. In
+  `tests/` it cannot see it, so Pages still deploys the repository as
+  it is, with nothing to confirm.
+- **The functions suite is `node --test` over HTTP, not `deno test`.**
+  It calls the real functions served by the local stack, so the
+  language of the test does not matter, and one toolchain is simpler.
+  `deno check` stays in CI for the function sources.
+- **Stripe is not stubbed inside the functions.** Nothing was added to
+  payment code. Locally the Stripe key is a stand-in Stripe refuses,
+  which tests that a refused checkout gives its space back; webhooks
+  are signed with a local stand-in secret, which tests signatures and
+  replays. "create-checkout refuses a price mismatch" belongs to B1,
+  which builds that guard, and goes in with it. That a body amount is
+  ignored is covered in the database, functions and browser suites.
+- **Units hold `talli-auth.js` only** until S0 makes front-end modules.
+- **No test password is published.** The local stack has a fixed one
+  that opens nothing else; the test project's is chosen by Andrew when
+  he seeds the accounts, and the staging sign-in card asks for it.
+- **Still for Andrew** (dashboard, no tool reaches it): on `talli-test`,
+  Email provider on, sign-ups off, and run
+  `supabase/test-only/seed-test-users.sql` with a password of his own
+  (DEPLOYMENT.md § 0c); then
+  make the CI `check` job a required check on `staging` and `main`.
+
 ### C1 — Go-live (Andrew)
 
 1. Device-test staging against the script in `TESTING.md`. Passing

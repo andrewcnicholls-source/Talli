@@ -314,6 +314,83 @@ end time and the online cutoff are all derived from the start time.
 It lives outside `supabase/migrations/` deliberately, so `supabase db push`
 can never carry it to the live site.
 
+## Automated tests
+
+Plan T0 (`docs/plans/second-block-onboarding.md`). One command, the same
+one CI runs on every pull request to `staging` and `main`:
+
+```bash
+bash scripts/check.sh            # everything
+bash scripts/check.sh --fast     # everything but the browser run
+bash scripts/check.sh --static   # no Docker: static checks and units only
+```
+
+The first time, install the tools (Playwright and the Supabase CLI,
+into `tests/node_modules` — nothing there is served) and a browser:
+
+```bash
+npm ci --prefix tests
+```
+
+```bash
+npx --prefix tests playwright install chromium
+```
+
+**Where they run: a local Supabase stack, never the test project.**
+`check.sh` starts one in Docker (`supabase start`, configured by
+`supabase/config.toml`), rebuilds the database from
+`supabase/migrations/` from empty on every run, and loads the
+test-only fixtures. The shared test project is your device-testing
+database; a test run there would trample whatever is open on your
+phone. `tests/lib/stack.js` refuses any address that is not this
+machine. Leave the stack running between runs, or stop it with
+`npm --prefix tests run stack:stop`.
+
+| Suite | Where | What it holds today |
+| --- | --- | --- |
+| Units | `tests/units/` (`node --test`) | Token handling in `assets/talli-auth.js`, and password sign-in refusing off the test site. Needs no stack. |
+| Database | `supabase/tests/database/` (pgTAP) | The last space; the gate reserve; sold out online but not at the gate; an abandoned checkout giving its space back; the event deletion guard; what the anon key can read and change; every view keeping `security_invoker`. |
+| Functions | `tests/functions/` (`node --test` over HTTP) | `gate-ops` and `check-setup` refusing the anon key, a forged token, a signed-in non-host and a warden with every block off; a warden refused operator actions, another block's cars and tap to pay; the email coming from the token, never the body; eight buyers racing for one space and exactly one winning; checkout refusals; a webhook confirming a booking only when correctly signed, and only once. |
+| Browser | `tests/browser/` (Playwright) | A customer booking a block through to the confirmation page, and being sent to that block; a night sold out online saying walk-ups, never a count; a warden seeing one block, selling cash, never offered tap to pay; the operator seeing both; a stranger turned away; the test-user sign-in. Phone, tablet and desktop sizes, video kept on failure. |
+
+**How the tests sign in.** No bypass in any server code. The fixtures
+include password accounts — operator, a warden per block, a warden with
+every grant off, a signed-in non-host — and the tests sign in with
+them. `gate-ops` then resolves the token, requires a confirmed email
+and looks it up in `host_user`, exactly as for Google. On the local
+stack their password comes from
+`supabase/test-only/local-stack-password.sql` and opens nothing
+anywhere else. On the test project they have a password you chose,
+which is in no file (DEPLOYMENT.md § 0c); `check.sh` proves the seed
+will not run without one, and that the local one never reaches a
+served file.
+
+**Stripe is not reached.** The local stack's Stripe key is a stand-in
+Stripe refuses, and its webhook signing secret is one the tests sign
+fake deliveries with (both in `supabase/config.toml`). So the suites
+cover what the functions decide either side of Stripe; a real
+test-mode payment is still a device test on staging.
+
+**What passing does not mean.** Chromium at three sizes against a
+local stack is not Safari, not a real phone, not the staging site and
+not a real Stripe page. Device testing on staging is still the real
+test.
+
+**Adding to them.** Every workstream adds its "done when" to these
+suites in the same PR. The fixtures in
+`supabase/test-only/seed-test-nights.sql` are dated from whenever they
+load, so they never go stale: two blocks, two sites each, four hosts,
+and a night sold out online with gate spaces left.
+
+### Signing in as a test user on the test site
+
+The gate screen's sign-in card on staging offers "Sign in as test
+user": the same accounts, so you can see the screen as a warden from
+your own phone. It asks for the password you set when you seeded the
+accounts; nothing in the page knows it. It needs two dashboard settings
+on the test project and the accounts seeded there — DEPLOYMENT.md § 0c. Production does
+not offer it, and refuses it if asked.
+
 ---
 
 ## Your backend is now in git

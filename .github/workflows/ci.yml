@@ -3,7 +3,8 @@
 #
 #  Runs the same script a contributor runs locally — scripts/check.sh —
 #  so a green PR means the same thing as a green terminal. There is
-#  deliberately nothing here that cannot also be run by hand.
+#  deliberately nothing here that cannot also be run by hand. That script
+#  now includes the automated suites (TESTING.md, "Automated tests").
 #
 #  This gate sits in front of `staging`, which deploys to the shared
 #  device-test site, and in front of `main`, which is the live booking
@@ -34,9 +35,35 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+          cache: npm
+          cache-dependency-path: tests/package-lock.json
 
+      # The suites' tools (plan T0): Playwright and the Supabase CLI. They
+      # live in tests/, not the repository root, so Cloudflare Pages never
+      # sees a package.json and keeps serving the repository as it is.
+      - name: Install test tools
+        run: npm ci --prefix tests
+
+      - name: Install the browser
+        run: npx --prefix tests playwright install --with-deps chromium
+
+      # Static checks, then units, then the database, edge function and
+      # browser suites against a local Supabase stack that check.sh starts
+      # here in Docker, built from supabase/migrations/ from empty. CI=true
+      # makes a suite that could not run a failure, not a skip.
       - name: Run project checks
         run: bash scripts/check.sh
+
+      - name: Keep the browser run's videos and report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright
+          path: |
+            tests/test-results/
+            tests/playwright-report/
+          retention-days: 14
+          if-no-files-found: ignore
 
   # -------------------------------------------------------------------
   #  Edge function typechecking.

@@ -7,6 +7,8 @@ branches, projects, keys. This file only covers what lives in here.
 migrations/   SQL, applied in filename order
 functions/    edge function sources, one directory per function
 test-only/    fixtures and resets that must never be pointed at production
+tests/        the pgTAP database suite (TESTING.md, "Automated tests")
+config.toml   the LOCAL stack the suites run against — not either project
 ```
 
 Both Supabase projects — `oxzwfemyavznykqixhvk` (production) and

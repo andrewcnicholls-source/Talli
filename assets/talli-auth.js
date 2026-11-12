@@ -185,6 +185,36 @@
       '&redirect_to=' + encodeURIComponent(target);
   }
 
+  // TEST SITE ONLY: one of the invented accounts in
+  // supabase/test-only/seed-test-users.sql, by password. This is how
+  // device testing signs in as a warden without a second Google account,
+  // and how the automated tests sign in at all. It produces an ordinary
+  // Supabase session, so gate-ops checks it exactly as it checks Google's.
+  //
+  // Refused here on production before any request is made, and refused
+  // again by production itself: its email-and-password provider is off
+  // (DEPLOYMENT.md § 0c). scripts/check.sh asserts this guard is present.
+  function signInWithPassword(email, password) {
+    if (!CFG.isTest) {
+      return Promise.reject(new Error('Password sign-in is for the test site only.'));
+    }
+    return fetch(AUTH + '/token?grant_type=password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: CFG.anonKey },
+      body: JSON.stringify({ email: email, password: password }),
+    })
+      .then(function (res) {
+        return res.json().then(function (data) {
+          if (!res.ok || !data.access_token) {
+            throw new Error(data.msg || data.error_description || data.error ||
+              'That test account could not sign in.');
+          }
+          return data;
+        });
+      })
+      .then(function (data) { return accept(data); });
+  }
+
   /* --------------------------------------------- back where you began */
 
   var RETURN_KEY = 'talli.auth.return';
@@ -261,6 +291,7 @@
     hasSession: function () { return !!session; },
     accessToken: accessToken,
     signInWithGoogle: signInWithGoogle,
+    signInWithPassword: signInWithPassword,
     signOut: signOut,
     forget: function () { save(null); },
   };

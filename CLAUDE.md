@@ -66,13 +66,23 @@ with tests for what it changes, and is not finished until they pass.
 `bash scripts/check.sh` is the one validation command, and CI runs the
 same script. Never report a check as passing without running it.
 
-Automated test suites — database, edge functions, browser — are being
-introduced by workstream T0 in `docs/plans/second-block-onboarding.md`,
-and will run through that same script. **Until T0 has merged they do
-not exist:** `scripts/check.sh` is all there is, so do not invent
-`npm test`, `npm run lint` or `npm run build`, and do not claim a test
-ran that could not have. Once T0 is in, add to its suites rather than
-starting another.
+It runs the static checks, then the automated suites from workstream
+T0 (`TESTING.md`, "Automated tests"): units, database (pgTAP),
+edge functions and browser (Playwright), against a **local** Supabase
+stack in Docker, rebuilt from `supabase/migrations/` on every run —
+never against the shared test project. `--fast` skips the browser,
+`--static` needs no Docker. A suite that could not run is reported as
+skipped, never as passed; say so when it happens. Add to these suites
+rather than starting another, and do not invent `npm test`,
+`npm run lint` or `npm run build` — the tools live in
+`tests/package.json` and exist only to serve `check.sh`.
+
+The tests sign in with password accounts seeded in
+`supabase/test-only/seed-test-users.sql`. The only password in the
+repository is the local stack's; the test project's is Andrew's and is
+never written down — not in a file, a commit, a PR or a chat. No server check may be
+weakened, skipped or special-cased to let a test through; if a test
+cannot sign in honestly, the test is wrong.
 
 There is still no build and no bundler: the site is served as the
 files in this repository.

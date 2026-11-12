@@ -92,14 +92,25 @@ bash scripts/check.sh
 ```
 
 That is the project's only validation command, and CI runs the same
-file. There is no build, no bundler, no test framework and no linter —
-do not invent `npm test`, `npm run lint` or `npm run build`.
+file. There is no build, no bundler and no linter — do not invent
+`npm test`, `npm run lint` or `npm run build`.
 
-What it covers: JavaScript syntax, local asset references, the
-environment switch, the edge-function `IS_TEST` guards, the production
-build no-op, committed secrets, migration filenames. What it does
-**not** cover: anything about how the site behaves in a browser. Say
-both.
+What it covers: the static checks (JavaScript syntax, asset
+references, the environment switch, the auth checks, committed
+secrets, migrations, and the rest), then the automated suites — units,
+database, edge functions and browser — against a local Supabase stack
+in Docker (TESTING.md, "Automated tests"). They need
+`npm ci --prefix tests` and Docker; without them `check.sh` reports
+the suites as **skipped**. A skip is not a pass: name each skipped
+suite in the report and say CI is where it runs. Never point a suite
+at a hosted project to get it to run.
+
+**The change must come with its tests.** If the work changed what the
+site or the database does, the PR adds to those suites. If it did not
+— docs only, say — say so.
+
+What it does **not** cover: Safari, real phones, the staging site, a
+real Stripe page. That is device testing on staging. Say so.
 
 **The TypeScript check is usually skipped locally, and that is not the
 same as passing.** `deno check` needs to reach esm.sh and jsr.io for
@@ -168,7 +179,7 @@ Branch:
   pushed to origin
 
 Validation:
-  ✓ scripts/check.sh — 20 passed, 0 failed, 1 skipped
+  ✓ scripts/check.sh — 81 passed, 0 failed, 1 skipped (TypeScript: CI)
     (skipped: edge function TypeScript — deno cannot reach esm.sh
      from here; CI's typecheck job is where that one runs)
 

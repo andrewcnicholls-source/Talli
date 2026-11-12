@@ -648,6 +648,44 @@ select id, 'someone@example.com' from host where name = 'Talli Limited';
 An unclaimed row is just an invitation — it becomes access the first
 time that person signs in, and never before.
 
+**Email and password: on for `talli-test`, OFF for production.** The
+test site's sign-in card also offers "sign in as a test user" — the
+invented accounts in `supabase/test-only/seed-test-users.sql`, by
+password — so device testing can see the gate screen as a warden
+without a second Google account, and so the automated tests can sign
+in at all (plan T0).
+
+**The test project's password is yours, and is written nowhere.** The
+repository holds only the local stack's password
+(`supabase/test-only/local-stack-password.sql`), which opens a stack on
+the machine running the tests and nothing else. The seed refuses to
+run without a password you supply, and refuses that local one.
+
+| Project | Authentication → Sign In / Providers → **Email** | Authentication → Sign In / Providers → **Allow new users to sign up** |
+| --- | --- | --- |
+| `talli-test` | **Enabled** | **Off** — every account is seeded |
+| production | **Disabled**, and it stays disabled | Off |
+
+Then, in the **test** project's SQL Editor, choose a password (a long
+one; keep it in your password manager, not in a file here), and run
+this line followed by the whole of
+`supabase/test-only/seed-test-users.sql`, in one run:
+
+```sql
+select set_config('talli.test_password', '<your password>', false);
+```
+
+It creates the accounts and their `host_user` rows. Re-run it with a
+new password to change the password on every test account at once —
+do that whenever anyone who knew it should no longer. Never against
+production.
+
+On staging the sign-in card asks for that password; your phone can
+remember it.
+
+`/release-production` asks production for a password sign-in before
+every release and stops unless the answer is `email_provider_disabled`.
+
 ### 1. Make `staging` the default branch
 
 The single highest-value change here. GitHub currently defaults every
