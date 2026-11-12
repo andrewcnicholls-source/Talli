@@ -15,8 +15,20 @@
 --  are exercised rather than skipped. There is no test switch in any
 --  server code.
 --
---  The password is not a secret and is not meant to be one. Everything
---  these accounts can reach is invented test data and Stripe test mode.
+--  THE PASSWORD IS NOT IN THIS FILE. It is read from the setting
+--  `talli.test_password`, and the script stops if that is not set:
+--
+--    * Local stack: local-stack-password.sql sets it, first.
+--    * Test project: Andrew sets it in the SQL Editor, in the same run,
+--      with a password he chooses and keeps (DEPLOYMENT.md § 0c):
+--
+--          select set_config('talli.test_password', '<choose one>', false);
+--          -- then the whole of this file
+--
+--      Running it again with a different password changes it for every
+--      test account. The local stack's password is refused here unless
+--      the local-stack marker is set too, so it cannot end up on staging
+--      by copying the wrong file.
 --
 --      operator.test@example.com         scope all, on the operator host
 --      warden.test@example.com           scope blocks: Gribblehurst (test)
@@ -29,6 +41,18 @@
 --
 --  Re-runnable. Needs seed-test-block.sql first (the Gribblehurst block).
 -- =====================================================================
+
+-- ---- The password, from the session — never from this file.
+do $$
+declare pw text := coalesce(current_setting('talli.test_password', true), '');
+begin
+  if length(pw) < 12 then
+    raise exception 'TEST_PASSWORD_REQUIRED: run select set_config(''talli.test_password'', ''<at least 12 characters>'', false); first, in the same run';
+  end if;
+  if pw = 'talli-test-only' and coalesce(current_setting('talli.local_stack', true), '') <> 'on' then
+    raise exception 'LOCAL_PASSWORD_REFUSED: that is the local stack''s published password; choose your own for this project';
+  end if;
+end $$;
 
 -- ---- Supabase Auth users, confirmed, with the email provider identity.
 with people(id, email) as (values
@@ -45,11 +69,17 @@ insert into auth.users (
   email_change_token_current, phone_change, phone_change_token, reauthentication_token
 )
 select '00000000-0000-0000-0000-000000000000', p.id, 'authenticated', 'authenticated', p.email,
-       extensions.crypt('talli-test-only', extensions.gen_salt('bf')), now(),
+       extensions.crypt(current_setting('talli.test_password'), extensions.gen_salt('bf')), now(),
        '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb, now(), now(),
        '', '', '', '', '', '', '', ''
   from people p
  where not exists (select 1 from auth.users u where u.id = p.id or lower(u.email) = p.email);
+
+-- Re-running with a new password changes it.
+update auth.users
+   set encrypted_password = extensions.crypt(current_setting('talli.test_password'), extensions.gen_salt('bf')),
+       updated_at = now()
+ where id between '7e570000-0000-4000-8000-000000000001' and '7e570000-0000-4000-8000-000000000005';
 
 insert into auth.identities (id, provider_id, user_id, identity_data, provider,
                              last_sign_in_at, created_at, updated_at)

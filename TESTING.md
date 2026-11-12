@@ -357,7 +357,13 @@ machine. Leave the stack running between runs, or stop it with
 include password accounts — operator, a warden per block, a warden with
 every grant off, a signed-in non-host — and the tests sign in with
 them. `gate-ops` then resolves the token, requires a confirmed email
-and looks it up in `host_user`, exactly as for Google.
+and looks it up in `host_user`, exactly as for Google. On the local
+stack their password comes from
+`supabase/test-only/local-stack-password.sql` and opens nothing
+anywhere else. On the test project they have a password you chose,
+which is in no file (DEPLOYMENT.md § 0c); `check.sh` proves the seed
+will not run without one, and that the local one never reaches a
+served file.
 
 **Stripe is not reached.** The local stack's Stripe key is a stand-in
 Stripe refuses, and its webhook signing secret is one the tests sign
@@ -380,8 +386,9 @@ and a night sold out online with gate spaces left.
 
 The gate screen's sign-in card on staging offers "Sign in as test
 user": the same accounts, so you can see the screen as a warden from
-your own phone. It needs two dashboard settings on the test project
-and the accounts seeded there — DEPLOYMENT.md § 0c. Production does
+your own phone. It asks for the password you set when you seeded the
+accounts; nothing in the page knows it. It needs two dashboard settings
+on the test project and the accounts seeded there — DEPLOYMENT.md § 0c. Production does
 not offer it, and refuses it if asked.
 
 ---

@@ -324,10 +324,10 @@ summary, and additionally:
 ### Production sign-in is Google only — check it every release
 
 The test site offers "sign in as a test user", by password, with
-invented accounts whose password is in this repository
-(`supabase/test-only/seed-test-users.sql`). That is safe only because
-production's email-and-password provider is **off** (DEPLOYMENT.md
-§ 0c). It is a dashboard switch, so nothing in git can prove it. Ask
+invented accounts (`supabase/test-only/seed-test-users.sql`). Their
+password on the test project is the user's own and in no file, but
+production must still refuse password sign-in outright: its
+email-and-password provider is **off** (DEPLOYMENT.md § 0c). It is a dashboard switch, so nothing in git can prove it. Ask
 production itself, with an address that does not exist and the public
 anon key from `assets/talli-config.js`:
 
@@ -345,7 +345,7 @@ The only acceptable answer names the provider as disabled:
 `invalid_credentials`, which means the provider is on and merely
 refused this one address — **stop the release** and tell the user to
 switch the Email provider off for the production project. Do not
-release with it on; the test accounts' password is public.
+release with it on: production is Google sign-in only.
 
 ### Booking-critical changes
 

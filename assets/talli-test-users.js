@@ -13,8 +13,10 @@
    test site, and production's password provider is switched off anyway.
    scripts/check.sh asserts the guard below stays the first thing here.
 
-   The password is not a secret. Everything these accounts reach is test
-   data and Stripe test mode.
+   The password is NOT in this file, or anywhere in the repository. Andrew
+   chose it when he created the accounts on the test project (DEPLOYMENT.md
+   § 0c) and types it here; the field is a real password field, so a phone
+   offers to remember it.
    ===================================================================== */
 (function () {
   'use strict';
@@ -22,7 +24,6 @@
   var CFG = window.TALLI || {};
   if (!CFG.isTest) return;
 
-  var PASSWORD = 'talli-test-only';
   var USERS = [
     ['operator.test@example.com', 'Operator (sees everything)'],
     ['warden.test@example.com', 'Warden — Gribblehurst (test)'],
@@ -50,6 +51,15 @@
     USERS.forEach(function (u) { select.appendChild(new Option(u[1], u[0])); });
     box.appendChild(select);
 
+    var password = document.createElement('input');
+    password.type = 'password';
+    password.className = 'ad-input';
+    password.id = 'ad-test-password';
+    password.placeholder = 'Test account password';
+    password.setAttribute('aria-label', 'Test account password');
+    password.autocomplete = 'current-password';
+    box.appendChild(password);
+
     var button = document.createElement('button');
     button.type = 'button';
     button.className = 'btn btn-outline';
@@ -58,8 +68,9 @@
     box.appendChild(button);
 
     button.addEventListener('click', function () {
+      if (!password.value) { password.focus(); return; }
       button.disabled = true;
-      window.TalliAuth.signInWithPassword(select.value, PASSWORD)
+      window.TalliAuth.signInWithPassword(select.value, password.value)
         .then(function () { window.location.reload(); })
         .catch(function (err) {
           button.disabled = false;

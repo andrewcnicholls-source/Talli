@@ -7,7 +7,7 @@
    ===================================================================== */
 'use strict';
 const { test, expect, signedIn } = require('./fixtures');
-const { FIX, rest, rpc, plate, forget } = require('../lib/stack');
+const { FIX, PASSWORD, rest, rpc, plate, forget } = require('../lib/stack');
 
 const made = [];
 let gribCar;
@@ -93,6 +93,13 @@ test('on the test site, the card signs in as a test user with no Google account'
   await page.goto('/admin');
   await expect(page.locator('#ad-lock-test')).toBeVisible();
   await page.selectOption('#ad-test-user', 'warden.test@example.com');
+  // No password is built into the page: it has to be typed.
+  await page.click('#ad-test-signin');
+  await expect(page.locator('#ad-app')).toBeHidden();
+  await page.fill('#ad-test-password', 'not the password');
+  await page.click('#ad-test-signin');
+  await expect(page.locator('#ad-lock-error')).toBeVisible();
+  await page.fill('#ad-test-password', PASSWORD);
   await page.click('#ad-test-signin');
   await expect(page.locator('#ad-app')).toBeVisible();
   await expect(page.locator('#ad-who')).toHaveText('warden.test@example.com');

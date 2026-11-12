@@ -47,7 +47,9 @@ const stack = {
   jwtSecret: env.JWT_SECRET,
 };
 
-// From supabase/test-only/seed-test-users.sql. Not a secret: see there.
+// The LOCAL STACK's password, from supabase/test-only/local-stack-password.sql.
+// It opens nothing anywhere else: the test project's accounts have a
+// password Andrew chose, which is in no file (DEPLOYMENT.md § 0c).
 const PASSWORD = 'talli-test-only';
 const USERS = {
   operator: 'operator.test@example.com',

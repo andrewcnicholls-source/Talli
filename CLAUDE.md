@@ -78,7 +78,9 @@ rather than starting another, and do not invent `npm test`,
 `tests/package.json` and exist only to serve `check.sh`.
 
 The tests sign in with password accounts seeded in
-`supabase/test-only/seed-test-users.sql`. No server check may be
+`supabase/test-only/seed-test-users.sql`. The only password in the
+repository is the local stack's; the test project's is Andrew's and is
+never written down — not in a file, a commit, a PR or a chat. No server check may be
 weakened, skipped or special-cased to let a test through; if a test
 cannot sign in honestly, the test is wrong.
 

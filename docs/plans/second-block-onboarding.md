@@ -584,9 +584,13 @@ What differs from the brief above, and why:
   which builds that guard, and goes in with it. That a body amount is
   ignored is covered in the database, functions and browser suites.
 - **Units hold `talli-auth.js` only** until S0 makes front-end modules.
+- **No test password is published.** The local stack has a fixed one
+  that opens nothing else; the test project's is chosen by Andrew when
+  he seeds the accounts, and the staging sign-in card asks for it.
 - **Still for Andrew** (dashboard, no tool reaches it): on `talli-test`,
   Email provider on, sign-ups off, and run
-  `supabase/test-only/seed-test-users.sql` (DEPLOYMENT.md § 0c); then
+  `supabase/test-only/seed-test-users.sql` with a password of his own
+  (DEPLOYMENT.md § 0c); then
   make the CI `check` job a required check on `staging` and `main`.
 
 ### C1 — Go-live (Andrew)

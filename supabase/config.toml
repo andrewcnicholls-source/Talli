@@ -31,9 +31,10 @@ major_version = 17
 
 [db.seed]
 enabled = true
-# Order matters: the calendar, then the second block on it, then the
-# people who sign in, then the two nights the tests book.
+# Order matters: the local-only test password, the calendar, the second
+# block on it, the people who sign in, then the two nights the tests book.
 sql_paths = [
+  "./test-only/local-stack-password.sql",
   "./test-only/reset-test-data.sql",
   "./test-only/seed-test-block.sql",
   "./test-only/seed-test-users.sql",

@@ -204,7 +204,24 @@ for addr in $seeded; do
   [ -n "$f" ] && hits="$hits $addr:$f"
 done
 if grep -q -F "talli-test-only" supabase/migrations/*.sql 2>/dev/null; then
-  hits="$hits password"
+  hits="$hits local-password"
+fi
+# The local stack's password is published, and opens nothing but a stack
+# on the machine running the tests. It must never be built into anything
+# served, nor be what seed-test-users.sql gives the hosted test project.
+lp=$(git ls-files | grep -vE '^(tests/|supabase/test-only/(local-stack-password|seed-test-users)\.sql$|scripts/check\.sh$)' \
+  | xargs grep -l -F "talli-test-only" 2>/dev/null)
+if [ -z "$lp" ]; then
+  pass "the local stack's test password is in no served file"
+else
+  fail "the local stack's test password appears in: $lp"
+fi
+if grep -q "current_setting('talli.test_password'" supabase/test-only/seed-test-users.sql \
+   && grep -q "TEST_PASSWORD_REQUIRED" supabase/test-only/seed-test-users.sql \
+   && grep -q "LOCAL_PASSWORD_REFUSED" supabase/test-only/seed-test-users.sql; then
+  pass "seed-test-users.sql takes its password from the person running it"
+else
+  fail "seed-test-users.sql no longer insists on a chosen password"
 fi
 if [ -z "$hits" ]; then
   pass "no seeded test account appears in a migration"
@@ -1148,6 +1165,21 @@ run_stack_suites() {
     fail "the database does not rebuild from supabase/migrations/"
     printf '%s\n' "$out" | tail -15 | sed 's/^/      /'
     return
+  fi
+
+  # The hosted test project gets a password its owner chooses. Prove the
+  # seed refuses to run without one, and refuses the local one.
+  seed_says() {
+    { printf '%s\n' "$1"; cat supabase/test-only/seed-test-users.sql; } \
+      | docker exec -i supabase_db_talli psql -U postgres -d postgres -v ON_ERROR_STOP=1 -q 2>&1
+  }
+  no_pw=$(seed_says "set talli.test_password = ''; set talli.local_stack = '';")
+  local_pw=$(seed_says "set talli.test_password = 'talli-test-only'; set talli.local_stack = '';")
+  if printf '%s' "$no_pw" | grep -q TEST_PASSWORD_REQUIRED \
+     && printf '%s' "$local_pw" | grep -q LOCAL_PASSWORD_REFUSED; then
+    pass "the test-user seed will not run without a chosen password"
+  else
+    fail "the test-user seed runs with no password, or with the published local one"
   fi
 
   local envs
