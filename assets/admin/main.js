@@ -33,7 +33,7 @@ import { cancelUnpaid, renderEditCharge, submitEdit } from './booking-edit.js';
 import { closeCardQr, openCardQr } from './card-qr.js';
 import { openCheck } from './check.js';
 import { measureHead, showTab } from './tabs.js';
-import { renderSiteForm } from './sites.js';
+import { renderSiteForm, setNightFilter } from './sites.js';
 import { initSeries } from './series.js';
 
 /* ------------------------------------------------------------------ init */
@@ -78,6 +78,7 @@ function init() {
   el('ad-tab-sites').addEventListener('click', function () { showTab('sites'); });
   el('ad-tab-info').addEventListener('click', function () { showTab('info'); });
   el('ad-site-pick').addEventListener('change', function (e) { renderSiteForm(e.target.value); });
+  el('ad-site-night').addEventListener('change', function (e) { setNightFilter(e.target.value); });
 
   el('ad-insight-event').addEventListener('change', function () {
     state.insightId = this.value;
