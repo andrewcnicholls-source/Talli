@@ -70,6 +70,21 @@ if command -v python3 >/dev/null 2>&1; then
   out=$(python3 - <<'PY'
 import re, sys, os, glob
 
+import json
+
+# Paths a Pages Function answers (functions/, routed by _routes.json) have
+# no file on disk; a link to one is fine as long as the route is real.
+routes = []
+if os.path.exists('_routes.json'):
+    routes = json.load(open('_routes.json', encoding='utf-8')).get('include', [])
+def routed(target):
+    for r in routes:
+        if r.endswith('/*') and target.startswith(r[:-1]) and len(target) > len(r) - 1:
+            return True
+        if target == r:
+            return True
+    return False
+
 bad = []
 pat = re.compile(r'(?:src|href)\s*=\s*["\']([^"\']+)["\']', re.I)
 for page in sorted(glob.glob('*.html')):
@@ -78,6 +93,8 @@ for page in sorted(glob.glob('*.html')):
             continue
         target = ref.split('?')[0].split('#')[0]
         if not target:
+            continue
+        if routed(target):
             continue
         if not os.path.exists(target.lstrip('/')):
             bad.append(f"{page} -> {ref}")
@@ -124,6 +141,73 @@ else
     pass "both Supabase projects referenced, and they are different projects"
   else
     fail "$CFG does not reference both Supabase project refs"
+  fi
+fi
+
+# ---------------------------------------------------------------------
+head "Events pages choose their database the way the browser does"
+# ---------------------------------------------------------------------
+# functions/ (plan A2) render on the server, so they cannot use
+# assets/talli-config.js and carry their own copy of the switch. Two
+# copies drift. If they did, /events on a test host could show production
+# events, or talli.co.nz could link its customers to test nights.
+# tests/units/event-pages.test.js runs both against a list of hostnames;
+# these are the cheap structural guards in front of that.
+SITE_FN="functions/_lib/site.js"
+if [ ! -f "$SITE_FN" ]; then
+  skip "no $SITE_FN — no server-rendered pages"
+else
+  hosts() { sed -n "/PRODUCTION_HOSTS = \[/,/\];/p" "$1" | grep -o "'[^']*'" | sort | tr '\n' ' '; }
+  if [ -n "$(hosts "$CFG")" ] && [ "$(hosts "$CFG")" = "$(hosts "$SITE_FN")" ]; then
+    pass "the same production hosts in both: $(hosts "$SITE_FN")"
+  else
+    fail "PRODUCTION_HOSTS differ: talli-config.js [$(hosts "$CFG")] vs $SITE_FN [$(hosts "$SITE_FN")]"
+  fi
+
+  if grep -q "PRODUCTION_HOSTS.indexOf(host) !== -1 ? PRODUCTION : TEST" "$SITE_FN"; then
+    pass "an unknown hostname is TEST in the functions too"
+  else
+    fail "$SITE_FN no longer defaults an unknown hostname to TEST"
+  fi
+
+  # Nothing but the hostname may choose: no binding, no header, no query.
+  if grep -rnE "context\.env|\benv\.|\{[^}]*\benv\b[^}]*\}|headers\.get\(|searchParams" functions/ >/dev/null; then
+    fail "a function reads env, a request header or the query string — the hostname alone picks the project"
+    grep -rnE "context\.env|\benv\.|\{[^}]*\benv\b[^}]*\}|headers\.get\(|searchParams" functions/ | sed 's/^/      /'
+  else
+    pass "the functions take their project from the hostname and nothing else"
+  fi
+
+  if grep -q "X-Robots-Tag" "$SITE_FN" && grep -q "project !== PRODUCTION" "$SITE_FN"; then
+    pass "function responses off production carry X-Robots-Tag (_headers does not reach them)"
+  else
+    fail "$SITE_FN no longer marks non-production responses noindex"
+  fi
+
+  # _routes.json decides which paths reach a function at all. A route file
+  # it does not include is dead; an include with no file is a 404 the
+  # static site used to answer.
+  if routes_out=$(python3 - <<'PY'
+import json, os, re, sys
+inc = sorted(json.load(open('_routes.json'))['include'])
+found = []
+for d, _, files in os.walk('functions'):
+    for f in files:
+        rel = os.path.join(d, f)[len('functions'):]
+        if '/_' in rel or not f.endswith('.js'):
+            continue
+        r = rel[:-3]
+        r = re.sub(r'/index$', '', r) or '/'
+        r = re.sub(r'/\[[^\]/]+\]$', '/*', r)
+        found.append(r)
+found = sorted(found)
+print(' '.join(found))
+sys.exit(0 if found == inc else 1)
+PY
+); then
+    pass "_routes.json includes exactly the function routes: $routes_out"
+  else
+    fail "_routes.json and functions/ disagree (functions give: $routes_out)"
   fi
 fi
 
@@ -667,65 +751,69 @@ for p in sorted(glob.glob('*.html')):
 def page_to_url(p):
     return f'{SITE}/' if p == 'index.html' else f'{SITE}/' + p[:-5]
 
-if not os.path.exists('sitemap.xml'):
-    bad('sitemap.xml is missing')
-else:
-    try:
-        root = ET.parse('sitemap.xml').getroot()
-    except ET.ParseError as e:
-        bad(f'sitemap.xml is not well-formed XML: {e}')
-        root = None
-    if root is not None:
-        ns = {'s': 'http://www.sitemaps.org/schemas/sitemap/0.9'}
-        if not root.tag.endswith('urlset'):
-            bad('sitemap.xml root element is not <urlset>')
-        locs = [e.text.strip() for e in root.findall('s:url/s:loc', ns) if e.text]
-        if not locs:
-            bad('sitemap.xml lists no URLs — check the xmlns is the sitemaps.org one')
-        if len(locs) != len(set(locs)):
-            bad('sitemap.xml lists the same URL more than once')
+# --- the sitemap ----------------------------------------------------
+# Generated by functions/sitemap.xml.js (plan A2), so a new series is
+# listed without a deploy. Its static part is STATIC_PAGES in
+# functions/_lib/site.js; that list must be exactly the indexable pages.
+import json, subprocess
+static = None
+if os.path.exists('sitemap.xml'):
+    bad('a committed sitemap.xml is back — it would shadow the generated one at /sitemap.xml')
+try:
+    got = subprocess.run(['node', '-e',
+        "import(require('url').pathToFileURL('functions/_lib/site.js').href)"
+        ".then(m => console.log(JSON.stringify({pages: m.STATIC_PAGES, site: m.SITE})))"],
+        capture_output=True, text=True, check=True).stdout
+    data = json.loads(got)
+    static, fn_site = data['pages'], data['site']
+    if fn_site.rstrip('/') != SITE:
+        bad(f'functions/_lib/site.js names the site {fn_site}, not {SITE}')
+except Exception as e:
+    bad(f'could not read STATIC_PAGES from functions/_lib/site.js: {e}')
 
-        listed = set(locs)
-        expected = {page_to_url(p) for p in pages if p not in noindex}
+if static is not None:
+    if len(static) != len(set(static)):
+        bad('STATIC_PAGES lists the same page more than once')
+    listed = {SITE + p for p in static}
+    expected = {page_to_url(p) for p in pages if p not in noindex}
 
-        missing = sorted(expected - listed)
-        if missing:
-            bad('indexable pages absent from sitemap.xml: ' + ', '.join(missing))
-        else:
-            ok(f'every indexable page is in sitemap.xml ({len(expected)} of them)')
+    missing = sorted(expected - listed)
+    if missing:
+        bad('indexable pages absent from the sitemap (STATIC_PAGES): ' + ', '.join(missing))
+    else:
+        ok(f'every indexable page is in the sitemap ({len(expected)} of them)')
 
-        forbidden = sorted(listed & {page_to_url(p) for p in noindex})
-        if forbidden:
-            bad('sitemap.xml lists noindex pages: ' + ', '.join(forbidden))
-        else:
-            ok('no noindex page is advertised in sitemap.xml')
+    forbidden = sorted(listed & {page_to_url(p) for p in noindex})
+    if forbidden:
+        bad('the sitemap lists noindex pages: ' + ', '.join(forbidden))
+    else:
+        ok('no noindex page is advertised in the sitemap')
 
-        # Every URL must resolve to a file that is really here.
-        stray = sorted(u for u in listed if u not in {page_to_url(p) for p in pages})
-        if stray:
-            bad('sitemap.xml lists URLs with no page on disk: ' + ', '.join(stray))
-        else:
-            ok('every sitemap URL maps to a page in the repository')
+    stray = sorted(u for u in listed if u not in {page_to_url(p) for p in pages})
+    if stray:
+        bad('the sitemap lists URLs with no page on disk: ' + ', '.join(stray))
+    else:
+        ok('every static sitemap URL maps to a page in the repository')
 
-        # --- canonical tags ---------------------------------------------
-        # www and the apex both serve this site, so without these Google
-        # sees two copies of every page and picks one itself.
-        wrong = []
-        for p in sorted(pages):
-            if p in noindex:
-                continue
-            m = re.search(r'<link[^>]+rel=["\']canonical["\'][^>]*>', pages[p], re.I)
-            if not m:
-                wrong.append(f'{p} has no canonical')
-                continue
-            href = re.search(r'href=["\']([^"\']+)["\']', m.group(0), re.I)
-            got = href.group(1) if href else ''
-            if got != page_to_url(p):
-                wrong.append(f'{p} -> {got or "(no href)"}, expected {page_to_url(p)}')
-        if wrong:
-            bad('canonical tags disagree with the sitemap: ' + '; '.join(wrong))
-        else:
-            ok('every indexable page has a canonical matching its sitemap URL')
+    # --- canonical tags -------------------------------------------------
+    # www and the apex both serve this site, so without these Google
+    # sees two copies of every page and picks one itself.
+    wrong = []
+    for p in sorted(pages):
+        if p in noindex:
+            continue
+        m = re.search(r'<link[^>]+rel=["\']canonical["\'][^>]*>', pages[p], re.I)
+        if not m:
+            wrong.append(f'{p} has no canonical')
+            continue
+        href = re.search(r'href=["\']([^"\']+)["\']', m.group(0), re.I)
+        got = href.group(1) if href else ''
+        if got != page_to_url(p):
+            wrong.append(f'{p} -> {got or "(no href)"}, expected {page_to_url(p)}')
+    if wrong:
+        bad('canonical tags disagree with the sitemap: ' + '; '.join(wrong))
+    else:
+        ok('every indexable page has a canonical matching its sitemap URL')
 
 print('\n'.join(out))
 PY

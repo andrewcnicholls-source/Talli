@@ -2530,3 +2530,96 @@ textarea.ad-input { resize: vertical; min-height: 56px; font-family: inherit; }
 }
 .ad-series-nights li.is-this { font-weight: 600; }
 
+
+/* ---------- Events catalogue (/events, /events/<slug>) ----------
+   Rendered on the server by functions/_lib/site.js. The date block on a
+   night is the booking page's (.bk-date), so a night reads the same in
+   both places. */
+.ev-list {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+}
+.ev-card { background: var(--white); }
+.ev-card-link {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  transition: background 0.15s ease;
+}
+.ev-card-link:hover { background: var(--blue-tint); }
+.ev-card-link:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
+.ev-card-pic {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  background: var(--blue-tint);
+}
+.ev-card-pic-none { display: block; aspect-ratio: auto; height: 4px; background: var(--blue); }
+.ev-card-body { display: flex; flex-direction: column; gap: 4px; padding: 18px 20px 22px; }
+.ev-card-kind,
+.ev-where {
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--grey);
+}
+.ev-card-name { font-size: 1.2rem; font-weight: 500; line-height: 1.3; }
+.ev-card-when { font-size: 0.95rem; font-weight: 300; color: #3A3A36; }
+.ev-from:empty { display: none; }
+.ev-from { font-size: 0.9rem; color: var(--blue); font-weight: 500; }
+.ev-empty { padding: 8px 0 24px; }
+.ev-empty a, .ev-crumb { text-decoration: underline; text-underline-offset: 3px; }
+
+.ev-hero .ev-where { margin-top: 10px; }
+.ev-hero-pic {
+  margin-top: 26px;
+  width: 100%;
+  max-width: 720px;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: 3px;
+}
+
+.ev-nights {
+  list-style: none;
+  display: grid;
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  margin-top: 6px;
+}
+.ev-night {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px 18px;
+  background: var(--white);
+  padding: 18px 20px;
+  scroll-margin-top: 96px;
+}
+.ev-night:target { background: var(--blue-tint); }
+.ev-night-body { flex: 1 1 220px; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.ev-night-name { font-size: 1.1rem; font-weight: 500; }
+.ev-night-meta { font-size: 0.92rem; font-weight: 300; color: #3A3A36; }
+.ev-night-status {
+  align-self: flex-start;
+  margin-top: 4px;
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--blue);
+  background: var(--blue-tint);
+  border-radius: 2px;
+  padding: 4px 9px;
+}
+.ev-night.is-closed .ev-night-status { color: var(--grey); background: var(--offwhite); }
+.ev-night-pic { width: 96px; aspect-ratio: 1; object-fit: cover; border-radius: 3px; }
+.ev-night-go { flex: none; }
+@media (max-width: 519px) {
+  .ev-night-go { flex: 1 1 100%; }
+}
+.ev-note { margin-top: 18px; font-size: 0.92rem; color: var(--grey); }

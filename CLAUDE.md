@@ -2,7 +2,10 @@
 
 Static site (plain HTML/CSS/JS) backed by Supabase. Booking flow lives in
 `assets/booking.js`, admin views in `assets/admin/` (ES modules, entry `main.js`), shared config in
-`assets/talli-config.js`.
+`assets/talli-config.js`. The one exception to "static": `/events`,
+`/events/<slug>` and `/sitemap.xml` are Cloudflare Pages Functions in
+`functions/` (routed by `_routes.json`), which choose their Supabase
+project from the hostname by the same rule — see `DEPLOYMENT.md`.
 
 ## How work gets done here
 
