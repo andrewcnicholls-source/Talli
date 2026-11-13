@@ -45,9 +45,12 @@ test('a warden sees their own block and nothing else', async ({ page }) => {
   await expect(page.locator('#ad-list')).toContainText(gribCar);
   await expect(page.locator('#ad-list')).not.toContainText(paiceCar);
 
-  const sites = await page.locator('#ad-site option').allTextContents();
-  expect(sites.join(' ')).toMatch(/Gribblehurst/);
-  expect(sites.join(' ')).not.toMatch(/Paice/);
+  // The selector (plan B6): their block and its sites, and no "all".
+  const scopes = await page.locator('#ad-scope option').evaluateAll(
+    (opts) => opts.map((o) => o.value + ' ' + o.textContent));
+  expect(scopes.join(' ')).toMatch(/Gribblehurst/);
+  expect(scopes.join(' ')).not.toMatch(/Paice/);
+  expect(scopes.some((s) => s.startsWith('all '))).toBe(false);
 
   // Arrivals and Site info only.
   await expect(page.locator('#ad-tab-night')).toBeHidden();

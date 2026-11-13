@@ -23,7 +23,7 @@
 
 import { AUTH, REFRESH_MS, el, hide, state } from './core.js';
 import { openSession, showSignIn } from './session.js';
-import { dayKey, loadList, setSite, syncEvent, todayKey } from './night.js';
+import { dayKey, loadList, setScope, syncEvent, todayKey } from './night.js';
 import { renderList } from './arrivals.js';
 import { applyPricePick, paintPriceHint, paintPricePick, submitPrice } from './tonight.js';
 import { loadInsight, renderInsight } from './insights.js';
@@ -74,7 +74,7 @@ function init() {
 
   el('ad-tab-gate').addEventListener('click', function () { showTab('gate'); });
   el('ad-tab-night').addEventListener('click', function () { showTab('night'); });
-  el('ad-site').addEventListener('change', function (e) { setSite(e.target.value); });
+  el('ad-scope').addEventListener('change', function (e) { setScope(e.target.value); });
   el('ad-tab-insights').addEventListener('click', function () { showTab('insights'); });
   el('ad-tab-sites').addEventListener('click', function () { showTab('sites'); });
   el('ad-tab-info').addEventListener('click', function () { showTab('info'); });

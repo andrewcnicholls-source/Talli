@@ -70,6 +70,15 @@
               aria-label="New event" title="New event">+</button>
     </div>
 
+    <!-- Which sites the screen is about (plan B6): all, a block, or one
+         site. Every tab follows it. Only with more than one site to
+         offer; a warden is offered only their own. Filled in by
+         renderScopePicker(). -->
+    <div class="ad-scope-row" id="ad-scope-row" hidden>
+      <label class="ad-site-label" for="ad-scope">Sites</label>
+      <select id="ad-scope" class="ad-select"></select>
+    </div>
+
     <nav class="ad-tabs" role="tablist">
       <!-- First, on the left: where you are and how a walk-up pays, the
            two things a warden reads out at a car window. Arrivals is
@@ -111,11 +120,8 @@
 
     <p class="ad-holds" id="ad-holds" hidden></p>
 
-    <!-- Only on nights with more than one driveway. Set once; a tap on
-         "Tick in" puts the car at this site. -->
+    <!-- The chosen site's guide, when one site is chosen at the top. -->
     <div class="ad-site-row" id="ad-site-row" hidden>
-      <label class="ad-site-label" for="ad-site">I'm at</label>
-      <select id="ad-site" class="ad-select"></select>
       <a class="ad-site-guide" id="ad-site-guide" target="_blank" rel="noopener" hidden>Site guide</a>
     </div>
     <p class="ad-site-notes" id="ad-site-notes" hidden></p>
@@ -132,7 +138,7 @@
   </section>
 
   <!-- ------------------------------------------------------- site info -->
-  <!-- For the site chosen on Arrivals: where it is, said large enough to
+  <!-- For the site chosen at the top: where it is, said large enough to
        read out at a car window, and the account a walk-up pays into when
        they have no cash. Filled in by renderInfo(). Wardens see this and
        Arrivals, nothing else. -->
@@ -442,6 +448,9 @@
       <h2>Sell at the gate</h2>
       <button type="button" class="ad-sheet-close" id="ad-sell-close" aria-label="Close">×</button>
     </div>
+    <!-- Which site the sale is at, on a night with more than one: the site
+         chosen at the top, or the anchor of the block chosen (plan B6). -->
+    <p class="ad-hint" id="ad-sell-at" hidden></p>
 
     <!-- Plate first: it is how every car is found later in the night. -->
     <label class="ad-label" for="ad-sell-rego">Number plate</label>

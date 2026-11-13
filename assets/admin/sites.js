@@ -19,6 +19,7 @@
 
 import { CFG, asDate, button, call, el, make, show, state, text, toast } from './core.js';
 import { loadList } from './night.js';
+import { parseScope } from './scope.js';
 
 var SITE_TYPES = [
   { code: 'standard', label: 'Standard' },
@@ -51,13 +52,35 @@ export function openSites(selectId, nightId) {
     .catch(function (err) { toast(err.message, 'bad'); });
 }
 
+// The selector at the top changed (plan B6): the same page, narrowed.
+export function refillSites() {
+  fillSitePicker();
+  renderSiteForm(el('ad-site-pick').value);
+}
+
+// The sites in the selector's scope. A block or a site is matched by id,
+// so a site that is not selling the night being worked is still listed
+// under its block. With nothing matching, every site: an empty page with
+// only "Add a new site" on it reads as the sites having gone.
+function sitesInScope() {
+  var s = parseScope(state.scope);
+  if (!s || s.kind === 'all') return data.sites;
+  var mine = data.sites.filter(function (x) {
+    return s.kind === 'site' ? x.property_id === s.id : x.block_id === s.id;
+  });
+  return mine.length ? mine : data.sites;
+}
+
 function fillSitePicker(selectId) {
   var pick = el('ad-site-pick');
-  var keep = selectId || pick.value;
+  var chosen = parseScope(state.scope);
+  var keep = selectId || pick.value ||
+    (chosen && chosen.kind === 'site' ? chosen.id : '');
+  var sites = sitesInScope();
   pick.innerHTML = '';
   var group = null;
   var groupName = null;
-  data.sites.forEach(function (s) {
+  sites.forEach(function (s) {
     if (s.block_name !== groupName) {
       groupName = s.block_name;
       group = document.createElement('optgroup');
@@ -74,9 +97,9 @@ function fillSitePicker(selectId) {
   add.value = '__new';
   add.textContent = '+ Add a new site…';
   pick.appendChild(add);
-  var exists = data.sites.some(function (s) { return s.property_id === keep; });
+  var exists = sites.some(function (s) { return s.property_id === keep; });
   pick.value = keep === '__new' ? '__new'
-    : exists ? keep : (data.sites[0] ? data.sites[0].property_id : '__new');
+    : exists ? keep : (sites[0] ? sites[0].property_id : '__new');
 }
 
 function fillNightPicker() {
