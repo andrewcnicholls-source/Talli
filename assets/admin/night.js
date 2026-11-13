@@ -109,6 +109,7 @@ function clearNight() {
   state.rows = [];
   state.tiers = [];
   state.sites = [];
+  state.lost = [];
   state.extras = [];
   state.summary = null;
 }
@@ -164,6 +165,7 @@ export function loadList(quiet) {
       state.rows = data.rows || [];
       state.tiers = data.tiers || [];
       state.sites = data.sites || [];
+      state.lost = data.lost || [];
       pickSite();
       state.extras = data.extras || [];
       state.summary = data.summary || null;
@@ -325,6 +327,10 @@ function renderStats() {
   if (s.unpaid_holds > 0) {
     notes.push(s.unpaid_holds + ' unpaid hold' + (s.unpaid_holds === 1 ? '' : 's') +
       ' — people mid-checkout, not confirmed bookings.');
+  }
+  // Its own line in the night's totals: not free, not filled (plan B5).
+  if (s.lost > 0) {
+    notes.push(s.lost + ' space' + (s.lost === 1 ? '' : 's') + ' lost tonight.');
   }
   if (s.extras_pending > 0) {
     notes.push(s.extras_pending + ' pre-paid item' + (s.extras_pending === 1 ? '' : 's') +

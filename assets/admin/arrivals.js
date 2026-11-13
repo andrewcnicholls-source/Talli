@@ -4,10 +4,11 @@
  */
 
 import { asTime, button, call, el, make, money, state, toast } from './core.js';
-import { arrivedAt, byTier, capacityAt, loadList, multiSite, siteName,
+import { byTier, loadList, multiSite, siteName,
   tierClass } from './night.js';
 import { openEdit } from './booking-edit.js';
 import { isOperator } from './session.js';
+import { inOtherSpace, sayPlaced, spaceName } from './placement.js';
 
 /* --------------------------------------------------------- the list */
 
@@ -31,6 +32,7 @@ export function renderList() {
   // Arrivals works the live night and only that one (plan B2). With none
   // live there is nothing to work, nothing to sell, and nothing to pick.
   el('ad-sell-open').hidden = !state.liveId;
+  el('ad-lost-open').hidden = !state.liveId;
   if (!state.liveId) {
     list.appendChild(make('p', 'ad-empty', isOperator()
       ? 'No event is live at the gate. Open the night on Tonight and mark it live.'
@@ -104,6 +106,12 @@ function rowCard(r) {
     meta.appendChild(make('span', 'ad-chip is-site',
       (r.arrived ? '@ ' : '→ ') + at + (moved ? ' (booked ' + siteName(r.booked_property_id) + ')' : '')));
   }
+  // A Standard car in a Priority space (plan B5): the warden who parks the
+  // next Priority car needs to know that space is gone.
+  if (inOtherSpace(r)) {
+    meta.appendChild(make('span', 'ad-chip' + tierClass(r.space_code),
+      'in a ' + spaceName(r.space_code) + ' space'));
+  }
   if (r.owes) {
     meta.appendChild(make('span', 'ad-chip is-warn', 'owes ' + rowTotal(r)));
   } else if (r.payment_method && r.payment_method !== 'stripe') {
@@ -172,19 +180,16 @@ function toggleArrived(r, btn) {
   if (!r.arrived && multiSite() && state.siteId) params.property_id = state.siteId;
 
   call(action, params)
-    .then(function () {
+    .then(function (data) {
       r.arrived = !r.arrived;
       var who = r.vehicle_rego || 'Booking';
       if (r.arrived && params.property_id) {
-        r.property_id = params.property_id;
-        var inNow = arrivedAt(params.property_id);
-        var cap = capacityAt(params.property_id);
-        if (cap && inNow > cap) {
-          toast(who + ' in at ' + siteName(params.property_id) +
-            ' — over its count (' + inNow + '/' + cap + ')', 'bad');
-          return loadList(true);
+        // The database placed it (plan B5). Said loudly when the car has
+        // to go to another site, or into another type of space.
+        var placed = data && data.placed;
+        if (!sayPlaced(who, placed, params.property_id)) {
+          toast(who + ' in at ' + siteName(placed ? placed.property_id : params.property_id), 'good');
         }
-        toast(who + ' in at ' + siteName(params.property_id), 'good');
         return loadList(true);
       }
       toast(who + (r.arrived ? ' ticked in' : ' un-ticked'), 'good');

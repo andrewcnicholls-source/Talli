@@ -44,6 +44,11 @@ export var state = {
   // at. With one site (most nights at Paice Ave) none of this shows.
   sites: [],
   siteId: null,
+  // Spaces lost tonight, and the lost-space sheet's picks (plan B5).
+  lost: [],
+  lostSite: null,
+  lostTier: null,
+  lostReason: null,
   extras: [],       // what has been pre-purchased and still needs handing over
   catalogue: [],    // what we sell
   summary: null,

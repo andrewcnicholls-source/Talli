@@ -1172,8 +1172,8 @@ IDX=supabase/functions/gate-ops/index.ts
 AUTH_TS=supabase/functions/gate-ops/auth.ts
 if grep -q "LIVE_SCOPED.has(action) && (!caller.all || !eventId)" "$IDX" \
    && grep -q "code: 'NOT_LIVE_EVENT'" "$IDX" \
-   && grep -q "LIVE_SCOPED = new Set(\['list', 'tiers', 'sell'\])" "$AUTH_TS"; then
-  pass "gate-ops pins a warden's list, tiers and sell to the live night"
+   && grep -q "LIVE_SCOPED = new Set(\['list', 'tiers', 'sell', 'lose_space'\])" "$AUTH_TS"; then
+  pass "gate-ops pins a warden's list, tiers, sell and lost spaces to the live night"
 else
   fail "gate-ops no longer pins a warden's Arrivals actions to the live night"
 fi

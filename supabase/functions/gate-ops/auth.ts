@@ -155,7 +155,7 @@ export async function mayTouchBooking(
 // live event for each: a warden cannot name another, and the operator's
 // Arrivals names none. The operator may still name any night, which is
 // how Tonight and Insights read the rest.
-export const LIVE_SCOPED = new Set(['list', 'tiers', 'sell'])
+export const LIVE_SCOPED = new Set(['list', 'tiers', 'sell', 'lose_space'])
 
 // The night's prices, capacity, templates and event set-up are Andrew's.
 // A warden works the gate: check-in, walk-ups, fixing a booking.

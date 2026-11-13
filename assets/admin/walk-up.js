@@ -8,6 +8,13 @@ import { button, call, el, hide, make, money, shortName, show, state,
 import { loadList, tiersHere } from './night.js';
 import { inGateOrder } from './tonight.js';
 import { openCardQr } from './card-qr.js';
+import { sayPlaced, spillSays } from './placement.js';
+
+// Still sellable at the gate: room of its own, or — Standard only — a
+// space it spills into elsewhere in the block (plan B5).
+function sellable(t) {
+  return !t.manually_sold_out && (t.spots_left_gate > 0 || !!t.spill);
+}
 
 /* -------------------------------------------------------- walk-up sale */
 
@@ -18,7 +25,7 @@ export function openSell() {
   el('ad-sell-error').hidden = true;
   // The type picked last time may have filled up since.
   var still = tiersHere().filter(function (t) {
-    return t.code === state.sellTier && !t.manually_sold_out && t.spots_left_gate > 0;
+    return t.code === state.sellTier && sellable(t);
   })[0];
   if (!still) {
     state.sellTier = null;
@@ -47,14 +54,12 @@ function renderSellTiers() {
   // Default to the first thing still sellable, which once a type is full
   // is the next one up. That is the whole point of the ordering.
   if (!state.sellTier) {
-    var first = tiers.filter(function (t) {
-      return !t.manually_sold_out && t.spots_left_gate > 0;
-    })[0];
+    var first = tiers.filter(sellable)[0];
     state.sellTier = first ? first.code : null;
   }
 
   tiers.forEach(function (t) {
-    var gone = t.manually_sold_out || t.spots_left_gate <= 0;
+    var gone = !sellable(t);
     var on = state.sellTier === t.code;
     var deal = on && state.sellPrice > 0 && state.sellPrice !== t.price_cents;
     var opt = pickTile('ad-pick-opt' + (on ? ' is-on' : '') + (gone ? ' is-gone' : ''),
@@ -92,7 +97,7 @@ function renderSellTiers() {
 
     var left = t.manually_sold_out ? 'marked sold out'
       : t.spots_left_gate > 0 ? t.spots_left_gate + ' left'
-      : 'none left';
+      : spillSays(t) || 'none left';
     // The sign is still the sign. Say so, so a deal never reads as a
     // price change for the next car.
     if (deal) left += ' · this car only, sign ' + money(t.price_cents);
@@ -348,6 +353,8 @@ export function submitSell(e) {
       }
       if (data.addons_failed) {
         toast('Space sold, but the extras did not save — take that cash', 'bad');
+      } else if (sayPlaced(plate || 'Sold', data.placed, tier.property_id)) {
+        // Said where it went: another site, or a Priority space.
       } else {
         // The charged figure comes back from the database rather than being
         // repeated from the screen, so a rate that changed mid-night shows

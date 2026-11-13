@@ -8,6 +8,7 @@ import { call, el, hide, make, money, shortName, show, state, surchargeOn,
 import { loadList, tierClass, tiersFor } from './night.js';
 import { inGateOrder } from './tonight.js';
 import { pickTile, priceSlot } from './walk-up.js';
+import { renderPlace } from './placement.js';
 
 /* ----------------------------------------------------- one booking */
 
@@ -87,6 +88,7 @@ export function openEdit(r) {
 
   renderEditTiers();
   renderEditCharge();
+  renderPlace(r);
   show(el('ad-edit'));
 }
 

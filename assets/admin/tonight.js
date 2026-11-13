@@ -142,7 +142,10 @@ function leftLine(t) {
   if (t.manually_sold_out) return 'Marked sold out';
   if (!t.capacity) return 'No spaces set for tonight';
 
-  var taken = (t.sold || 0) + ' of ' + t.capacity + ' taken';
+  var taken = (t.sold || 0) + ' of ' + t.capacity + ' taken' +
+    // A Standard car in a Priority space, and a space lost (plan B5).
+    (t.overflow_in ? ' (' + t.overflow_in + ' Standard)' : '') +
+    (t.lost ? ' · ' + t.lost + ' lost' : '');
   if (t.spots_left_gate <= 0) return taken + ' · full';
   if (t.spots_left > 0) return taken + ' · ' + t.spots_left + ' available online';
   return t.gate_reserve > 0

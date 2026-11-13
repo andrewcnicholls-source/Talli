@@ -594,6 +594,34 @@ What differs from the brief above, and why:
   the booking page, a lost space does the same and can be undone, and
   the proposal order above holds with two sites in a block.
 
+**Status, 14 Nov 2026: built** (`feature/placement-oversell-and-lost-spaces`),
+on top of B2, alongside B3. What differs from the brief above, and why:
+
+- **One count, not a new one.** `booking.space_code` says which type of
+  space a car is in when that is not what it was sold as (only ever a
+  Standard car in a Priority space). `private.tier_sold` now counts cars
+  by the space they are in, plus lost spaces, so `hold_booking`,
+  `edit_booking_at_gate` and the booking page follow without being
+  restated. `v_tier_availability.sold` is still the cars; `lost` and
+  `overflow_in` are new columns on the end.
+- **The order is the database's**, `propose_space()`, used by both the
+  gate sale and check-in: Standard here; Standard elsewhere in the block;
+  Priority here; Priority elsewhere. Elsewhere means a site confirmed for
+  the night; the anchor first, then the most room. A walk-up sold into
+  Priority is recorded as Standard at the Standard price.
+- **Placement happens on the tick-in**, one tap as before: the toast says
+  when the car must be sent to another site or into a Priority space. The
+  override is *Parked at* on the car's sheet, and is refused into a space
+  that is not free. With nowhere free in the block the car is ticked in
+  where it was counted, and the warden is told to call Andrew.
+- **The warden's current site is *I'm at*** on Arrivals until B6 replaces
+  it with the selector. Nothing here depends on B6.
+- **Lost spaces** are `lost_space`, recorded and undone from a *Space
+  lost* sheet on Arrivals, and show under the counts as their own line.
+  Reasons: bad parking, blocked, the host's own car, other.
+- **At release:** migration `20261118100000`, then `gate-ops`. Nothing to
+  set by hand.
+
 ### B6 — `gate-selector`
 
 - One selector at the top of the gate screen: all, one block, or one

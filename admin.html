@@ -124,6 +124,8 @@
       <input type="search" id="ad-search" class="ad-search" placeholder="Plate, ref, name or phone…"
              autocomplete="off" autocapitalize="characters" spellcheck="false">
       <button type="button" class="ad-sell-open" id="ad-sell-open">+ Walk-up</button>
+      <!-- A space nobody can use tonight (plan B5). -->
+      <button type="button" class="ad-sell-open ad-lost-open" id="ad-lost-open">Space lost</button>
     </div>
 
     <div class="ad-list" id="ad-list"></div>
@@ -521,6 +523,40 @@
   </form>
 </div>
 
+<!-- ----------------------------------------------------- a lost space -->
+<!-- A space nobody can use tonight: a car across two, a blocked driveway,
+     the host's own car (plan B5). Not a booking, no money. It comes off
+     sale everywhere, the booking page too, until it is undone. -->
+<div class="ad-sheet" id="ad-lost" hidden>
+  <form class="ad-sheet-card" id="ad-lost-form">
+    <div class="ad-sheet-head">
+      <h2>Space lost</h2>
+      <button type="button" class="ad-sheet-close" id="ad-lost-close" aria-label="Close">&times;</button>
+    </div>
+    <p class="ad-hint">Comes off sale straight away, here and on the website. Undo it if the space comes back.</p>
+
+    <div id="ad-lost-site-row" hidden>
+      <label class="ad-label" for="ad-lost-site">Site</label>
+      <select id="ad-lost-site" class="ad-select"></select>
+    </div>
+
+    <label class="ad-label">Type of space</label>
+    <div class="ad-pick" id="ad-lost-tiers"></div>
+
+    <label class="ad-label">Why</label>
+    <div class="ad-pick" id="ad-lost-reasons"></div>
+
+    <label class="ad-label" for="ad-lost-note">Note <span>optional</span></label>
+    <input type="text" id="ad-lost-note" name="note" class="ad-input" maxlength="200">
+
+    <p class="ad-sheet-error" id="ad-lost-error" role="alert" hidden></p>
+    <button type="submit" class="btn btn-primary" id="ad-lost-submit">Take it off sale</button>
+
+    <h3 class="ad-sheet-sub" id="ad-lost-list-head" hidden>Lost tonight</h3>
+    <div class="ad-lost-list" id="ad-lost-list"></div>
+  </form>
+</div>
+
 <!-- ----------------------------------------------------- one booking -->
 <!-- Tap a row to get here. Everything that can be wrong about a booking
      after the fact: the plate, how to reach them, how they paid, and which
@@ -537,6 +573,17 @@
     <label class="ad-label">Space <span>move them if they ended up somewhere else</span></label>
     <div class="ad-pick" id="ad-edit-tiers"></div>
     <p class="ad-hint" id="ad-edit-move-hint" hidden></p>
+
+    <!-- Where the car actually is, once it is in (plan B5): any site in
+         its block, and a Standard car can take a Priority space. Moves on
+         its own button, straight away — not with the rest of the sheet. -->
+    <div id="ad-edit-place-row" hidden>
+      <label class="ad-label" for="ad-edit-place">Parked at <span>where the car actually is</span></label>
+      <div class="ad-place-row">
+        <select id="ad-edit-place" class="ad-select"></select>
+        <button type="button" class="btn btn-outline" id="ad-edit-place-go">Move</button>
+      </div>
+    </div>
 
     <label class="ad-label" for="ad-edit-rego">License plate</label>
     <input type="text" id="ad-edit-rego" name="rego" class="ad-input"

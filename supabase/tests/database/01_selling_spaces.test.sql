@@ -69,8 +69,14 @@ select throws_like($$ select pg_temp.hold('night', 'paice', 'standard', 'BBB4') 
 select is(pg_temp.left_gate('night', 'paice', 'standard'), 1, 'the gate still has 1');
 select isnt(sell_at_gate(pg_temp.id('night'), pg_temp.id('paice'), 'standard', 'cash', 'GATE1'),
   null, 'a walk-up buys the space held for them');
-select throws_like($$ select sell_at_gate(pg_temp.id('night'), pg_temp.id('paice'), 'standard', 'cash', 'GATE2') $$,
-  'SOLD_OUT%', 'and after that even the gate is sold out');
+-- Standard is now full at 86 and at the berm, so the next walk-up is not
+-- more Standard: it takes a Priority space at 86 (plan B5; the whole
+-- order is in 09_placement_oversell_lost).
+create temp table gate2 as
+  select sell_at_gate(pg_temp.id('night'), pg_temp.id('paice'), 'standard', 'cash', 'GATE2') as id;
+select is((select coalesce(b.space_code, b.tier_code) from booking b
+            where b.id = (select id from gate2)),
+  'priority', 'after that a Standard walk-up takes a Priority space, never more Standard');
 
 -- ---------------------------------------------------------------------
 -- Sold out online is not sold out: night 2 holds every Standard for
