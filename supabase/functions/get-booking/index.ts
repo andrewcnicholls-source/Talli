@@ -93,7 +93,8 @@ Deno.serve(async (req) => {
     await Promise.all([
       db.from('event').select('name, venue, starts_at').eq('id', booking.event_id).maybeSingle(),
       db.from('property')
-        .select('name, address, walk_minutes, block_id, block:block_id(name, anchor:anchor_property_id(address))')
+        .select('name, address, walk_minutes, slug, block_id, ' +
+                'block:block_id(name, slug, anchor:anchor_property_id(address))')
         .eq('id', booking.property_id)
         .maybeSingle(),
       db.from('offer_tier').select('label').eq('code', booking.tier_code).limit(1).maybeSingle(),

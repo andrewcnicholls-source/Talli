@@ -144,6 +144,16 @@ a:focus-visible, button:focus-visible {
 /* Getting Here for a booked block: who meets you, said before the buttons. */
 .gh-note { margin: 0 0 16px; font-size: 1.05rem; line-height: 1.5; }
 
+/* Getting Here: every parking area, each to its /go/ page (plan A4). */
+.gh-areas { list-style: none; display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line); margin-bottom: 24px; }
+.gh-area { background: var(--white); }
+.gh-area-link { display: flex; flex-direction: column; gap: 4px; padding: 18px 20px; }
+.gh-area-link:hover { background: var(--blue-tint); }
+.gh-area-link:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
+.gh-area-name { font-size: 1.15rem; font-weight: 500; }
+.gh-area-meta { font-size: 0.92rem; font-weight: 300; color: #3A3A36; }
+.gh-area-go { font-size: 0.9rem; color: var(--blue); font-weight: 500; }
+
 .section-label {
   font-size: 0.76rem;
   letter-spacing: 0.16em;
@@ -2486,6 +2496,31 @@ textarea.ad-input { resize: vertical; min-height: 56px; font-family: inherit; }
 .ad-info-bank dd { margin: 0; font-size: 1.1rem; overflow-wrap: anywhere; }
 .ad-info-bank dd.ad-info-big { font-size: 1.45rem; font-weight: 500; font-variant-numeric: tabular-nums; }
 
+/* Site guide (plan A4): the Locate Us card, and where to park. */
+.ad-guide-card {
+  display: block; width: 100%; max-width: 360px; margin: 0 auto 6px; padding: 0;
+  background: #fff; border: 1px solid var(--line); border-radius: 10px; cursor: zoom-in; overflow: hidden;
+}
+.ad-guide-card svg { display: block; width: 100%; height: auto; }
+.ad-guide-hint { text-align: center; margin: 0 0 24px; }
+.ad-guide-park { margin: 0 0 26px; }
+.ad-guide-notes { margin: 0 0 12px; white-space: pre-line; font-size: 1.02rem; line-height: 1.45; }
+.ad-guide-pics { display: grid; gap: 14px; }
+.ad-guide-pic { margin: 0; }
+.ad-guide-pic img { display: block; width: 100%; height: auto; border-radius: 6px; background: var(--blue-tint); }
+.ad-guide-pic figcaption { margin-top: 6px; font-size: 0.95rem; color: #3A3A36; }
+.ad-guide-link { margin: 12px 0 0; }
+.ad-guide-link a { text-decoration: underline; text-underline-offset: 3px; }
+/* Full screen, white, as large as the screen allows: held up to a car
+   window, the code is read from a metre away. */
+.ad-guide-full {
+  position: fixed; inset: 0; z-index: 1000; background: #fff;
+  display: flex; align-items: center; justify-content: center; padding: 12px; cursor: zoom-out;
+}
+.ad-guide-full[hidden] { display: none; }
+.ad-guide-full svg { width: 100%; height: 100%; max-width: 100%; max-height: 100%; }
+body.ad-guide-open { overflow: hidden; }
+
 /* ------------------------------------------------ booking page map */
 /* Square, so the ground around Eden Park reads the same in every direction. */
 .bk-map { width: 100%; max-width: 480px; aspect-ratio: 1 / 1; height: auto;
@@ -2560,6 +2595,16 @@ textarea.ad-input { resize: vertical; min-height: 56px; font-family: inherit; }
 .ad-site-grid .ad-num, .ad-site-offset .ad-num { width: 100%; text-align: center; }
 .ad-site-offset .ad-num { max-width: 8rem; }
 .ad-site-help { margin: 6px 0 0; font-size: 0.85rem; color: var(--muted, #5b6472); }
+/* Sites: the Locate Us card and pictures of where to park (plan A4). */
+.ad-site-card { max-width: 240px; margin: 10px 0 4px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: #fff; }
+.ad-site-card svg { display: block; width: 100%; height: auto; }
+.ad-site-sub { margin: 22px 0 4px; font-size: 1rem; color: var(--blue-deep); }
+.ad-site-pics { display: grid; gap: 12px; margin: 10px 0 4px; }
+.ad-site-pic { display: flex; gap: 12px; align-items: flex-start; }
+.ad-site-pic img { width: 120px; height: 90px; object-fit: cover; border-radius: 6px; background: var(--blue-tint); flex: none; }
+.ad-site-pic-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.ad-site-pic-acts { display: flex; gap: 14px; flex-wrap: wrap; }
+.ad-link-bad { color: var(--tier-red); }
 .ad-site-offset, .ad-site-field { margin-top: 16px; }
 .ad-site-field .ad-input, .ad-site-field .ad-select { width: 100%; }
 .ad-site-apply { display: flex; gap: 8px; align-items: flex-start; margin-top: 16px; font-size: 0.92rem; }
@@ -2771,3 +2816,27 @@ textarea.ad-input { resize: vertical; min-height: 56px; font-family: inherit; }
 }
 .ad-lost-what { font-size: 14px; min-width: 0; }
 .ad-lost-undo { flex: none; }
+
+/* ============================================
+   /go/<slug> — what a Locate Us card opens (plan A4).
+   Directions first: on a phone, the map buttons are the first thing
+   under the address, full width, one tap from scan to navigation.
+   ============================================ */
+.go-hero h1 { margin-top: 6px; }
+.go-address { font-size: 1.05rem; }
+.go-walk { margin-top: 8px; font-weight: 500; color: var(--blue); }
+.go-maps { margin: 4px 0 18px; }
+.go-maps .btn { flex: 1 1 220px; text-align: center; font-size: 1.05rem; padding-top: 16px; padding-bottom: 16px; }
+.go-note { margin: 0 0 24px; font-size: 1.02rem; line-height: 1.5; }
+.go-pics { display: grid; gap: 18px; margin-bottom: 8px; }
+.go-pic img { display: block; width: 100%; height: auto; background: var(--blue-tint); }
+.go-pic figcaption { margin-top: 8px; font-size: 0.95rem; color: #3A3A36; }
+.go-nights { list-style: none; display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line); margin: 16px 0 20px; }
+.go-night { background: var(--white); }
+.go-night-link { display: flex; align-items: center; gap: 14px 18px; flex-wrap: wrap; padding: 16px 18px; }
+.go-night-link:hover { background: var(--blue-tint); }
+.go-night-link:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
+.go-night-body { flex: 1 1 200px; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.go-night-name { font-weight: 500; font-size: 1.05rem; }
+.go-night-meta { font-size: 0.9rem; font-weight: 300; color: #3A3A36; }
+.go-night-go { font-size: 0.9rem; color: var(--blue); font-weight: 500; }

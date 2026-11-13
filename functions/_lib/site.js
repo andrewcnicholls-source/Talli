@@ -9,6 +9,9 @@
      /events/<slug>   one series: what, where, when, each night, and the
                       booking flow under them (plan A3, BOOKING_FLOW)
      /sitemap.xml     the static pages, the catalogue and every series
+     /go/<slug>       one site or parking area (plan A4): what its Locate
+                      Us card opens. Directions first, then the next
+                      nights to book there.
 
    Why on the server at all: the details of an event have to be in the
    HTML Google receives. What is left and what it costs is not — that is
@@ -421,8 +424,8 @@ ${og.map(([k, v]) => `<meta property="${k}" content="${esc(v)}">`).join('\n')}
     <a href="/"><img class="brand-logo" src="/assets/talli-logo.png" alt="talli."></a>
     <nav class="topnav">
       <a href="/">Home</a>
-      <a href="/events" class="active">What's On</a>
-      <a href="/getting-here">Getting Here</a>
+      <a href="/events"${opts.nav === 'here' ? '' : ' class="active"'}>What's On</a>
+      <a href="/getting-here"${opts.nav === 'here' ? ' class="active"' : ''}>Getting Here</a>
       <a href="/book">Book &amp; Extras</a>
       <a href="/eden-park">Eden Park Guide</a>
     </nav>
@@ -595,6 +598,23 @@ export function renderNotFound(opts) {
 }
 
 function renderUnavailable(opts) {
+  // A driver who scanned a card at the kerb: the address is on the card
+  // in front of them, so say that rather than point them at booking.
+  if (opts.place) {
+    return page({
+      title: 'Back shortly | Talli Parking',
+      description: 'Directions are not available just now.',
+      canonical: SITE + '/getting-here',
+      noindex: true,
+      nav: 'here',
+      body: `<header class="hero compact">
+  <div class="hero-rule"></div>
+  <h1>Back in a moment</h1>
+  <p>We could not load the directions just now. The address is on the card, and in your booking
+  confirmation. Please try this page again shortly.</p>
+</header>`,
+    });
+  }
   return page({
     title: 'Back shortly | Talli Parking',
     description: 'The events list is not available just now.',
@@ -605,6 +625,201 @@ function renderUnavailable(opts) {
   <h1>Back in a moment</h1>
   <p>We could not load the events just now. Please try again shortly, or
   <a href="/book">go straight to booking</a>.</p>
+</header>`,
+  });
+}
+
+// --- /go/<slug> (plan A4) ------------------------------------------------------
+//
+// What a Locate Us card opens. Scanning goes to the Talli site on purpose,
+// not straight to a map: the directions are one tap away, and the next
+// nights to book are underneath them. A printed card carries this address,
+// so the page reads its position from the database each time and a card
+// never needs reprinting when a position is corrected.
+//
+// A slug names a site (its own driveway) or a block (the area a customer
+// books: its anchor's address "or a driveway within 100m"). Both are read
+// with the anon key: active sites and blocks, their addresses, positions
+// and pictures, which are public by design. The bank details a warden's
+// Site guide shows are not readable here, and this file never asks.
+
+const PLACE_SITE_FIELDS = 'id,name,address,lat,lng,walk_minutes,slug,block_id';
+const PICTURES = 'site_picture(path,caption,sort_order)';
+
+export function sitePictureUrl(project, path) {
+  if (!path) return null;
+  const clean = String(path).split('/').map(encodeURIComponent).join('/');
+  return project.supabaseUrl + '/storage/v1/object/public/site-pictures/' + clean;
+}
+
+const byOrder = (a, b) => (a.sort_order || 0) - (b.sort_order || 0);
+
+// "86 Paice Avenue, Sandringham, Auckland 1025" → "86 Paice Avenue". The
+// part a driver looks for on a letterbox. Brackets (test sites) dropped.
+export function streetOf(address) {
+  return String(address || '').split(',')[0].replace(/\s*\(.*?\)\s*/g, ' ').trim();
+}
+
+// Where a map should take someone: the position when there is one, which
+// lands on the driveway, else the address.
+export function mapLinks(place) {
+  const to = place.lat != null && place.lng != null
+    ? place.lat + ',' + place.lng
+    : place.address;
+  return {
+    google: 'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(to),
+    apple: 'https://maps.apple.com/?daddr=' + encodeURIComponent(to) + '&saddr=Current+Location',
+  };
+}
+
+// The site or block a slug names, as one shape the page draws, or null.
+export async function loadPlace(project, slug, now) {
+  if (!SLUG.test(slug || '')) return null;
+  let place = null;
+  let siteIds = [];
+
+  const sites = await read(project,
+    '/property?slug=eq.' + encodeURIComponent(slug) + '&active=is.true' +
+    '&select=' + PLACE_SITE_FIELDS + ',' + PICTURES + '&limit=1');
+  if (sites.length) {
+    const p = sites[0];
+    place = {
+      kind: 'site', slug: p.slug, name: p.name, address: p.address || p.name,
+      lat: p.lat, lng: p.lng, walk_minutes: p.walk_minutes,
+      pictures: (p.site_picture || []).slice().sort(byOrder),
+    };
+    siteIds = [p.id];
+    if (p.block_id) {
+      const rows = await read(project, '/property?active=is.true&block_id=eq.' +
+        encodeURIComponent(p.block_id) + '&select=id');
+      siteIds = rows.map((r) => r.id);
+    }
+  } else {
+    const blocks = await read(project,
+      '/block?slug=eq.' + encodeURIComponent(slug) + '&active=is.true' +
+      '&select=id,name,slug,lat,lng,anchor:anchor_property_id(' +
+      PLACE_SITE_FIELDS + ',active,' + PICTURES + ')&limit=1');
+    if (!blocks.length) return null;
+    const b = blocks[0];
+    const a = b.anchor && b.anchor.active ? b.anchor : null;
+    const rows = await read(project, '/property?active=is.true&block_id=eq.' +
+      encodeURIComponent(b.id) + '&select=id');
+    siteIds = rows.map((r) => r.id);
+    // A block with no active anchor has nowhere to send anyone.
+    if (!a) return null;
+    place = {
+      kind: 'block', slug: b.slug, name: b.name, address: a.address || a.name,
+      lat: a.lat != null ? a.lat : b.lat, lng: a.lng != null ? a.lng : b.lng,
+      walk_minutes: a.walk_minutes,
+      pictures: (a.site_picture || []).slice().sort(byOrder),
+      several: siteIds.length > 1,
+    };
+  }
+
+  place.nights = [];
+  if (siteIds.length) {
+    // The nights this area takes part in: an offer that is on sale or
+    // waiting on its host. A paused one sells nothing online.
+    const offers = await read(project, '/event_offer?status=in.(confirmed,pending)' +
+      '&property_id=in.(' + siteIds.map(encodeURIComponent).join(',') + ')&select=event_id');
+    const ids = [...new Set(offers.map((o) => o.event_id))];
+    if (ids.length) {
+      place.nights = (await read(project,
+        '/event?' + LISTED + '&id=in.(' + ids.map(encodeURIComponent).join(',') + ')' +
+        '&starts_at=gt.' + encodeURIComponent(now.toISOString()) +
+        '&order=starts_at.asc,id.asc&limit=8' +
+        '&select=' + NIGHT_FIELDS + ',event_series!inner(' + SERIES_FIELDS + ')'))
+        .filter((n) => n.event_series && n.event_series.slug);
+    }
+  }
+  return place;
+}
+
+export function renderPlace(project, place, opts) {
+  const now = opts.now;
+  const url = SITE + '/go/' + place.slug;
+  const street = streetOf(place.address) || place.name;
+  const maps = mapLinks(place);
+  const first = place.pictures[0] ? sitePictureUrl(project, place.pictures[0].path) : null;
+
+  const walk = place.walk_minutes != null
+    ? `<p class="go-walk">${esc(place.walk_minutes)} min walk to Eden Park</p>` : '';
+  const where = place.kind === 'block' && place.several
+    ? `<p class="go-note">Come to ${esc(street)}. A Talli warden will meet you and show you which
+  driveway to park in — it may be one of the neighbours within 100m.</p>`
+    : `<p class="go-note">A Talli warden will meet you on the driveway and show you where to park.</p>`;
+
+  const pictures = place.pictures.map((pic) => `    <figure class="go-pic">
+      <img src="${esc(sitePictureUrl(project, pic.path))}" alt="${esc(pic.caption || 'Where to park at ' + street)}" loading="lazy">
+      ${pic.caption ? `<figcaption>${esc(pic.caption)}</figcaption>` : ''}
+    </figure>`).join('\n');
+
+  const nights = place.nights.map((n) => {
+    const s = n.event_series;
+    const state = nightState(n, now);
+    return `    <li class="go-night">
+      <a class="go-night-link" href="/events/${esc(s.slug)}?night=${esc(encodeURIComponent(n.id))}">
+        ${dateBlock(n.starts_at)}
+        <span class="go-night-body">
+          <span class="go-night-name">${esc(s.name)}${n.night_label ? ' — ' + esc(n.night_label) : ''}</span>
+          <span class="go-night-meta">${esc(longDate(n.starts_at))}, ${esc(time(n.starts_at))} · ${esc(state.label)}</span>
+        </span>
+        <span class="go-night-go">${esc(state.action)} →</span>
+      </a>
+    </li>`;
+  }).join('\n');
+
+  const body = `<header class="hero compact go-hero">
+  <div class="hero-rule"></div>
+  <span class="eyebrow">Locate us · Talli Parking</span>
+  <h1>${esc(street)}</h1>
+  <p class="go-address">${esc(place.address)}</p>
+  ${walk}
+</header>
+
+<main class="wrap tight go-main">
+  <div class="btn-row go-maps">
+    <a class="btn btn-primary" id="go-google" href="${esc(maps.google)}" target="_blank" rel="noopener">Open in Google Maps</a>
+    <a class="btn btn-outline" id="go-apple" href="${esc(maps.apple)}" target="_blank" rel="noopener">Open in Apple Maps</a>
+  </div>
+  ${where}
+${pictures ? `  <div class="go-pics">\n${pictures}\n  </div>` : ''}
+
+  <hr class="thin">
+
+  <div class="section-label">Next time</div>
+  <h2>Book your space here</h2>
+${place.nights.length
+    ? `  <ul class="go-nights">\n${nights}\n  </ul>`
+    : `  <p class="ev-empty">Nothing on sale here just now.</p>`}
+  <div class="btn-row"><a class="btn btn-outline" href="/events">See everything on at Eden Park</a></div>
+</main>`;
+
+  return page({
+    title: street + ' — parking near Eden Park | Talli Parking',
+    description: 'Directions to Talli Parking at ' + street + ', ' +
+      (place.walk_minutes != null ? place.walk_minutes + ' minutes\u2019 walk' : 'a short walk') +
+      ' from Eden Park. Open in Google Maps or Apple Maps, and book your space for next time.',
+    canonical: url,
+    image: first,
+    noindex: opts.noindex,
+    nav: 'here',
+    body,
+  });
+}
+
+function renderPlaceNotFound() {
+  return page({
+    title: 'Not found | Talli Parking',
+    description: 'That parking address is not one we know.',
+    canonical: SITE + '/getting-here',
+    noindex: true,
+    nav: 'here',
+    body: `<header class="hero compact">
+  <div class="hero-rule"></div>
+  <h1>We could not find that address</h1>
+  <p>It may have been typed slightly differently from the card. Pick your parking area from the list.</p>
+  <div class="btn-row"><a class="btn btn-primary" href="/getting-here">Getting Here</a></div>
 </header>`,
   });
 }
@@ -640,8 +855,8 @@ function headers(type, project, extra) {
 
 const HTML = 'text/html; charset=utf-8';
 
-function unavailable(project) {
-  return new Response(renderUnavailable({}), {
+function unavailable(project, opts) {
+  return new Response(renderUnavailable(opts || {}), {
     status: 503,
     headers: headers(HTML, project, { 'Cache-Control': 'no-store', 'Retry-After': '60' }),
   });
@@ -675,5 +890,36 @@ export async function handleSitemap(request, project, now = new Date()) {
   try { list = await loadCatalogue(project, now); } catch (e) { list = []; }
   return new Response(renderSitemap(list), {
     headers: headers('application/xml; charset=utf-8', project),
+  });
+}
+
+// /go/<slug>. A slug typed from a photo of the card may come in with
+// capitals; it is sent to the lower-case address rather than refused.
+export async function handlePlace(request, project, slug, now = new Date()) {
+  const raw = String(slug || '').trim();
+  if (raw && raw.toLowerCase() !== raw && SLUG.test(raw.toLowerCase())) {
+    return new Response(null, {
+      status: 301,
+      headers: headers(HTML, project, { Location: '/go/' + raw.toLowerCase() }),
+    });
+  }
+  let place;
+  try { place = await loadPlace(project, raw, now); } catch (e) { return unavailable(project, { place: true }); }
+  if (!place) {
+    return new Response(renderPlaceNotFound(), {
+      status: 404,
+      headers: headers(HTML, project, { 'Cache-Control': 'public, max-age=60' }),
+    });
+  }
+  return new Response(renderPlace(project, place, { now, noindex: project !== PRODUCTION }), {
+    headers: headers(HTML, project),
+  });
+}
+
+// /go on its own: the list of every area.
+export function handleGoIndex(request, project) {
+  return new Response(null, {
+    status: 302,
+    headers: headers(HTML, project, { Location: '/getting-here' }),
   });
 }

@@ -11,6 +11,9 @@
      Nights   — which upcoming nights it sells, as ticks, and the one tap
                 that puts it on sale online for each.
      Prices   — its area's adjustment per type from the reference site.
+     Locate Us — its address on the Talli site (/go/<slug>) and its
+                area's, the card printed to A4 for a sign, and the
+                pictures of where to park (plan A4).
 
    Every rule — a booked site does not move, the anchor stays in its area,
    a night's count is never below what has sold — is the database's. The
@@ -245,6 +248,7 @@ export function renderSiteForm(id) {
   if (!site) return;
 
   detailsSection(box, site);
+  locateSection(box, site, blockById(site.block_id));
   var night = nightFilter ? nightById(nightFilter) : null;
   if (night) nightSpacesSection(box, site, night);
   else usualSpacesSection(box, site);
@@ -349,6 +353,205 @@ function detailsSection(box, site) {
     }
     box.appendChild(line);
   }
+}
+
+/* ------------------------------------------- Locate Us (plan A4) */
+
+// The address printed on a card is the one its QR code opens. Changing it
+// strands every card already printed with the old one, so it is asked
+// twice.
+function slugField(box, kind, id, current, labelText, keepSite) {
+  var input = textInput(current, 'e.g. 86paice');
+  input.autocapitalize = 'none';
+  input.spellcheck = false;
+  var shown = window.TalliCard ? window.TalliCard.address(current).text : '/go/' + current;
+  field(box, labelText, input, 'Printed on the card as ' + shown + '. Letters, numbers and hyphens.');
+  var say = errorBox(box);
+  box.appendChild(button('btn btn-outline ad-site-save', 'Save address', function () {
+    var slug = input.value.trim().toLowerCase();
+    if (slug === current) { say(null); return; }
+    if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(slug)) {
+      say('Letters, numbers and single hyphens only, like 86paice.');
+      return;
+    }
+    if (!window.confirm('Cards already printed with /go/' + current + ' will stop working. ' +
+                        'Change it to /go/' + slug + '?')) return;
+    say(null);
+    call('save_place_slug', { kind: kind, id: id, slug: slug })
+      .then(function (res) {
+        reload(keepSite, 'Address is now /go/' + res.slug);
+        if (state.eventId) loadList(true);
+      })
+      .catch(function (e) { say(explain(e)); });
+  }));
+}
+
+function printButton(box, label, target) {
+  box.appendChild(button('btn btn-primary ad-site-save', label, function () {
+    if (!window.TalliCard || !window.TalliCard.print(target)) {
+      toast('The print window was blocked. Allow pop-ups for this page and try again.', 'bad');
+    }
+  }));
+}
+
+function locateSection(box, site, block) {
+  section(box, 'Locate Us card',
+    'What a driver scans or photographs. It opens this site\u2019s page on the Talli site: the ' +
+    'directions, the pictures below, and the next nights to book here.');
+
+  if (window.TalliCard && site.slug) {
+    var preview = make('div', 'ad-site-card');
+    preview.innerHTML = window.TalliCard.svg({ slug: site.slug, address: site.address || site.name });
+    box.appendChild(preview);
+  }
+  if (site.slug) {
+    slugField(box, 'site', site.property_id, site.slug, 'This site\u2019s address', site.property_id);
+    printButton(box, 'Print this site\u2019s card (A4)',
+      { slug: site.slug, address: site.address || site.name });
+  }
+
+  if (block && block.slug) {
+    var anchor = siteById(block.anchor_property_id);
+    box.appendChild(make('p', 'ad-site-help',
+      block.name + '\u2019s card sends drivers to its anchor' +
+      (anchor ? ', ' + anchor.name : '') + ', and is what booking confirmations link to.'));
+    slugField(box, 'block', block.id, block.slug, block.name + '\u2019s address', site.property_id);
+    if (anchor) {
+      printButton(box, 'Print ' + block.name + '\u2019s card (A4)',
+        { slug: block.slug, address: anchor.address || anchor.name });
+    }
+  }
+
+  picturesSection(box, site);
+}
+
+// Pictures of where and how to park, shown on the warden's Site guide and
+// on the public /go/ page, in this order.
+function picturesSection(box, site) {
+  box.appendChild(make('h3', 'ad-site-sub', 'Pictures of where to park'));
+  box.appendChild(make('p', 'ad-site-help',
+    'Marked-up photos of where and how to park. Anyone who scans the card sees them.'));
+
+  var list = make('div', 'ad-site-pics');
+  (site.pictures || []).forEach(function (pic, i, all) {
+    var row = make('div', 'ad-site-pic');
+    var img = make('img');
+    img.src = CFG.supabaseUrl + '/storage/v1/object/public/site-pictures/' +
+      String(pic.path).split('/').map(encodeURIComponent).join('/');
+    img.alt = pic.caption || 'Picture ' + (i + 1);
+    img.loading = 'lazy';
+    row.appendChild(img);
+
+    var body = make('div', 'ad-site-pic-body');
+    var cap = textInput(pic.caption, 'Caption, e.g. Pull right up to the garage door');
+    cap.setAttribute('aria-label', 'Caption for picture ' + (i + 1));
+    cap.maxLength = 200;
+    cap.addEventListener('change', function () {
+      call('save_site_picture', { picture_id: pic.id, caption: cap.value })
+        .then(function () { pic.caption = cap.value.trim() || null; toast('Caption saved', 'good'); })
+        .catch(function (e) { toast(explain(e), 'bad'); });
+    });
+    body.appendChild(cap);
+
+    var acts = make('div', 'ad-site-pic-acts');
+    function move(by) {
+      return function () {
+        call('save_site_picture', { picture_id: pic.id, move: by })
+          .then(function () { reload(site.property_id, 'Moved'); })
+          .catch(function (e) { toast(explain(e), 'bad'); });
+      };
+    }
+    if (i > 0) acts.appendChild(button('ad-link', 'Move up', move(-1)));
+    if (i < all.length - 1) acts.appendChild(button('ad-link', 'Move down', move(1)));
+    acts.appendChild(button('ad-link ad-link-bad', 'Remove', function () {
+      if (!window.confirm('Remove this picture? It comes off the card page and the Site guide.')) return;
+      call('remove_site_picture', { picture_id: pic.id })
+        .then(function () { reload(site.property_id, 'Picture removed'); })
+        .catch(function (e) { toast(explain(e), 'bad'); });
+    }));
+    body.appendChild(acts);
+    row.appendChild(body);
+    list.appendChild(row);
+  });
+  box.appendChild(list);
+
+  var file = document.createElement('input');
+  file.type = 'file';
+  file.accept = 'image/jpeg,image/png,image/webp';
+  file.className = 'ad-input';
+  field(box, 'Add a picture', file);
+  var caption = textInput('', 'Caption (optional)');
+  caption.maxLength = 200;
+  field(box, 'Its caption', caption);
+  var say = errorBox(box);
+  var add = button('btn btn-outline ad-site-save', 'Upload picture', function () {
+    var f = file.files && file.files[0];
+    if (!f) { say('Choose a picture first.'); return; }
+    say(null);
+    add.disabled = true;
+    text(add, 'Uploading…');
+    shrink(f)
+      .then(function (pic) {
+        return call('upload_site_picture', {
+          property_id: site.property_id, content_type: pic.type, data: pic.data,
+          caption: caption.value,
+        });
+      })
+      .then(function () {
+        reload(site.property_id, 'Picture added');
+        if (state.eventId) loadList(true);
+      })
+      .catch(function (e) {
+        add.disabled = false;
+        text(add, 'Upload picture');
+        say(explain(e));
+      });
+  });
+  box.appendChild(add);
+}
+
+// A phone photo is often over the 5 MB gate-ops takes, and far larger than
+// a phone screen needs. Anything wider or taller than 1800 pixels, or over
+// 4 MB, is redrawn at that size as a JPEG; anything smaller goes as it is.
+var MAX_SIDE = 1800;
+function shrink(file) {
+  function asBase64(blob) {
+    return new Promise(function (resolve, reject) {
+      var reader = new FileReader();
+      reader.onload = function () { resolve(String(reader.result).split(',')[1] || ''); };
+      reader.onerror = function () { reject(new Error('Could not read that picture.')); };
+      reader.readAsDataURL(blob);
+    });
+  }
+  if (['image/jpeg', 'image/png', 'image/webp'].indexOf(file.type) === -1) {
+    return Promise.reject(new Error('A JPEG, PNG or WebP picture, please.'));
+  }
+  return new Promise(function (resolve, reject) {
+    var url = URL.createObjectURL(file);
+    var img = new Image();
+    img.onload = function () {
+      URL.revokeObjectURL(url);
+      var big = Math.max(img.naturalWidth, img.naturalHeight);
+      if (big <= MAX_SIDE && file.size <= 4 * 1024 * 1024) {
+        asBase64(file).then(function (d) { resolve({ type: file.type, data: d }); }, reject);
+        return;
+      }
+      var k = Math.min(1, MAX_SIDE / big);
+      var c = document.createElement('canvas');
+      c.width = Math.round(img.naturalWidth * k);
+      c.height = Math.round(img.naturalHeight * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      c.toBlob(function (blob) {
+        if (!blob) { reject(new Error('Could not make that picture smaller.')); return; }
+        asBase64(blob).then(function (d) { resolve({ type: 'image/jpeg', data: d }); }, reject);
+      }, 'image/jpeg', 0.85);
+    };
+    img.onerror = function () {
+      URL.revokeObjectURL(url);
+      reject(new Error('That file did not open as a picture.'));
+    };
+    img.src = url;
+  });
 }
 
 /* ------------------------------------------------------------- spaces */
@@ -730,6 +933,8 @@ var MEANINGS = {
   REFERENCE_SITE: 'This is the reference site: every price is measured from it, so it stays where it is.',
   SITE_IS_ANCHOR: 'This is its area’s anchor. Make another site the anchor first.',
   ANCHOR_NOT_IN_AREA: 'The anchor must be an active site in that area.',
+  SLUG_TAKEN: 'Another site or area already has that address.',
+  BAD_SLUG: 'Letters, numbers and single hyphens only, like 86paice.',
 };
 export function explain(err) {
   if (err && err.code && MEANINGS[err.code]) return MEANINGS[err.code];

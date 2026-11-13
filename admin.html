@@ -84,7 +84,7 @@
            two things a warden reads out at a car window. Arrivals is
            still the tab the screen opens on. -->
       <button type="button" class="ad-tab" id="ad-tab-info"
-              role="tab" aria-selected="false" aria-controls="ad-pane-info">Site info</button>
+              role="tab" aria-selected="false" aria-controls="ad-pane-info">Site guide</button>
       <button type="button" class="ad-tab is-on" id="ad-tab-gate"
               role="tab" aria-selected="true" aria-controls="ad-pane-gate">Arrivals</button>
       <button type="button" class="ad-tab" id="ad-tab-night"
@@ -147,6 +147,20 @@
     <p class="ad-info-address" id="ad-info-address"></p>
     <div class="ad-info-maps" id="ad-info-maps"></div>
 
+    <!-- The Locate Us card (plan A4): what a driver scans or photographs.
+         Tap it to fill the screen and hold it up to the window. -->
+    <button type="button" class="ad-guide-card" id="ad-guide-card" hidden
+            aria-label="Show the Locate Us card full screen"></button>
+    <p class="ad-hint ad-guide-hint" id="ad-guide-hint" hidden>Tap the card to fill the screen,
+      then hold it up to the driver&rsquo;s window.</p>
+
+    <div class="ad-guide-park" id="ad-guide-park" hidden>
+      <h2 class="ad-info-head">Where to park</h2>
+      <p class="ad-guide-notes" id="ad-guide-notes" hidden></p>
+      <div class="ad-guide-pics" id="ad-guide-pics"></div>
+      <p class="ad-guide-link" id="ad-guide-link" hidden></p>
+    </div>
+
     <h2 class="ad-info-head">Pay by bank transfer</h2>
     <p class="ad-empty" id="ad-info-bank-empty" hidden></p>
     <dl class="ad-info-bank" id="ad-info-bank" hidden>
@@ -162,6 +176,10 @@
     <p class="ad-hint">Sell it on Arrivals as &ldquo;Bank transfer&rdquo;. It is matched
       to the car later, from the plate on the bank statement.</p>
   </section>
+
+  <!-- The card, full screen. Tap anywhere to close. -->
+  <div class="ad-guide-full" id="ad-guide-full" role="dialog" aria-modal="true"
+       aria-label="Locate Us card" hidden></div>
 
   <!-- --------------------------------------------------- tonight's state -->
   <section id="ad-pane-night" role="tabpanel" aria-labelledby="ad-tab-night" hidden>
@@ -705,6 +723,7 @@
 <div class="ad-toast" id="ad-toast" role="status" hidden></div>
 
 <script src="assets/vendor/qrcode-generator/qrcode.js"></script>
+<script src="assets/locate-card.js"></script>
 <script type="module" src="assets/admin/main.js"></script>
 </body>
 </html>

@@ -219,7 +219,7 @@ async function sendConfirmationEmail(bookingId: string): Promise<void> {
       await Promise.all([
         db.from('event').select('name, starts_at').eq('id', b.event_id).maybeSingle(),
         db.from('property')
-          .select('name, address, block_id, block:block_id(anchor:anchor_property_id(address))')
+          .select('name, address, slug, block_id, block:block_id(slug, anchor:anchor_property_id(address))')
           .eq('id', b.property_id).maybeSingle(),
         db.from('offer_tier').select('label').eq('code', b.tier_code).limit(1).maybeSingle(),
         db.from('booking_addon').select('name, qty').eq('booking_id', b.id).order('code'),
@@ -241,10 +241,13 @@ async function sendConfirmationEmail(bookingId: string): Promise<void> {
         address = `${anchor} — or a driveway within 100m. A Talli warden will show you where.`
       }
     }
-    // Directions to the block they booked. Without a block it is the
-    // default page, which is 86 Paice Ave.
-    const directions = `${SITE_URL}/getting-here` +
-      (property?.block_id ? `?block=${encodeURIComponent(String(property.block_id))}` : '')
+    // Directions to the block they booked: its /go/ page (plan A4), the
+    // page its Locate Us card opens. A site with no block has its own.
+    // With neither, the list of every block on /getting-here.
+    const goSlug = (property as Row | null)?.block?.slug ?? (property as Row | null)?.slug ?? null
+    const directions = goSlug
+      ? `${SITE_URL}/go/${encodeURIComponent(String(goSlug))}`
+      : `${SITE_URL}/getting-here`
 
     const extras = (addons ?? []).map((a: Row) =>
       a.qty > 1 ? `${a.name} × ${a.qty}` : String(a.name))

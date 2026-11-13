@@ -409,6 +409,44 @@ wardens can reach.
   in one more tap, the page offers the next events to book, and a
   booking in a second block never shows a Paice Ave direction.
 
+**Status, 14 Nov 2026: built** (`feature/site-guide-and-qr`), on top of
+B6. What differs from the brief above, and why:
+
+- **Slugs are number + street, no hyphen** (Andrew): `86 Paice Ave` is
+  `/go/86paice`, a unit number is dropped, a second site at the same
+  number gets `-2`. A block's comes from its name (`paice-ave`). One
+  namespace for both, enforced by a trigger
+  (`20261119100000_talli_site_guide_and_qr`), which also fills the slug
+  of every new site and block, so `add_site` was not restated. Andrew
+  can change one from the Sites page; it asks first, because cards
+  printed with the old address stop working. Old slugs do not redirect.
+- **The pictures are public** (Andrew): the marked-up "where to park"
+  pictures (`site_picture`, several per site, captioned, ordered) show
+  on the `/go/` page as well as the warden's guide. `site_guide_url`
+  stays and is shown as a link.
+- **The guide is the old Site info tab, renamed "Site guide"**: card,
+  where to park, then the bank details as R2 built them. It follows the
+  B6 selector: one site chosen shows that site's card; an area (or
+  all) shows the area's card, at its anchor. A warden's night only ever
+  carries their own blocks' sites, so the guide cannot show another's.
+- **The card** (`assets/locate-card.js`) is a square QR (error
+  correction H) set in a car outline, a small pin at its centre,
+  "Talli Parking", "Locate Us", the street and the short address in
+  text. On staging it points at the staging host, never talli.co.nz.
+  **Not yet tested with a phone camera**: no decoder was available to
+  the agent. Do that on staging, from arm's length off a phone screen
+  and from a photo of a printed card, before printing any for real.
+- **Confirmations link to the booked block's `/go/` page** (page and
+  email). `getting-here` no longer shows Paice Ave: it lists every
+  active area, and forwards an old `?block=<id>` link to its `/go/`
+  page. `eden-park.html` gives no walk from Paice Ave.
+- **Started before B2 in the old § 5 order**, once B1–B6 had landed;
+  nothing in A4 restates a P1 object.
+- **Release:** the migration, then `gate-ops`, `get-booking` and
+  `stripe-webhook`, then Pages. The migration gives every production
+  site and block its slug from its address or name; check the list on
+  the Sites page after it runs, before printing a card.
+
 ### B1 — `block-pricing`
 
 - `block_tier_offset (block_id, code, offset_cents)`. The reference

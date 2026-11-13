@@ -108,11 +108,12 @@
     el('cf-reference').textContent = b.reference;
 
     // "On the night" names the actual place, not a hardcoded house.
-    // Directions to the block they booked, not the default Paice Ave page.
-    var block = b.property && b.property.block_id;
+    // Directions to the block they booked: its /go/ page (plan A4), the
+    // one its Locate Us card opens. Never the Paice Ave default.
+    var go = b.property && ((b.property.block && b.property.block.slug) || b.property.slug);
     var directions = el('cf-directions');
-    if (directions && block) {
-      directions.href = 'getting-here.html?block=' + encodeURIComponent(block);
+    if (directions && go) {
+      directions.href = '/go/' + encodeURIComponent(go);
     }
 
     var come = el('cf-come-to');

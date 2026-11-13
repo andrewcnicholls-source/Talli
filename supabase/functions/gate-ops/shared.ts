@@ -117,3 +117,41 @@ export async function liveEvent(): Promise<Row | null> {
 // Absent means "leave it"; a string, even an empty one, means "set it".
 export const optText = (v: unknown): string | null =>
   v === undefined || v === null ? null : String(v)
+
+// Pictures uploaded from the gate screen: series and nights (plan A1),
+// and the pictures of where to park at a site (plan A4). Each bucket is
+// public to read and has no storage policy for browsers: only this
+// function writes to it, with the service role, for Andrew.
+export const PICTURE_MAX_BYTES = 5 * 1024 * 1024
+export const PICTURE_TYPES: Record<string, { ext: string; magic: (b: Uint8Array) => boolean }> = {
+  'image/jpeg': { ext: 'jpg', magic: (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff },
+  'image/png': { ext: 'png', magic: (b) => b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47 },
+  'image/webp': {
+    ext: 'webp',
+    magic: (b) => String.fromCharCode(...b.slice(0, 4)) === 'RIFF' &&
+      String.fromCharCode(...b.slice(8, 12)) === 'WEBP',
+  },
+}
+
+// The picture in a request, checked: a type we take, whole, under the
+// limit, and actually that type. A Response is the refusal to send back.
+export function pictureFrom(body: Record<string, unknown>):
+  { bytes: Uint8Array; type: string; ext: string } | Response {
+  const type = PICTURE_TYPES[String(body.content_type ?? '')]
+  if (!type) {
+    return json({ error: 'A JPEG, PNG or WebP picture, please.', code: 'BAD_PICTURE' }, 400)
+  }
+  let bytes: Uint8Array
+  try {
+    bytes = Uint8Array.from(atob(String(body.data ?? '')), (c) => c.charCodeAt(0))
+  } catch {
+    return json({ error: 'That picture did not arrive whole. Try again.', code: 'BAD_PICTURE' }, 400)
+  }
+  if (!bytes.length || bytes.length > PICTURE_MAX_BYTES) {
+    return json({ error: 'Pictures up to 5 MB, please.', code: 'PICTURE_TOO_BIG' }, 400)
+  }
+  if (!type.magic(bytes)) {
+    return json({ error: 'That file is not the picture it says it is.', code: 'BAD_PICTURE' }, 400)
+  }
+  return { bytes, type: String(body.content_type), ext: type.ext }
+}
