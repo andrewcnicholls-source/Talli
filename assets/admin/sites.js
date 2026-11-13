@@ -677,13 +677,16 @@ function attachPlaces(wrap, address, pos, name) {
       pac.className = 'ad-places';
       wrap.insertBefore(pac, address);
       text(note, 'Search above to fill in the address and position, or type them.');
+      // Only Essentials fields: address and position. displayName (or any
+      // other Pro field) would bill the lookup at the Pro rate, and the
+      // short name is just the street part of the address anyway.
       function fill(place) {
-        return place.fetchFields({ fields: ['formattedAddress', 'location', 'displayName'] })
+        return place.fetchFields({ fields: ['formattedAddress', 'location'] })
           .then(function () {
             if (place.formattedAddress) address.value = place.formattedAddress;
             if (place.location) pos.value = positionText(place.location.lat(), place.location.lng());
             if (name && !name.value.trim()) {
-              name.value = String(place.displayName || place.formattedAddress || '').split(',')[0];
+              name.value = String(place.formattedAddress || '').split(',')[0];
             }
           });
       }
