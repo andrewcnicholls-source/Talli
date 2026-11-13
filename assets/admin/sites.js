@@ -8,8 +8,8 @@ import { loadList } from './night.js';
 
 /* ------------------------------------------------------------- sites */
 
-// One driveway at a time: its usual spaces per type, how many of those
-// sell online, and its price difference from the reference site.
+// One driveway at a time: its usual spaces per type and how many of those
+// sell online. Below it, its area's prices (one price per area, plan B1).
 var SITE_TYPES = [
   { code: 'standard', label: 'Standard' },
   { code: 'priority', label: 'Priority exit' },
@@ -92,21 +92,6 @@ export function renderSiteForm(id) {
   box.appendChild(make('p', 'ad-site-help',
     'Online is how many sell on the website; the rest are kept for the warden to sell on the night.'));
 
-  var offsetRow = make('div', 'ad-site-offset');
-  var offLabel = make('label', 'ad-label', site.is_reference
-    ? 'Price — this is the reference site every other site is priced from'
-    : 'Price difference from the reference site ($)');
-  offsetRow.appendChild(offLabel);
-  var offset = numberInput((site.price_offset_cents || 0) / 100, -100);
-  offset.step = '1';
-  offset.disabled = site.is_reference;
-  offset.setAttribute('aria-label', 'Price difference in dollars');
-  offsetRow.appendChild(offset);
-  offsetRow.appendChild(make('p', 'ad-site-help',
-    site.is_reference ? 'Change prices on Tonight; every other site follows at its own difference.'
-      : 'e.g. -5 sells this site at $5 less than the reference site, for every type of space.'));
-  box.appendChild(offsetRow);
-
   var applyRow = make('label', 'ad-site-apply');
   var apply = document.createElement('input');
   apply.type = 'checkbox';
@@ -130,13 +115,10 @@ export function renderSiteForm(id) {
       if (o > c) bad = t.label + ': online can’t be more than its spaces.';
       tiers.push({ code: t.code, capacity: c, online: o });
     });
-    var dollars = Number(offset.value || 0);
-    if (!Number.isFinite(dollars) || Math.abs(dollars) > 100) bad = 'Price difference must be between -$100 and $100.';
     if (bad) { text(err, bad); show(err); return; }
     err.hidden = true;
     call('save_site', {
       property_id: site.property_id,
-      price_offset_cents: Math.round(dollars * 100),
       tiers: tiers,
       apply_upcoming: apply.checked,
     })
@@ -151,6 +133,69 @@ export function renderSiteForm(id) {
       })
       .catch(function (e) { text(err, e.message); show(err); });
   }));
+
+  var block = sitesData.blocks.filter(function (b) { return b.id === site.block_id; })[0];
+  if (block) box.appendChild(blockPricing(block, site.property_id));
+}
+
+// One price per area (plan B1): each type of park is the reference site's
+// price plus this area's adjustment, the same at every driveway in it.
+// Prices themselves move on Tonight, on the reference site only.
+function blockPricing(block, keepSite) {
+  var wrap = make('div', 'ad-site-offset');
+  wrap.appendChild(make('label', 'ad-label', 'Prices in ' + block.name));
+  if (block.is_reference) {
+    wrap.appendChild(make('p', 'ad-site-help',
+      'This is the reference area: every other area is priced from it. ' +
+      'Change prices on Tonight and every area follows.'));
+    return wrap;
+  }
+
+  var table = make('div', 'ad-site-grid');
+  table.appendChild(make('span', 'ad-site-h', 'Type'));
+  table.appendChild(make('span', 'ad-site-h', '± $ vs reference'));
+  table.appendChild(make('span', 'ad-site-h', ''));
+  var inputs = {};
+  SITE_TYPES.forEach(function (t) {
+    var cents = (block.offsets && block.offsets[t.code]) || 0;
+    var i = numberInput(cents / 100, -100);
+    i.setAttribute('aria-label', t.label + ' price difference in dollars');
+    inputs[t.code] = i;
+    table.appendChild(make('span', 'ad-site-type', t.label));
+    table.appendChild(i);
+    table.appendChild(make('span', '', ''));
+  });
+  wrap.appendChild(table);
+  wrap.appendChild(make('p', 'ad-site-help',
+    'e.g. -5 sells that type $5 under the reference site, at every driveway in ' +
+    block.name + '. Saving re-prices its upcoming nights.'));
+
+  var err = make('p', 'ad-sheet-error');
+  err.hidden = true;
+  wrap.appendChild(err);
+
+  wrap.appendChild(button('ad-btn', 'Save prices for ' + block.name, function () {
+    var offsets = [];
+    var bad = null;
+    SITE_TYPES.forEach(function (t) {
+      var dollars = Number(inputs[t.code].value || 0);
+      if (!Number.isFinite(dollars) || Math.abs(dollars) > 100) {
+        bad = t.label + ': the difference must be between -$100 and $100.';
+      }
+      offsets.push({ code: t.code, offset_cents: Math.round(dollars * 100) });
+    });
+    if (bad) { text(err, bad); show(err); return; }
+    err.hidden = true;
+    call('save_block_pricing', { block_id: block.id, offsets: offsets })
+      .then(function (res) {
+        toast(block.name + ' prices saved — ' + (res.events_updated || 0) + ' upcoming event' +
+          (res.events_updated === 1 ? '' : 's') + ' re-priced', 'good');
+        openSites(keepSite);
+        if (state.eventId) loadList(true);
+      })
+      .catch(function (e) { text(err, e.message); show(err); });
+  }));
+  return wrap;
 }
 
 // A new driveway: name, address, its area and host, and where it is.

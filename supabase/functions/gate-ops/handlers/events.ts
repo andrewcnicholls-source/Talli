@@ -144,12 +144,9 @@ export const events: Record<string, Handler> = {
       p_price_cents: Number(body.price_cents ?? 0),
     })
     if (error) return json(named(error), 409)
-    // A price on the reference site (Andrew's house) moves every other
-    // site in the event with it, each at its own offset.
-    const { data: ref } = await db.rpc('reference_property')
-    if (ref && String(ref) === String(body.property_id ?? '')) {
-      await db.rpc('apply_price_offsets', { p_event_id: eventId })
-    }
+    // Only the reference site (Andrew's house) takes a price, and the
+    // database moves every block with it in the same transaction, each at
+    // its adjustment. Any other site is refused as REFERENCE_PRICE_ONLY.
     return json({ ok: true, price_cents: data })
   },
 
@@ -167,8 +164,7 @@ export const events: Record<string, Handler> = {
       p_property_id: body.property_id ? String(body.property_id) : null,
     })
     if (error) return json(named(error), 409)
-    // A template sets one price for everyone; put each site's offset back.
-    await db.rpc('apply_price_offsets', { p_event_id: eventId })
+    // The database has already put every block back at its adjustment.
     return json({ ok: true, applied: data })
   },
 
