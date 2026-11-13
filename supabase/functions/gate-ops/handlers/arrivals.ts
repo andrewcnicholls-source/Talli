@@ -85,13 +85,14 @@ export const arrivals: Record<string, Handler> = {
     return json({ tiers: mine, card_surcharge_bps: rate?.card_surcharge_bps ?? 0 })
   },
 
-  // Ticking a car in records that it turned up, and nothing else. Where
-  // it actually goes is the marshal's call standing in the driveway —
-  // the database has no bays to have an opinion about.
+  // Ticking a car in records that it turned up, and where it went.
   //
-  // With several driveways in a block, the one place it does record is
-  // which driveway: the site the warden says they are standing at. That
-  // is what the host is paid on.
+  // With several driveways in a block, the warden says which one they are
+  // standing at, and the database places the car (plan B5): a Standard
+  // space here, then elsewhere in the block, then a Priority space here,
+  // then elsewhere. Never Valet. `placed` says where it went, and
+  // `no_room` when there was nowhere and it stayed counted where it was.
+  // That site is what the host is paid on.
   async check_in({ caller, body, allowed, bookingGuard }: Ctx) {
     const blocked = await bookingGuard()
     if (blocked) return blocked
@@ -100,11 +101,80 @@ export const arrivals: Record<string, Handler> = {
     if (site && allowed !== null && !allowed.has(site)) {
       return json({ error: 'That site is not one of yours.', code: 'NOT_YOUR_SITE' }, 403)
     }
-    const { error } = await db.rpc('check_in_booking_at', {
+    if (!site) {
+      const { error } = await db.rpc('check_in_booking_at', {
+        p_booking_id: id, p_property_id: null, p_by: caller.me,
+      })
+      if (error) return json(named(error), 409)
+      return json({ ok: true })
+    }
+    const { data, error } = await db.rpc('check_in_placed', {
       p_booking_id: id,
       p_property_id: site,
       p_by: caller.me,
     })
+    if (error) return json(named(error), 409)
+    return json({ ok: true, placed: data })
+  },
+
+  // The warden overriding where a car went: another site in the block, or
+  // a Standard car into a Priority space. The database refuses a space
+  // that is not free, so Priority is never past its count.
+  async place({ caller, body, allowed, bookingGuard }: Ctx) {
+    const blocked = await bookingGuard()
+    if (blocked) return blocked
+    const site = String(body.property_id ?? '')
+    if (!site) return json({ error: 'Which site?' }, 400)
+    if (allowed !== null && !allowed.has(site)) {
+      return json({ error: 'That site is not one of yours.', code: 'NOT_YOUR_SITE' }, 403)
+    }
+    const { data, error } = await db.rpc('place_booking', {
+      p_booking_id: String(body.booking_id),
+      p_property_id: site,
+      p_space_code: body.space_code ? String(body.space_code) : null,
+      p_by: caller.me,
+    })
+    if (error) return json(named(error), 409)
+    return json({ ok: true, placed: data })
+  },
+
+  // ---------------------------------------------------- lost spaces
+
+  // A space that cannot be used tonight: a car across two, a blocked
+  // driveway, the host's own car (plan B5). Not a booking and no money.
+  // It comes off availability everywhere — the booking page included —
+  // until it is undone. The live night only, and a warden's own sites.
+  async lose_space({ caller, body, eventId, allowed }: Ctx) {
+    if (!eventId) return json({ error: 'event_id is required' }, 400)
+    const site = String(body.property_id ?? '')
+    if (!site) return json({ error: 'Which site?' }, 400)
+    if (allowed !== null && !allowed.has(site)) {
+      return json({ error: 'That site is not one of yours.', code: 'NOT_YOUR_SITE' }, 403)
+    }
+    const { data, error } = await db.rpc('record_lost_space', {
+      p_event_id: eventId,
+      p_property_id: site,
+      p_tier_code: String(body.tier_code ?? ''),
+      p_reason: String(body.reason ?? ''),
+      p_note: optText(body.note),
+      p_by: caller.me,
+    })
+    if (error) return json(named(error), 409)
+    return json({ ok: true, id: data })
+  },
+
+  async undo_lost_space({ caller, body, allowed, live }: Ctx) {
+    const id = String(body.id ?? '')
+    if (!id) return json({ error: 'id is required' }, 400)
+    const { data: row, error: rErr } = await db.from('lost_space')
+      .select('event_id, property_id').eq('id', id).maybeSingle()
+    if (rErr) throw rErr
+    // The same rule as a booking: a warden's own sites, on the live night.
+    if (!row || (allowed !== null &&
+        (!allowed.has(String(row.property_id)) || !live || String(live.id) !== String(row.event_id)))) {
+      return json({ error: 'That is not at one of your sites tonight.', code: 'NOT_YOUR_SITE' }, 403)
+    }
+    const { error } = await db.rpc('undo_lost_space', { p_id: id, p_by: caller.me })
     if (error) return json(named(error), 409)
     return json({ ok: true })
   },
@@ -204,13 +274,19 @@ export const arrivals: Record<string, Handler> = {
     // marshal reads is the figure that was actually recorded — not the
     // one the screen worked out a moment before the sale.
     const { data: sold } = await db.from('booking')
-      .select('amount_cents, addons_cents, surcharge_cents')
+      .select('amount_cents, addons_cents, surcharge_cents, property_id, tier_code, space_code')
       .eq('id', data)
       .maybeSingle()
 
     return json({
       ok: true,
       booking_id: data,
+      // Where it went: a Standard sale past its count is in a Priority
+      // space, perhaps at another site in the block (plan B5).
+      placed: sold
+        ? { property_id: sold.property_id, tier_code: sold.tier_code,
+            space_code: sold.space_code ?? sold.tier_code }
+        : null,
       charge_cents: sold
         ? (sold.amount_cents ?? 0) + (sold.addons_cents ?? 0) + (sold.surcharge_cents ?? 0)
         : null,

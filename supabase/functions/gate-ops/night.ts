@@ -6,7 +6,7 @@ import { db, isGateAddress, type Row } from './shared.ts'
 // end of a driveway, one request that sometimes carries a little too much
 // beats four that each might not arrive.
 export async function nightState(eventId: string, allowed: Set<string> | null = null) {
-  const [listRes, tierRes, rateRes, chargeRes, siteRes, refRes] = await Promise.all([
+  const [listRes, tierRes, rateRes, chargeRes, siteRes, refRes, lostRes] = await Promise.all([
     db.from('v_gate_list').select('*').eq('event_id', eventId),
     db.from('v_tier_availability').select('*').eq('event_id', eventId)
       .order('sort_order', { ascending: true }),
@@ -19,7 +19,7 @@ export async function nightState(eventId: string, allowed: Set<string> | null = 
     // added. This join costs one small query and cannot go stale.
     db.from('booking')
       .select('id, surcharge_cents, vehicle_low_clearance, customer_email, hold_expires_at, ' +
-              'property_id, booked_property_id, checked_in_by, cash_collected_by')
+              'property_id, booked_property_id, checked_in_by, cash_collected_by, space_code')
       .eq('event_id', eventId),
     // The driveways selling this night, with their block, so the screen can
     // offer "I'm at …" and say which site each car is at.
@@ -29,12 +29,18 @@ export async function nightState(eventId: string, allowed: Set<string> | null = 
       .eq('event_id', eventId),
     // The one site a price is set on (plan B1); every other follows it.
     db.rpc('reference_property'),
+    // Spaces lost tonight and not undone (plan B5), each with its Undo.
+    db.from('lost_space')
+      .select('id, property_id, tier_code, reason, note, recorded_at')
+      .eq('event_id', eventId).is('undone_at', null)
+      .order('recorded_at', { ascending: true }),
   ])
   if (listRes.error) throw listRes.error
   const ref = refRes.data ? String(refRes.data) : null
   if (siteRes.error) throw siteRes.error
   if (tierRes.error) throw tierRes.error
   if (chargeRes.error) throw chargeRes.error
+  if (lostRes.error) throw lostRes.error
 
   const surcharges = new Map<string, number>()
   const lowCars = new Set<string>()
@@ -47,6 +53,9 @@ export async function nightState(eventId: string, allowed: Set<string> | null = 
       booked_property_id: b.booked_property_id,
       checked_in_by: b.checked_in_by,
       cash_collected_by: b.cash_collected_by,
+      // The type of space the car is in, when not the type it was sold
+      // as: a Standard car in a Priority space (plan B5).
+      space_code: b.space_code ?? null,
     })
     surcharges.set(String(b.id), b.surcharge_cents ?? 0)
     if (b.vehicle_low_clearance) lowCars.add(String(b.id))
@@ -86,6 +95,25 @@ export async function nightState(eventId: string, allowed: Set<string> | null = 
 
   const tiers = ((tierRes.data ?? []) as Row[])
     .filter((t: Row) => allowed === null || allowed.has(String(t.property_id)))
+
+  // A walk-up form whose Standard is full is not a closed one (plan B5):
+  // the sale goes where the database would put it — Standard elsewhere in
+  // the block, then a Priority space here, then elsewhere. Asked for each
+  // full Standard so the form can say where before the warden sells.
+  await Promise.all(tiers
+    .filter((t: Row) => t.code === 'standard' && !t.manually_sold_out && (t.spots_left_gate ?? 0) <= 0)
+    .map(async (t: Row) => {
+      const { data, error } = await db.rpc('propose_space', {
+        p_event_id: eventId, p_property_id: t.property_id, p_tier_code: 'standard',
+        p_booking_id: null, p_selling: true,
+      })
+      if (error) throw error
+      const to = ((data ?? []) as Row[])[0]
+      t.spill = to ? { property_id: to.property_id, space_code: to.space_code } : null
+    }))
+
+  const lost = ((lostRes.data ?? []) as Row[])
+    .filter((l: Row) => allowed === null || allowed.has(String(l.property_id)))
   const sites = ((siteRes.data ?? []) as Row[])
     .filter((o: Row) => allowed === null || allowed.has(String(o.property_id)))
     .map((o: Row) => ({
@@ -134,11 +162,14 @@ export async function nightState(eventId: string, allowed: Set<string> | null = 
   // is the same figure he is looking at on the card above it.
   const capacity = tiers.reduce((n: number, t: Row) => n + (t.capacity ?? 0), 0)
   const filled = tiers.reduce((n: number, t: Row) => n + (t.sold ?? 0), 0)
+  // A lost space is not free and not filled: its own line (plan B5).
+  const lostCount = tiers.reduce((n: number, t: Row) => n + (t.lost ?? 0), 0)
 
   return {
     rows,
     tiers,
     sites,
+    lost,
     card_surcharge_bps: rateRes.data?.card_surcharge_bps ?? 0,
     extras: [...extras.values()].sort((a, b) => a.name.localeCompare(b.name)),
     summary: {
@@ -151,7 +182,8 @@ export async function nightState(eventId: string, allowed: Set<string> | null = 
       // Spaces, not bookings. A valet car and a standard car both take one.
       capacity,
       filled,
-      free: capacity - filled,
+      lost: lostCount,
+      free: Math.max(0, capacity - filled - lostCount),
       cash_due_cents: rows
         .filter((r: Row) => r.payment_method !== 'stripe' && r.payment_method !== 'unpaid' &&
           !r.arrived)

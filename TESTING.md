@@ -255,6 +255,28 @@ What to check on the test site:
 A booking never re-prices. Change the rate mid-night and the sales already
 taken keep the surcharge they were charged.
 
+### Where a car goes, and lost spaces (plan B5)
+
+On the fixture night, signed in as the Gribblehurst warden, with *I'm at*
+on the anchor:
+
+- **Walk-ups past Standard** — sell Standard until the anchor's tile says
+  *full — takes a Standard space at* the neighbour; the next sale toasts
+  *send to* the neighbour. Fill that too, and the tile says it *takes a
+  Priority space here*; the row then carries an *in a Priority space* chip,
+  and the booking page shows one Priority fewer for the block. Priority
+  and Valet tiles still stop at their own count.
+- **Space lost** — the button beside *+ Walk-up*. Pick the type and why;
+  it comes off sale at once, shows as *N spaces lost tonight* under the
+  counts, and *Undo* in the same sheet puts it back.
+- **Moving a car** — tap a ticked-in car: *Parked at* lists the sites in its
+  block (and Priority, for a Standard car) with what is free, and refuses a
+  full one.
+
+Automated: `supabase/tests/database/09_placement_oversell_lost.test.sql`
+holds the placement order and the counts; `tests/functions/placement.test.js`
+and `tests/browser/placement.spec.js` the warden's side.
+
 ---
 
 ## The test fixtures

@@ -2718,3 +2718,20 @@ textarea.ad-input { resize: vertical; min-height: 56px; font-family: inherit; }
 .ev-night.is-chosen { background: var(--blue-tint); box-shadow: inset 3px 0 0 var(--blue); }
 .ev-flow { margin-top: 28px; }
 .ev-from.is-walk-up { color: var(--ink); font-weight: 400; }
+
+/* ---- placement and lost spaces (plan B5) ---- */
+/* Quieter than "+ Walk-up": it is the exception, not the job. */
+.ad-sell-open.ad-lost-open {
+  background: var(--white);
+  color: var(--blue);
+  border: 1px solid var(--blue);
+}
+.ad-place-row { display: flex; gap: 8px; align-items: center; }
+.ad-place-row .ad-select { flex: 1; min-width: 0; }
+.ad-lost-list { display: flex; flex-direction: column; gap: 8px; }
+.ad-lost-item {
+  display: flex; gap: 8px; align-items: center; justify-content: space-between;
+  padding: 8px 0; border-top: 1px solid #E5E2DA;
+}
+.ad-lost-what { font-size: 14px; min-width: 0; }
+.ad-lost-undo { flex: none; }
