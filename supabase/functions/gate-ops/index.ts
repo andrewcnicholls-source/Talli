@@ -35,6 +35,7 @@
 //   handlers/arrivals   working the gate (wardens too)
 //   handlers/events     making and running an event (Andrew)
 //   handlers/sites      sites, blocks and the bank details
+//   handlers/settlement settling a night: pools, hosts, wardens (Andrew)
 //
 // Every action goes through the one Deno.serve below. A handler is only
 // ever called from it, after the caller has been resolved and checked.
@@ -44,8 +45,9 @@ import { cors, json, liveEvent } from './shared.ts'
 import { arrivals } from './handlers/arrivals.ts'
 import { events } from './handlers/events.ts'
 import { sites } from './handlers/sites.ts'
+import { settlement } from './handlers/settlement.ts'
 
-const handlers: Record<string, Handler> = { ...arrivals, ...events, ...sites }
+const handlers: Record<string, Handler> = { ...arrivals, ...events, ...sites, ...settlement }
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })

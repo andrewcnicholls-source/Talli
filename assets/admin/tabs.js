@@ -7,6 +7,7 @@ import { el, state } from './core.js';
 import { openInsights } from './insights.js';
 import { openInfo } from './site-info.js';
 import { openSites } from './sites.js';
+import { openSettle } from './settle.js';
 import { syncEvent } from './night.js';
 
 // The sticky search bar has to sit directly under the header, whose height
@@ -49,7 +50,7 @@ export function showTab(which) {
   if (which === 'gate' || which === 'info' || which === 'night') syncEvent();
   measureHead();
   if (which === 'insights') openInsights();
-  if (which === 'sites') openSites();
+  if (which === 'sites') { openSites(); openSettle(); }
   if (which === 'info') openInfo();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }

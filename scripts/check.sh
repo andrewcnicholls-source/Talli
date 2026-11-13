@@ -453,6 +453,26 @@ if [ -z "$missing" ]; then
 else
   fail "gate-ops: a warden may call series actions:$missing"
 fi
+# Settlement (plan B7) is money owed to hosts and wardens: Andrew's alone.
+missing=""
+for a in settlement save_warden_allocation settle_night reopen_settlement save_settlement_setting save_host_details; do
+  printf '%s' "$series_ops" | grep -q "'$a'" || missing="$missing $a"
+done
+if [ -z "$missing" ]; then
+  pass "gate-ops: settlement is Andrew's alone"
+else
+  fail "gate-ops: a warden may call settlement actions:$missing"
+fi
+# The per-booking host earnings are wrong by design under § 3.11: the
+# settlement migration may name them in its comments, never in its code.
+B7_SQL=supabase/migrations/20261121100000_talli_host_settlement.sql
+if [ -f "$B7_SQL" ] \
+   && ! grep -vE '^\s*--' "$B7_SQL" | grep -q "host_earnings_cents\|platform_fee_cents\|platform_share"; then
+  pass "settlement never reads booking.host_earnings_cents, platform_fee_cents or host.platform_share"
+else
+  fail "settlement reads the per-booking host earnings or platform_share"
+fi
+
 if grep -l "event-pictures" supabase/migrations/*.sql \
      | xargs grep -qiE "create policy[^;]*on storage\.objects"; then
   fail "a migration opens the event-pictures bucket to writes from a browser"

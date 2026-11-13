@@ -168,6 +168,9 @@ export const OPERATOR_ONLY = new Set([
   'series_list', 'save_series', 'set_event_series', 'upload_picture',
   'set_live_event',
   'save_place_slug', 'upload_site_picture', 'save_site_picture', 'remove_site_picture',
+  // Settlement (plan B7): money owed to hosts and wardens is Andrew's.
+  'settlement', 'save_warden_allocation', 'settle_night', 'reopen_settlement',
+  'save_settlement_setting', 'save_host_details',
 ])
 
 export const denied = (c: Caller | Denied): c is Denied =>

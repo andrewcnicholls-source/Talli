@@ -710,6 +710,49 @@ on top of B2, alongside B3. What differs from the brief above, and why:
   recording a lost space lowers only that host's; and every night's
   shares add up to its takings to the cent.
 
+**Status, 14 Nov 2026: built** (`feature/host-settlement`), on top of B5
+and B6. Andrew's answers to what the brief left open, and what differs:
+
+- **Where:** a Settlement section at the foot of the Sites page
+  (`assets/admin/settle.js`), one card per block, following the selector.
+  It is hooked in from `tabs.js` and `night.js`; `sites.js` is untouched.
+- **Rounding:** the wardens' amount and the hosts' pool are each rounded
+  down to the cent; the hosts' pool is shared by largest remainders;
+  Talli has what is left. Proved over forty odd-cent nights.
+- **Refunds:** partial refunds are now recorded — `booking.refunded_cents`,
+  set by `stripe-webhook` from `charge.amount_refunded` through
+  `record_refund()`. A refund comes off parking first, then extras, then
+  the surcharge. A full refund is still status `refunded` and counts for
+  nothing on its night. A free walk-up took nothing.
+- **Reopen:** a settled night can be reopened; it keeps who settled it
+  until it is settled again.
+- **A lost space lowers its own host's figure, and raises the others'**:
+  the hosts' half is the same size and is shared by spaces, so the space
+  a host could not provide goes to the hosts who did. The test proves
+  "lowers no other host's" rather than "changes no other".
+- **"Raising the price halfway changes no host's figure"** is proved as:
+  who paid the dearer price, and where they parked, changes nothing — two
+  hosts with equal spaces are owed equal shares. A price rise does make
+  the pool bigger, and every host's share of it.
+- **Settling** needs the night `closed` or `cancelled`. Closing takes the
+  "spaces provided" snapshot (`night_site_spaces`, a trigger on
+  `event.status`), retaken if the night is closed again, except for a
+  block already settled. The settled figures, the allocation and the
+  percentages in force are frozen in `night_settlement.figures`; if the
+  night's money moves afterwards (a late refund), the card says so.
+- **Spaces provided** are the active types' counts at a site `confirmed`
+  for the night. A site left `pending` or `paused` provided none.
+- **`host_earnings_cents`, `platform_fee_cents`, `platform_share`:**
+  settlement reads none of them (`scripts/check.sh` asserts it). The
+  booking paths that fill the first two at hold time are not restated —
+  that would mean restating `hold_booking` and `sell_at_gate` for columns
+  nothing reads.
+- **Host details:** email, phone and payout notes are edited from each
+  host's line on the settlement card (`save_host_details`).
+- **At release:** migration `20261121100000`, then `gate-ops` and
+  `stripe-webhook`. Nothing to set by hand: the percentages start at
+  30 / 20 / 50 and 10 / 90.
+
 ### B8 — `warden-access`
 
 - Operator-only actions: list staff, invite by email with blocks, switch

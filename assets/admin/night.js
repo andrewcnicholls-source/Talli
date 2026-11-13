@@ -13,6 +13,7 @@ import { measureHead } from './tabs.js';
 import { renderInfo } from './site-info.js';
 import { renderInsight } from './insights.js';
 import { refillSites } from './sites.js';
+import { refillSettle } from './settle.js';
 import { isOperator } from './session.js';
 import { ALL, chosenSite, hereSite, resolveScope, scopeLabel, scopeNight,
   scopeOptions } from './scope.js';
@@ -233,7 +234,7 @@ export function setScope(value) {
   pickScope();
   renderAll();
   if (state.tab === 'insights') renderInsight();
-  if (state.tab === 'sites') refillSites();
+  if (state.tab === 'sites') { refillSites(); refillSettle(); }
 }
 
 // The night as the selector narrows it: rows, tiers, sites, lost spaces,
