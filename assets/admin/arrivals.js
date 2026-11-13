@@ -7,6 +7,7 @@ import { asTime, button, call, el, make, money, state, toast } from './core.js';
 import { arrivedAt, byTier, capacityAt, loadList, multiSite, siteName,
   tierClass } from './night.js';
 import { openEdit } from './booking-edit.js';
+import { isOperator } from './session.js';
 
 /* --------------------------------------------------------- the list */
 
@@ -26,6 +27,16 @@ export function renderList() {
   list.innerHTML = '';
 
   var rows = state.rows.filter(matches);
+
+  // Arrivals works the live night and only that one (plan B2). With none
+  // live there is nothing to work, nothing to sell, and nothing to pick.
+  el('ad-sell-open').hidden = !state.liveId;
+  if (!state.liveId) {
+    list.appendChild(make('p', 'ad-empty', isOperator()
+      ? 'No event is live at the gate. Open the night on Tonight and mark it live.'
+      : 'No event is live at the gate yet. Andrew starts the night; this screen follows on its own.'));
+    return;
+  }
 
   if (!rows.length) {
     list.appendChild(make('p', 'ad-empty',

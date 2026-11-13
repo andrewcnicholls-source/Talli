@@ -7,7 +7,7 @@
 import { GATE_ORDER, asDate, asTime, button, call, el, hide, make, money,
   shortName, show, state, surchargeOn, text, toast } from './core.js';
 import { isOperator } from './session.js';
-import { loadList, multiSite, renderEventOptions, siteName } from './night.js';
+import { loadList, multiSite, refreshEvents, renderEventOptions, siteName } from './night.js';
 import { showTab } from './tabs.js';
 import { seriesLine } from './series.js';
 
@@ -587,6 +587,7 @@ export function renderStatus() {
     text(el('ad-status-note'), 'Make one with + at the top of the screen.');
     text(el('ad-status-series'), '');
     hide(el('ad-series-open'));
+    el('ad-status-live').innerHTML = '';
     return;
   }
 
@@ -609,6 +610,62 @@ export function renderStatus() {
     b.disabled = on || !!state.busy['status'];
     actions.appendChild(b);
   });
+
+  renderLiveControl(ev);
+}
+
+// Whether this is the night Arrivals works (plan B2). One at a time: the
+// database clears the last one when another is made live, and every
+// warden's phone follows on its next refresh. Separate from the status,
+// because selling online and working the gate are different questions —
+// a night closed online is often still busy at the gate.
+function renderLiveControl(ev) {
+  var row = el('ad-status-live');
+  row.innerHTML = '';
+  var isLive = ev.id === state.liveId;
+  var other = !isLive && state.liveId &&
+    state.events.filter(function (e) { return e.id === state.liveId; })[0];
+  row.classList.toggle('is-live', isLive);
+
+  var words = isLive
+    ? 'Live at the gate. Arrivals, and every warden, are working this night.'
+    : other
+      ? 'Not live. The gate is working ' + other.name + ' (' + asDate(other.starts_at) + ').'
+      : 'Not live. No night is live at the gate.';
+  row.appendChild(make('span', 'ad-status-live-text', words));
+
+  var busy = !!state.busy['live'];
+  if (isLive) {
+    var stop = button('ad-status-set', 'Stop', function () { setLive(ev, false); });
+    stop.disabled = busy;
+    row.appendChild(stop);
+    return;
+  }
+  var canGo = ev.status !== 'draft' && ev.status !== 'cancelled';
+  var go = button('ad-status-set', other ? 'Make this live instead' : 'Make live',
+    function () { setLive(ev, true); });
+  go.disabled = busy || !canGo;
+  if (!canGo) go.title = 'A draft or cancelled night cannot be live.';
+  row.appendChild(go);
+}
+
+function setLive(ev, live) {
+  if (!live && !window.confirm('Stop ' + ev.name + ' at the gate? ' +
+      'Arrivals will show no event until another is made live.')) {
+    return;
+  }
+  state.busy['live'] = true;
+  renderStatus();
+  call('set_live_event', live ? { event_id: ev.id } : { live: false })
+    .then(function () {
+      toast(live ? ev.name + ' is live at the gate' : 'No night is live at the gate', 'good');
+      return refreshEvents();
+    })
+    .catch(function (err) { toast(err.message, 'bad'); })
+    .finally(function () {
+      delete state.busy['live'];
+      renderStatus();
+    });
 }
 
 function setStatus(ev, status) {
@@ -627,6 +684,10 @@ function setStatus(ev, status) {
       ev.status = data.status;
       toast(ev.name + ' — ' + statusMeta(ev.status)[1].toLowerCase(), 'good');
       renderEventOptions();
+      // Draft or cancelled takes a night off the gate too, in the database.
+      if (ev.id === state.liveId && (ev.status === 'draft' || ev.status === 'cancelled')) {
+        refreshEvents().catch(function () {});
+      }
       return loadList(true);
     })
     .catch(function (err) { toast(err.message, 'bad'); })

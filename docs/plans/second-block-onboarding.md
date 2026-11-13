@@ -460,6 +460,36 @@ What differs from the brief above, and why:
 - Done when: a warden's phone shows the live event with no selector,
   and switching the live event moves every warden on next refresh.
 
+**Status, 14 Nov 2026: built** (`feature/live-event`), on top of B1.
+What differs from the brief above, and why:
+
+- **The event manager is the Tonight tab's status card.** Under the
+  status buttons: "Make live", "Make this live instead" when another
+  night is live, or "Stop". The header picker is now Tonight's alone;
+  Arrivals and Site info show the live night's name and nothing to pick,
+  for Andrew as well as wardens.
+- **`set_live_event(id | null)`** (`20261116100000_talli_live_event`)
+  clears the last night and sets the new one under an advisory lock, so
+  two phones tapping at once take turns rather than tripping the index.
+  It refuses a draft or cancelled night (`NOT_LIVE_STATUS`). Closed is
+  allowed: online sales close while the gate is still busy.
+  `set_event_status` is restated so cancelling, or going back to draft,
+  takes the night off the gate as well.
+- **What the server does.** `list`, `tiers` and `sell` resolve the live
+  night in `gate-ops/index.ts`. A warden naming another is refused as
+  `NOT_LIVE_EVENT`; with none live, `NO_LIVE_EVENT`. A warden's booking
+  actions also need the booking to be on the live night, so a car from
+  last week cannot be ticked or edited. `session` and `events` give a
+  warden the live night only. The operator can still name any night
+  (Tonight, Insights) and gets the live one when naming none.
+- **How a phone follows.** Arrivals asks for its list without naming a
+  night and is told which it is, so the 30-second refresh moves a phone
+  to a new live night with nothing to tap. A walk-up form submitted
+  across a switch is refused, not sold into the wrong night.
+- **At release:** nothing is live after the migration. Before the first
+  night, on Tonight: open it and tap "Make live", or Arrivals tells
+  every warden there is no event.
+
 ### B3 — `sites-page`
 
 Replaces the Sites tab and removes site capacity and site price controls

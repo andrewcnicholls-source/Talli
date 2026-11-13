@@ -4,12 +4,21 @@
 
 import type Stripe from 'https://esm.sh/stripe@18?target=denonext'
 import { type Ctx, type Handler } from '../auth.ts'
-import { CARD_LINK_MINUTES, db, isGateAddress, json, named, optText, PAY_METHODS, priceCents, type Row, SITE_URL, stripeOrNull, TAP_REFUSED } from '../shared.ts'
+import { CARD_LINK_MINUTES, db, EVENT_FIELDS, isGateAddress, json, named, optText, PAY_METHODS, priceCents, type Row, SITE_URL, stripeOrNull, TAP_REFUSED } from '../shared.ts'
 import { nightState } from '../night.ts'
 
-// What the screen lists for each night, including the series it is in.
-const EVENT_FIELDS = 'id, name, venue, starts_at, status, series_id, night_label, ' +
-  'picture_path, series:series_id(name, picture_path)'
+// The nights a caller is shown. The operator sees every one; a warden
+// sees the live night and nothing else (plan B2), because it is the only
+// one they could work.
+async function eventsFor({ caller, live }: Ctx) {
+  if (!caller.all) return live ? [live] : []
+  const { data, error } = await db
+    .from('event')
+    .select(EVENT_FIELDS)
+    .order('starts_at', { ascending: true })
+  if (error) throw error
+  return data ?? []
+}
 
 export const arrivals: Record<string, Handler> = {
   // What the screen needs to open: who it just let in, and the list to
@@ -21,12 +30,8 @@ export const arrivals: Record<string, Handler> = {
   // exist is a filter nobody can prove is right. The identity is in the
   // request now, which is the part that had to come first — `who.hosts`
   // is what the filter will read when it is wanted.
-  async session({ caller }: Ctx) {
-    const { data, error } = await db
-      .from('event')
-      .select(EVENT_FIELDS)
-      .order('starts_at', { ascending: true })
-    if (error) throw error
+  async session(ctx: Ctx) {
+    const { caller, live } = ctx
     return json({
       who: {
         email: caller.email,
@@ -37,24 +42,31 @@ export const arrivals: Record<string, Handler> = {
         operator: caller.all,
         blocks: caller.blocks,
       },
-      events: data,
+      events: await eventsFor(ctx),
+      // The night Arrivals works (plan B2), or null.
+      live_event_id: live ? String(live.id) : null,
     })
   },
 
   // Every event, not just the ones on sale — the gate needs drafts,
-  // announced fixtures and closed ones too.
-  async events(_: Ctx) {
-    const { data, error } = await db
-      .from('event')
-      .select(EVENT_FIELDS)
-      .order('starts_at', { ascending: true })
-    if (error) throw error
-    return json({ events: data })
+  // announced fixtures and closed ones too. A warden gets the live one.
+  async events(ctx: Ctx) {
+    return json({
+      events: await eventsFor(ctx),
+      live_event_id: ctx.live ? String(ctx.live.id) : null,
+    })
   },
 
-  async list({ eventId, allowed }: Ctx) {
+  // event_id in the answer is the night this list is for. For Arrivals
+  // that is the live one, resolved in index.ts, so a phone that asked with
+  // none learns here when Andrew has moved the gate on to another.
+  async list({ eventId, allowed, live }: Ctx) {
     if (!eventId) return json({ error: 'event_id is required' }, 400)
-    return json(await nightState(eventId, allowed))
+    return json({
+      event_id: eventId,
+      live_event_id: live ? String(live.id) : null,
+      ...(await nightState(eventId, allowed)),
+    })
   },
 
   // What is still sellable right now, for the walk-up form.

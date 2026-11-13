@@ -43,8 +43,9 @@ test.afterEach(async () => {
 });
 
 async function openSeriesFor(page, night) {
-  await page.selectOption('#ad-event', night.id);
+  // The event picker is Tonight's alone (plan B2).
   await page.click('#ad-tab-night');
+  await page.selectOption('#ad-event', night.id);
   await page.click('#ad-series-open');
   await expect(page.locator('#ad-series')).toBeVisible();
   // Loaded when the picker has more than its placeholder.

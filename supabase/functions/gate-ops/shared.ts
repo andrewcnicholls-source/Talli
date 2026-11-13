@@ -101,6 +101,19 @@ export const TAP_REFUSED = {
   code: 'OPERATOR_ONLY',
 }
 
+// What the screen lists for each night, including the series it is in.
+export const EVENT_FIELDS = 'id, name, venue, starts_at, status, is_live, series_id, ' +
+  'night_label, picture_path, series:series_id(name, picture_path)'
+
+// The night the gate is working (plan B2), or null when none is. The
+// partial unique index event_one_live means there are never two.
+export async function liveEvent(): Promise<Row | null> {
+  const { data, error } = await db.from('event').select(EVENT_FIELDS)
+    .eq('is_live', true).maybeSingle()
+  if (error) throw error
+  return (data as Row | null) ?? null
+}
+
 // Absent means "leave it"; a string, even an empty one, means "set it".
 export const optText = (v: unknown): string | null =>
   v === undefined || v === null ? null : String(v)

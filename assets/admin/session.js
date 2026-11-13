@@ -19,6 +19,11 @@ export function openSession() {
   return call('session').then(function (data) {
     state.who = data.who || null;
     state.events = data.events || [];
+    // The night the gate works (plan B2). For a warden, events holds this
+    // one and nothing else. eventId is cleared so the list is loaded fresh
+    // for whoever has just signed in.
+    state.liveId = data.live_event_id || null;
+    state.eventId = undefined;
     hide(el('ad-lock'));
     show(el('ad-app'));
     renderWho();

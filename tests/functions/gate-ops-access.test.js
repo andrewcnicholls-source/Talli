@@ -77,7 +77,7 @@ test('a warden gets in, as a warden, with their one block', async () => {
 test('a warden is refused every operator-only action', async () => {
   for (const action of ['set_price', 'set_capacity', 'set_reserve', 'set_event_status',
     'create_event', 'sites_setup', 'save_site', 'create_site', 'apply_price_template',
-    'save_block_pricing']) {
+    'save_block_pricing', 'set_live_event']) {
     const r = await gate('wardenGrib', { action, event_id: FIX.night });
     assert.equal(r.status, 403, `${action} should be refused`);
     assert.equal(r.body.code, 'OPERATOR_ONLY', `${action} should be refused by name`);
@@ -150,4 +150,122 @@ test('bank details reach a signed-in warden and nobody else', async () => {
   assert.equal(anon.status, 401);
   const outsider = await callFn('gate-ops', { action: 'bank_details' }, await token('outsider'));
   assert.equal(outsider.status, 403);
+});
+
+/* ---------------------------------------------------------------------
+   One event live at a time (plan B2). Arrivals works the live night: a
+   warden cannot name another, and the operator's Arrivals names none.
+   These move the live night, so each puts it back on the fixture night;
+   the functions suite runs one file at a time (--test-concurrency=1).
+   --------------------------------------------------------------------- */
+
+const backToFixture = () => gate('operator', { action: 'set_live_event', event_id: FIX.night });
+
+test('Arrivals with no event named is the live night, for a warden and the operator', async () => {
+  for (const who of ['wardenGrib', 'operator']) {
+    const r = await gate(who, { action: 'list' });
+    assert.equal(r.status, 200, `${who}: ${JSON.stringify(r.body)}`);
+    assert.equal(r.body.event_id, FIX.night);
+    assert.equal(r.body.live_event_id, FIX.night);
+  }
+});
+
+test('a warden is shown the live night and no other', async () => {
+  const r = await gate('wardenGrib', { action: 'session' });
+  assert.equal(r.status, 200);
+  assert.equal(r.body.live_event_id, FIX.night);
+  assert.deepEqual(r.body.events.map((e) => e.id), [FIX.night]);
+  const op = await gate('operator', { action: 'session' });
+  assert.ok(op.body.events.length > 1, 'the operator still sees every night');
+});
+
+test('a warden cannot name another night on any Arrivals action', async () => {
+  const rego = plate('GN'); made.push(rego);
+  for (const body of [
+    { action: 'list', event_id: FIX.soldOutNight },
+    { action: 'tiers', event_id: FIX.soldOutNight },
+    { action: 'sell', event_id: FIX.soldOutNight, property_id: FIX.gribAnchor,
+      tier_code: 'standard', payment_method: 'cash', vehicle_rego: rego },
+  ]) {
+    const r = await gate('wardenGrib', body);
+    assert.equal(r.status, 409, `${body.action} should be refused`);
+    assert.equal(r.body.code, 'NOT_LIVE_EVENT', `${body.action} should be refused by name`);
+  }
+  const sold = await rest(`booking?vehicle_rego=eq.${rego}&select=id`);
+  assert.equal(sold.length, 0, 'and nothing was sold');
+});
+
+test('the operator may still open any night by name', async () => {
+  const r = await gate('operator', { action: 'list', event_id: FIX.soldOutNight });
+  assert.equal(r.status, 200);
+  assert.equal(r.body.event_id, FIX.soldOutNight);
+  assert.equal(r.body.live_event_id, FIX.night, 'without moving the live night');
+});
+
+test('switching the live night moves every warden on their next refresh', async () => {
+  const car = await bookAt(FIX.paice);
+  try {
+    const before = await gate('wardenPaice', { action: 'list' });
+    assert.equal(before.body.event_id, FIX.night);
+    assert.ok(before.body.rows.some((x) => x.booking_id === car));
+
+    const moved = await gate('operator', { action: 'set_live_event', event_id: FIX.soldOutNight });
+    assert.equal(moved.status, 200, JSON.stringify(moved.body));
+    assert.equal(moved.body.live_event_id, FIX.soldOutNight);
+
+    const after = await gate('wardenPaice', { action: 'list' });
+    assert.equal(after.status, 200);
+    assert.equal(after.body.event_id, FIX.soldOutNight, 'the same request now lists the new night');
+    assert.ok(!after.body.rows.some((x) => x.booking_id === car), "and not the old night's cars");
+
+    const session = await gate('wardenPaice', { action: 'session' });
+    assert.deepEqual(session.body.events.map((e) => e.id), [FIX.soldOutNight]);
+
+    // A car on the old night, at the warden's own site, is no longer theirs to touch.
+    const tick = await gate('wardenPaice', { action: 'check_in', booking_id: car });
+    assert.equal(tick.status, 403);
+    assert.equal(tick.body.code, 'NOT_YOUR_SITE');
+    const [row] = await rest(`booking?id=eq.${car}&select=checked_in_at`);
+    assert.equal(row.checked_in_at, null);
+  } finally {
+    await backToFixture();
+  }
+});
+
+test('with no night live, Arrivals says so by name and a warden can do nothing', async () => {
+  const car = await bookAt(FIX.gribAnchor);
+  const rego = plate('GZ'); made.push(rego);
+  try {
+    const off = await gate('operator', { action: 'set_live_event', live: false });
+    assert.equal(off.status, 200, JSON.stringify(off.body));
+    assert.equal(off.body.live_event_id, null);
+
+    for (const who of ['wardenGrib', 'operator']) {
+      const r = await gate(who, { action: 'list' });
+      assert.equal(r.status, 409, who);
+      assert.equal(r.body.code, 'NO_LIVE_EVENT', who);
+    }
+    const sell = await gate('wardenGrib', {
+      action: 'sell', property_id: FIX.gribAnchor, tier_code: 'standard',
+      payment_method: 'cash', vehicle_rego: rego,
+    });
+    assert.equal(sell.body.code, 'NO_LIVE_EVENT');
+    const tick = await gate('wardenGrib', { action: 'check_in', booking_id: car });
+    assert.equal(tick.status, 403);
+    const session = await gate('wardenGrib', { action: 'session' });
+    assert.equal(session.status, 200, 'still signed in');
+    assert.deepEqual(session.body.events, []);
+  } finally {
+    await backToFixture();
+  }
+});
+
+test('a draft night cannot be made live', async () => {
+  const draft = await rest('event?status=eq.draft&select=id&limit=1');
+  assert.ok(draft.length, 'the seeded calendar has a draft night to try');
+  const r = await gate('operator', { action: 'set_live_event', event_id: draft[0].id });
+  assert.equal(r.status, 409);
+  assert.equal(r.body.code, 'NOT_LIVE_STATUS');
+  const live = await rest('event?is_live=is.true&select=id');
+  assert.deepEqual(live.map((e) => e.id), [FIX.night], 'and the live night did not move');
 });

@@ -59,9 +59,12 @@
       <span class="ad-brand">talli<span>.</span> gate</span>
       <button type="button" class="ad-refresh" id="ad-refresh" aria-label="Refresh">↻</button>
     </div>
-    <!-- Tonight and what is coming up. Finished nights live under Insights,
-         which has its own picker, so this row steps aside on that tab. -->
-    <div class="ad-event-row" id="ad-event-row">
+    <!-- Arrivals and Site info work the live night, and only that one
+         (plan B2): no picker, just its name. Andrew moves it from Tonight. -->
+    <p class="ad-live" id="ad-live" aria-live="polite"></p>
+    <!-- Tonight and what is coming up, on the Tonight tab only. Finished
+         nights live under Insights, which has its own picker. -->
+    <div class="ad-event-row" id="ad-event-row" hidden>
       <select id="ad-event" class="ad-select" aria-label="Event"></select>
       <button type="button" class="ad-event-new" id="ad-new-open"
               aria-label="New event" title="New event">+</button>
@@ -172,6 +175,9 @@
       </div>
       <p class="ad-status-note" id="ad-status-note"></p>
       <div class="ad-status-actions" id="ad-status-actions"></div>
+      <!-- Whether this is the night Arrivals works (plan B2). Filled in by
+           renderStatus(). -->
+      <div class="ad-status-live" id="ad-status-live"></div>
     </div>
 
     <div class="ad-board">

@@ -4,7 +4,7 @@
  */
 
 import { TZ, button, call, el, hide, make, money, show, state, text, toast } from './core.js';
-import { loadList, renderEventOptions } from './night.js';
+import { renderEventOptions, syncEvent } from './night.js';
 
 /* ----------------------------------------------------------- new event */
 
@@ -301,10 +301,11 @@ export function submitNew(e) {
       // screen on whatever was selected before it existed.
       return call('events').then(function (list) {
         state.events = list.events || [];
-        state.eventId = data.event_id;
+        state.liveId = list.live_event_id || null;
+        // Tonight's picker. Making a night does not make it live.
+        state.pickId = data.event_id;
         renderEventOptions();
-        el('ad-event').value = state.eventId;
-        return loadList();
+        return syncEvent();
       });
     })
     .catch(function (err) { newError(err.message); })
