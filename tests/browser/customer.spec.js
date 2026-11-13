@@ -70,9 +70,17 @@ test('a customer books a block from the series page, and is sent to that block',
   // Night, block, pay: the details are typed, not tapped.
   expect(taps.length).toBeLessThanOrEqual(4);
 
-  // What the page asked for: a night, an area, a type. Never a price.
+  // What the page asked for: a night, an area, a type. Never an amount.
+  // The one price-shaped field is the figure it showed, sent as an
+  // expectation that checkout compares against the database and refuses on
+  // (plan B1, PRICE_CHANGED) — it is never what is charged. Anything else
+  // that looks like a price is still not allowed to leave the page.
   expect(sent).toMatchObject({ event_id: FIX.night, tier_code: 'standard', vehicle_rego: rego });
-  for (const key of Object.keys(sent)) expect(key).not.toMatch(/amount|price|cents|total/i);
+  expect(sent.expected_price_cents).toBe(4000);
+  for (const key of Object.keys(sent)) {
+    if (key === 'expected_price_cents') continue;
+    expect(key).not.toMatch(/amount|price|cents|total/i);
+  }
 
   await expect(page.locator('#cf-come-to')).toContainText('Gribblehurst');
   await expect(page.locator('#cf-come-to')).not.toContainText('Paice');
