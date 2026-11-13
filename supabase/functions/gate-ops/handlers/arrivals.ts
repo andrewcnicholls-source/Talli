@@ -7,6 +7,10 @@ import { type Ctx, type Handler } from '../auth.ts'
 import { CARD_LINK_MINUTES, db, isGateAddress, json, named, optText, PAY_METHODS, priceCents, type Row, SITE_URL, stripeOrNull, TAP_REFUSED } from '../shared.ts'
 import { nightState } from '../night.ts'
 
+// What the screen lists for each night, including the series it is in.
+const EVENT_FIELDS = 'id, name, venue, starts_at, status, series_id, night_label, ' +
+  'picture_path, series:series_id(name, picture_path)'
+
 export const arrivals: Record<string, Handler> = {
   // What the screen needs to open: who it just let in, and the list to
   // pick from. One round trip, because the alternative is a screen that
@@ -20,7 +24,7 @@ export const arrivals: Record<string, Handler> = {
   async session({ caller }: Ctx) {
     const { data, error } = await db
       .from('event')
-      .select('id, name, venue, starts_at, status')
+      .select(EVENT_FIELDS)
       .order('starts_at', { ascending: true })
     if (error) throw error
     return json({
@@ -42,7 +46,7 @@ export const arrivals: Record<string, Handler> = {
   async events(_: Ctx) {
     const { data, error } = await db
       .from('event')
-      .select('id, name, venue, starts_at, status')
+      .select(EVENT_FIELDS)
       .order('starts_at', { ascending: true })
     if (error) throw error
     return json({ events: data })

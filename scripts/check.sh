@@ -354,6 +354,27 @@ else
   fail "gate-ops: OPERATOR_ONLY names actions no handler has:${missing:- (list not found)}"
 fi
 
+# Event series (plan A1) are Andrew's: a warden may not rename, regroup
+# or re-picture what customers see. And the picture bucket is written by
+# gate-ops with the service role only — no storage policy may let a
+# browser write to it.
+series_ops=$(awk '/^export const OPERATOR_ONLY/,/\]\)/' "$GO/auth.ts")
+missing=""
+for a in series_list save_series set_event_series upload_picture; do
+  printf '%s' "$series_ops" | grep -q "'$a'" || missing="$missing $a"
+done
+if [ -z "$missing" ]; then
+  pass "gate-ops: making and changing event series is Andrew's alone"
+else
+  fail "gate-ops: a warden may call series actions:$missing"
+fi
+if grep -l "event-pictures" supabase/migrations/*.sql \
+     | xargs grep -qiE "create policy[^;]*on storage\.objects"; then
+  fail "a migration opens the event-pictures bucket to writes from a browser"
+else
+  pass "event pictures are written by gate-ops only, never from a browser"
+fi
+
 # RLS on, no policy, is what keeps host_user unreadable if a grant is ever
 # added by accident. It is the same treatment host and booking get.
 SSO="supabase/migrations/20260908090000_talli_host_sso_access.sql"
@@ -1184,7 +1205,8 @@ head "Automated suites against a local stack"
 # The database is rebuilt from supabase/migrations/ and the test-only
 # fixtures on every run, so a migration that does not replay fails here.
 SB="tests/node_modules/.bin/supabase"
-SUITES_EXCLUDE="studio,imgproxy,logflare,vector,supavisor,mailpit,realtime,postgres-meta,storage-api"
+# storage-api runs: gate-ops stores event pictures in it (plan A1).
+SUITES_EXCLUDE="studio,imgproxy,logflare,vector,supavisor,mailpit,realtime,postgres-meta"
 
 missing() {
   if [ "${CI:-}" = "true" ]; then fail "$1"; else skip "$1"; fi

@@ -152,6 +152,7 @@ export const OPERATOR_ONLY = new Set([
   'set_capacity', 'set_price', 'apply_price_template', 'set_reserve',
   'set_offer_status', 'site_options', 'add_offer',
   'sites_setup', 'save_site', 'create_site',
+  'series_list', 'save_series', 'set_event_series', 'upload_picture',
 ])
 
 export const denied = (c: Caller | Denied): c is Denied =>

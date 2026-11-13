@@ -2484,3 +2484,49 @@ textarea.ad-input { resize: vertical; min-height: 56px; font-family: inherit; }
 .ad-site-field .ad-input, .ad-site-field .ad-select { width: 100%; }
 .ad-site-apply { display: flex; gap: 8px; align-items: flex-start; margin-top: 16px; font-size: 0.92rem; }
 .ad-site-apply input { margin-top: 3px; }
+
+/* ---------------------------------------------- series & picture (plan A1) */
+.ad-status-series {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  font-size: 0.84rem;
+  color: var(--grey);
+  margin-top: 4px;
+}
+.ad-sheet-sub {
+  font-size: 1rem;
+  margin: 22px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+}
+.ad-pic {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.ad-pic img {
+  width: 96px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.06);
+}
+.ad-pic input[type="file"] {
+  max-width: 100%;
+  font-size: 0.84rem;
+}
+.ad-series-nights {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  font-size: 0.86rem;
+}
+.ad-series-nights li {
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+.ad-series-nights li.is-this { font-weight: 600; }
+

@@ -93,7 +93,8 @@ enabled = false
 enabled = false
 
 [storage]
-enabled = false
+# On for the picture bucket (plan A1): gate-ops uploads event pictures.
+enabled = true
 
 [analytics]
 enabled = false
