@@ -135,6 +135,16 @@ Andrew uses "zone" two ways. Neither is the code's `zone`.
 | Q3 | A transfer referenced only by location cannot be matched to a car. May the plate go in the bank's "particulars" field beside it? | Yes: reference = location, particulars = plate. | § 5a |
 | Q4 | Who is the host of 72 Gribblehurst Rd? | A placeholder name, corrected before the night is settled. | § 5a |
 
+Answered 13 Nov 2026. Personal and bank details stay out of this file:
+
+- **Q1** — a warden is named. Production only; their Google address is
+  still to come, and which block they take is still to confirm.
+- **Q2** — Andrew has given the account name and number. They are entered
+  into production's `bank_transfer_setting` at release, never here.
+- **Q3** — yes: reference = location, particulars = plate. The Site info
+  tab already says so (R2).
+- **Q4** — a placeholder host for 72 Gribblehurst Rd, corrected later.
+
 ## 5. Order of work
 
 Most of this plan edits `assets/admin.js` (2,963 lines, one closure) or

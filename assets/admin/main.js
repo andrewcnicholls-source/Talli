@@ -34,6 +34,7 @@ import { closeCardQr, openCardQr } from './card-qr.js';
 import { openCheck } from './check.js';
 import { measureHead, showTab } from './tabs.js';
 import { renderSiteForm } from './sites.js';
+import { initSeries } from './series.js';
 
 /* ------------------------------------------------------------------ init */
 
@@ -86,6 +87,7 @@ function init() {
 
   el('ad-new-open').addEventListener('click', openNew);
   el('ad-new-close').addEventListener('click', function () { hide(el('ad-new')); });
+  initSeries();
   el('ad-new-form').addEventListener('submit', submitNew);
   el('ad-new-save-template').addEventListener('click', saveTemplate);
   el('ad-new-tier-add').addEventListener('click', function () {

@@ -9,6 +9,7 @@ import { GATE_ORDER, asDate, asTime, button, call, el, hide, make, money,
 import { isOperator } from './session.js';
 import { loadList, multiSite, renderEventOptions, siteName } from './night.js';
 import { showTab } from './tabs.js';
+import { seriesLine } from './series.js';
 
 /* ------------------------------------------------------ tonight's board */
 
@@ -557,7 +558,7 @@ export function statusMeta(code) {
     [code, String(code || '—').replace(/_/g, ' '), ''];
 }
 
-function currentEvent() {
+export function currentEvent() {
   return state.events.filter(function (e) { return e.id === state.eventId; })[0] || null;
 }
 
@@ -571,6 +572,8 @@ export function renderStatus() {
     text(el('ad-status-pill'), '—');
     text(el('ad-status-when'), '');
     text(el('ad-status-note'), 'Make one with + at the top of the screen.');
+    text(el('ad-status-series'), '');
+    hide(el('ad-series-open'));
     return;
   }
 
@@ -582,6 +585,8 @@ export function renderStatus() {
   text(el('ad-status-when'),
     [asDate(ev.starts_at), asTime(ev.starts_at), ev.venue].filter(Boolean).join(' · '));
   text(el('ad-status-note'), meta[2]);
+  text(el('ad-status-series'), seriesLine(ev));
+  show(el('ad-series-open'));
 
   STATUSES.forEach(function (s) {
     var on = s[0] === ev.status;

@@ -165,6 +165,11 @@
         <span class="ad-status-pill" id="ad-status-pill">&mdash;</span>
       </div>
       <div class="ad-status-when" id="ad-status-when"></div>
+      <!-- The series this night belongs to (plan A1): what its page will be. -->
+      <div class="ad-status-series">
+        <span id="ad-status-series"></span>
+        <button type="button" class="ad-link" id="ad-series-open">Series &amp; picture</button>
+      </div>
       <p class="ad-status-note" id="ad-status-note"></p>
       <div class="ad-status-actions" id="ad-status-actions"></div>
     </div>
@@ -245,6 +250,89 @@
     <span class="ad-foot-who" id="ad-who"></span>
     <button type="button" class="ad-link" id="ad-signout">Sign out</button>
   </p>
+</div>
+
+<!-- ------------------------------------------------------------ series -->
+<!-- Which series a night belongs to, what the night is called, and the
+     series itself: what a customer will look for (plan A1). Andrew only;
+     gate-ops refuses every one of these calls to a warden. -->
+<div class="ad-sheet" id="ad-series" hidden>
+  <form class="ad-sheet-card" id="ad-series-form">
+    <div class="ad-sheet-head">
+      <h2>Series &amp; picture</h2>
+      <button type="button" class="ad-sheet-close" id="ad-series-close" aria-label="Close">&times;</button>
+    </div>
+
+    <p class="ad-edit-sub" id="ad-series-event"></p>
+
+    <label class="ad-label" for="ad-series-pick">Series <span>what customers look for: the act, or the team</span></label>
+    <select id="ad-series-pick" class="ad-select"></select>
+
+    <label class="ad-label" for="ad-series-night">This night <span>&ldquo;Night 2&rdquo;, &ldquo;v Hurricanes&rdquo; &mdash; optional</span></label>
+    <input type="text" id="ad-series-night" class="ad-input" maxlength="80">
+
+    <label class="ad-label">Picture for this night <span>optional &mdash; otherwise the series&rsquo;</span></label>
+    <div class="ad-pic" id="ad-series-night-pic-box">
+      <img id="ad-series-night-pic" alt="" hidden>
+      <input type="file" id="ad-series-night-file" accept="image/jpeg,image/png,image/webp">
+      <button type="button" class="ad-link" id="ad-series-night-pic-remove" hidden>Remove</button>
+    </div>
+
+    <h3 class="ad-sheet-sub">The series</h3>
+
+    <label class="ad-label" for="ad-series-name">Name</label>
+    <input type="text" id="ad-series-name" class="ad-input" maxlength="120" required>
+
+    <div class="ad-sheet-row">
+      <div>
+        <label class="ad-label" for="ad-series-kind">Kind</label>
+        <select id="ad-series-kind" class="ad-select">
+          <option value="concert">Concert</option>
+          <option value="sport">Sport</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+      <div>
+        <label class="ad-label" for="ad-series-venue">Venue</label>
+        <input type="text" id="ad-series-venue" class="ad-input" placeholder="Eden Park">
+      </div>
+    </div>
+
+    <label class="ad-label" for="ad-series-summary">Summary <span>a line or two for its page</span></label>
+    <textarea id="ad-series-summary" class="ad-input" rows="2" maxlength="600"></textarea>
+
+    <div class="ad-sheet-row">
+      <div>
+        <label class="ad-label" for="ad-series-slug">Web address</label>
+        <input type="text" id="ad-series-slug" class="ad-input" autocapitalize="none"
+               spellcheck="false" placeholder="made from the name">
+      </div>
+      <div>
+        <label class="ad-label" for="ad-series-order">Order</label>
+        <input type="number" id="ad-series-order" class="ad-input" step="1" value="0">
+      </div>
+    </div>
+    <p class="ad-hint">Its page will be talli.co.nz/events/<span id="ad-series-slug-show">&hellip;</span>.
+      Renaming the series keeps the address.</p>
+
+    <label class="ad-check" for="ad-series-active">
+      <input type="checkbox" id="ad-series-active" checked>
+      <span>Listed on the website</span>
+    </label>
+
+    <label class="ad-label">Series picture</label>
+    <div class="ad-pic">
+      <img id="ad-series-pic" alt="" hidden>
+      <input type="file" id="ad-series-file" accept="image/jpeg,image/png,image/webp">
+      <button type="button" class="ad-link" id="ad-series-pic-remove" hidden>Remove</button>
+    </div>
+
+    <label class="ad-label">Nights in this series</label>
+    <ul class="ad-series-nights" id="ad-series-nights"></ul>
+
+    <p class="ad-sheet-error" id="ad-series-error" role="alert" hidden></p>
+    <button type="submit" class="btn btn-primary" id="ad-series-save">Save</button>
+  </form>
 </div>
 
 <!-- --------------------------------------------------------- new event -->

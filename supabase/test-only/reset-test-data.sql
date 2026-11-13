@@ -60,6 +60,8 @@ delete from processed_webhook_event;
 --
 -- status:      on_sale   — sells online now
 --              announced — listed, no prices, register-interest capture
+--              closed    — played; kept for Insights
+--              draft     — known to Eden Park, not listed by Talli yet
 -- demand_tier: drives the price ladder in step 7.
 -- runs_for:    how long the crowd is inside; sets expected_end_at.
 create temporary table known_event (
@@ -74,80 +76,143 @@ create temporary table known_event (
 -- Local wall-clock times, converted by Postgres. Auckland goes to NZDT on
 -- 27 September 2026 and back to NZST on 4 April 2027, so writing the
 -- offsets by hand would get half of these rows wrong.
+--
+-- REFRESHED 13 NOVEMBER 2026 from edenpark.co.nz/events. Every night that
+-- production also has takes production's status and start time, so test
+-- shows the calendar exactly as the live site is selling it. A night
+-- production does not have yet (the Blues) is a draft: on test, as on
+-- production, nobody has listed it. Concert times are gates, as on
+-- production; sport is kick-off. Left out under the crowd rule above:
+-- Art in the Park and the domestic cricket (Super Smash, Plunket Shield,
+-- Ford Trophy, Hallyburton Johnstone Shield).
 insert into known_event (id, name, starts_at, demand_tier, status, runs_for) values
-  -- Sat 12 Sep 2026 — NPC, 2.05pm (FPC curtain-raiser 11.35am).
+  -- ---- Played. Closed on production; kept so Insights has a season.
+  -- Fri 28 Aug 2026 — NPC, 7.05pm.
+  ('ede22026-0000-4000-8000-00000000000e',
+   'TEST — Auckland v Bay of Plenty',
+   timestamp '2026-08-28 19:05' at time zone 'Pacific/Auckland',
+   'standard', 'closed', interval '2 hours 30 minutes'),
+
+  -- Sat 12 Sep 2026 — NPC, 2.05pm.
   ('ede22026-0000-4000-8000-000000000001',
    'TEST — Auckland v Counties Manukau (NPC)',
    timestamp '2026-09-12 14:05' at time zone 'Pacific/Auckland',
-   'standard', 'on_sale', interval '2 hours 30 minutes'),
+   'standard', 'closed', interval '2 hours 30 minutes'),
 
-  -- Fri 25 Sep 2026 — NPC. Kick-off TBC; 7.05pm is the Friday norm.
+  -- Sun 20 Sep 2026 — NRL semi-final, 6.05pm.
+  ('ede22026-0000-4000-8000-00000000000f',
+   'TEST — Warriors vs Knights Semi-Final',
+   timestamp '2026-09-20 18:05' at time zone 'Pacific/Auckland',
+   'premium', 'closed', interval '2 hours 30 minutes'),
+
+  -- Fri 25 Sep 2026 — NPC, 7.05pm.
   ('ede22026-0000-4000-8000-000000000002',
    'TEST — Auckland v Manawatu (NPC)',
    timestamp '2026-09-25 19:05' at time zone 'Pacific/Auckland',
-   'standard', 'on_sale', interval '2 hours 30 minutes'),
+   'standard', 'closed', interval '2 hours 30 minutes'),
 
-  -- Sat 10 Oct 2026 — Bledisloe Cup test, 7.10pm. The biggest night here.
+  -- Sat 10 Oct 2026 — Bledisloe Cup, 7.10pm.
   ('ede22026-0000-4000-8000-000000000003',
    'TEST — All Blacks v Australia (Bledisloe Cup)',
    timestamp '2026-10-10 19:10' at time zone 'Pacific/Auckland',
-   'premium', 'on_sale', interval '2 hours 30 minutes'),
+   'premium', 'closed', interval '2 hours 30 minutes'),
 
   -- Fri 30 Oct 2026 — T20, 8.00pm.
   ('ede22026-0000-4000-8000-000000000004',
    'TEST — BLACKCAPS v India (T20)',
    timestamp '2026-10-30 20:00' at time zone 'Pacific/Auckland',
-   'high', 'on_sale', interval '3 hours 30 minutes'),
+   'high', 'closed', interval '3 hours 30 minutes'),
 
-  -- Wed 4 Nov 2026 — ODI, 3.00pm. A day game: the yard fills in
-  -- daylight and empties after dark.
+  -- Wed 4 Nov 2026 — ODI, 3.00pm. Played, but production still has it
+  -- on sale (not yet closed off on the Tonight tab), so test does too.
   ('ede22026-0000-4000-8000-000000000005',
    'TEST — BLACKCAPS v India (ODI)',
    timestamp '2026-11-04 15:00' at time zone 'Pacific/Auckland',
    'high', 'on_sale', interval '8 hours'),
 
-  -- Tue 24 Nov 2026 — Robbie Williams, BRITPOP World Tour, with Drax
-  -- Project. Doors 5.00pm; the headline set and gates are TBC.
+  -- ---- Ahead.
+  -- Tue 24 Nov 2026 — Robbie Williams. Gates 5pm, show 6.30pm.
   ('ede22026-0000-4000-8000-000000000006',
    'TEST — Robbie Williams (BRITPOP World Tour)',
    timestamp '2026-11-24 17:00' at time zone 'Pacific/Auckland',
    'premium', 'on_sale', interval '6 hours'),
 
-  -- Thu 17 Dec 2026 — Guns N' Roses with Airbourne. Doors 5.00pm.
+  -- Thu 17 Dec 2026 — Guns N' Roses. Gates 5pm, show 5.45pm.
   ('ede22026-0000-4000-8000-000000000007',
    'TEST — Guns N'' Roses (with Airbourne)',
    timestamp '2026-12-17 17:00' at time zone 'Pacific/Auckland',
    'premium', 'on_sale', interval '6 hours'),
 
-  -- Sat 13 and Sun 14 Mar 2027 — Bruno Mars, The Romantic Tour. Two
-  -- nights; the second was added on demand. Doors TBC, 5.00pm assumed.
-  -- Far enough out that Talli has no prices for them yet.
+  -- Sat 13 Feb 2027 — Super Rugby Pacific, 7.05pm.
+  ('ede22026-0000-4000-8000-000000000010',
+   'TEST — Blues v Hurricanes (Super Rugby Pacific)',
+   timestamp '2027-02-13 19:05' at time zone 'Pacific/Auckland',
+   'high', 'draft', interval '2 hours 30 minutes'),
+
+  -- Sun 28 Feb 2027 — 4.00pm.
+  ('ede22026-0000-4000-8000-000000000011',
+   'TEST — Blues v Crusaders (Super Rugby Pacific)',
+   timestamp '2027-02-28 16:00' at time zone 'Pacific/Auckland',
+   'high', 'draft', interval '2 hours 30 minutes'),
+
+  -- Sat 6 Mar 2027 — 4.35pm.
+  ('ede22026-0000-4000-8000-000000000012',
+   'TEST — Blues v Reds (Super Rugby Pacific)',
+   timestamp '2027-03-06 16:35' at time zone 'Pacific/Auckland',
+   'standard', 'draft', interval '2 hours 30 minutes'),
+
+  -- Sat 13, Sun 14 and Tue 16 Mar 2027 — Bruno Mars, three nights.
+  -- Gates TBC on Eden Park; times as production has them.
   ('ede22026-0000-4000-8000-000000000008',
    'TEST — Bruno Mars (The Romantic Tour)',
    timestamp '2027-03-13 17:00' at time zone 'Pacific/Auckland',
-   'premium', 'announced', interval '6 hours'),
+   'premium', 'on_sale', interval '6 hours'),
   ('ede22026-0000-4000-8000-000000000009',
    'TEST — Bruno Mars (The Romantic Tour, second show)',
    timestamp '2027-03-14 17:00' at time zone 'Pacific/Auckland',
-   'premium', 'announced', interval '6 hours'),
+   'premium', 'on_sale', interval '6 hours'),
+  ('ede22026-0000-4000-8000-00000000000d',
+   'TEST — Bruno Mars (The Romantic Tour, third show)',
+   timestamp '2027-03-16 19:05' at time zone 'Pacific/Auckland',
+   'premium', 'on_sale', interval '6 hours'),
 
-  -- Sun 25 Apr 2027 — Anzac Round. The Warriors' first NRL match at
-  -- Eden Park in thirteen years. Opponent and kick-off wait on the 2027
-  -- NRL draw; 4.00pm is the Anzac Round norm in New Zealand.
+  -- Fri 9 Apr 2027 — 7.35pm.
+  ('ede22026-0000-4000-8000-000000000013',
+   'TEST — Blues v Chiefs (Super Rugby Pacific)',
+   timestamp '2027-04-09 19:35' at time zone 'Pacific/Auckland',
+   'high', 'draft', interval '2 hours 30 minutes'),
+
+  -- Sun 25 Apr 2027 — Anzac Round. Kick-off TBC; production has 4.00pm.
   ('ede22026-0000-4000-8000-00000000000a',
    'TEST — One NZ Warriors (Anzac Round)',
    timestamp '2027-04-25 16:00' at time zone 'Pacific/Auckland',
    'premium', 'announced', interval '2 hours 30 minutes'),
 
-  -- Sun 13 Jun 2027 — the Warriors open Origin week, three days before
-  -- the Origin match itself. Opponent and kick-off TBC; afternoon.
+  -- Sat 1 May 2027 — 7.05pm.
+  ('ede22026-0000-4000-8000-000000000014',
+   'TEST — Blues v Brumbies (Super Rugby Pacific)',
+   timestamp '2027-05-01 19:05' at time zone 'Pacific/Auckland',
+   'standard', 'draft', interval '2 hours 30 minutes'),
+
+  -- Fri 7 May 2027 — 7.35pm.
+  ('ede22026-0000-4000-8000-000000000015',
+   'TEST — Blues v Fijian Drua (Super Rugby Pacific)',
+   timestamp '2027-05-07 19:35' at time zone 'Pacific/Auckland',
+   'standard', 'draft', interval '2 hours 30 minutes'),
+
+  -- Sat 29 May 2027 — 7.05pm.
+  ('ede22026-0000-4000-8000-000000000016',
+   'TEST — Blues v Highlanders (Super Rugby Pacific)',
+   timestamp '2027-05-29 19:05' at time zone 'Pacific/Auckland',
+   'standard', 'draft', interval '2 hours 30 minutes'),
+
+  -- Sun 13 Jun 2027 — Warriors, opponent TBC. Production has 4.00pm.
   ('ede22026-0000-4000-8000-00000000000b',
    'TEST — One NZ Warriors (Origin week)',
    timestamp '2027-06-13 16:00' at time zone 'Pacific/Auckland',
    'premium', 'announced', interval '2 hours 30 minutes'),
 
-  -- Wed 16 Jun 2027 — State of Origin Game 2, the first ever played in
-  -- New Zealand. Kick-off TBC; 8.00pm is the Origin norm.
+  -- Wed 16 Jun 2027 — State of Origin. Kick-off TBC; production has 8.00pm.
   ('ede22026-0000-4000-8000-00000000000c',
    'TEST — State of Origin Game 2 (NSW Blues v QLD Maroons)',
    timestamp '2027-06-16 20:00' at time zone 'Pacific/Auckland',

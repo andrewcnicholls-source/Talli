@@ -3,7 +3,23 @@
 // alone (OPERATOR_ONLY in auth.ts).
 
 import { type Ctx, type Handler } from '../auth.ts'
-import { db, json, minutes, named } from '../shared.ts'
+import { db, json, minutes, named, type Row } from '../shared.ts'
+
+// Pictures for series pages and nights (plan A1). The bucket is public to
+// read and has no storage policy for browsers: only this function writes
+// to it, with the service role, for Andrew.
+const PICTURE_BUCKET = 'event-pictures'
+const PICTURE_MAX_BYTES = 5 * 1024 * 1024
+const PICTURE_TYPES: Record<string, { ext: string; magic: (b: Uint8Array) => boolean }> = {
+  'image/jpeg': { ext: 'jpg', magic: (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff },
+  'image/png': { ext: 'png', magic: (b) => b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47 },
+  'image/webp': {
+    ext: 'webp',
+    magic: (b) => String.fromCharCode(...b.slice(0, 4)) === 'RIFF' &&
+      String.fromCharCode(...b.slice(8, 12)) === 'WEBP',
+  },
+}
+const SERIES_FIELDS = 'id, slug, name, kind, venue, summary, picture_path, sort_order, active'
 
 export const events: Record<string, Handler> = {
   // --------------------------------------------- making a new event
@@ -189,5 +205,122 @@ export const events: Record<string, Handler> = {
     })
     if (error) return json(named(error), 409)
     return json({ ok: true, reserve: data })
+  },
+
+  // ------------------------------------------------ series (plan A1)
+
+  // Every series, on sale or not, with its nights: the event manager's
+  // picture of how the calendar is grouped.
+  async series_list(_: Ctx) {
+    const [seriesRes, nightRes] = await Promise.all([
+      db.from('event_series').select(SERIES_FIELDS)
+        .order('sort_order', { ascending: true }).order('name', { ascending: true }),
+      db.from('event').select('id, name, starts_at, status, series_id, night_label, picture_path')
+        .order('starts_at', { ascending: true }),
+    ])
+    if (seriesRes.error) throw seriesRes.error
+    if (nightRes.error) throw nightRes.error
+    const nights = new Map<string, Row[]>()
+    for (const e of (nightRes.data ?? []) as Row[]) {
+      const list = nights.get(String(e.series_id)) ?? []
+      list.push(e)
+      nights.set(String(e.series_id), list)
+    }
+    return json({
+      series: ((seriesRes.data ?? []) as Row[]).map((s) => ({
+        ...s, nights: nights.get(String(s.id)) ?? [],
+      })),
+    })
+  },
+
+  // Make a series, or change one. The address (slug) survives a rename;
+  // it changes only when one is sent.
+  async save_series({ body }: Ctx) {
+    const sort = body.sort_order === undefined || body.sort_order === '' ? null : Number(body.sort_order)
+    if (sort !== null && !Number.isInteger(sort)) {
+      return json({ error: 'The order must be a whole number.', code: 'BAD_ORDER' }, 400)
+    }
+    const { data, error } = await db.rpc('save_event_series', {
+      p_id: body.series_id ? String(body.series_id) : null,
+      p_name: String(body.name ?? ''),
+      p_kind: body.kind ? String(body.kind) : null,
+      p_venue: body.venue ? String(body.venue) : null,
+      p_summary: body.summary === undefined || body.summary === null ? null : String(body.summary),
+      p_sort_order: sort,
+      p_active: typeof body.active === 'boolean' ? body.active : null,
+      p_slug: body.slug ? String(body.slug) : null,
+    })
+    if (error) return json(named(error), 409)
+    return json({ ok: true, series: data })
+  },
+
+  // Put a night in a series, and say which night it is.
+  async set_event_series({ body, eventId }: Ctx) {
+    if (!eventId) return json({ error: 'event_id is required' }, 400)
+    const seriesId = String(body.series_id ?? '')
+    const { data: series, error: sErr } = await db.from('event_series')
+      .select('id').eq('id', seriesId).maybeSingle()
+    if (sErr) throw sErr
+    if (!series) return json({ error: 'That series does not exist.', code: 'NO_SUCH_SERIES' }, 404)
+    const label = String(body.night_label ?? '').trim()
+    if (label.length > 80) {
+      return json({ error: 'Keep the night\'s name under 80 characters.', code: 'BAD_LABEL' }, 400)
+    }
+    const { data, error } = await db.from('event')
+      .update({ series_id: seriesId, night_label: label || null })
+      .eq('id', eventId)
+      .select('id, series_id, night_label')
+    if (error) throw error
+    if (!data?.length) return json({ error: 'No such event' }, 404)
+    return json({ ok: true, event: data[0] })
+  },
+
+  // A picture for a series, or for one night. Sent as base64 so it rides
+  // the same signed-in call as everything else; checked here for type,
+  // size and the file's own first bytes, whatever the browser claimed.
+  // { remove: true } takes the picture off without uploading anything.
+  async upload_picture({ body }: Ctx) {
+    const target = String(body.target ?? '')
+    const id = String(body.id ?? '')
+    if (!['series', 'event'].includes(target) || !id) {
+      return json({ error: 'target (series or event) and id are required' }, 400)
+    }
+    const table = target === 'series' ? 'event_series' : 'event'
+    const { data: row, error: rErr } = await db.from(table).select('id').eq('id', id).maybeSingle()
+    if (rErr) throw rErr
+    if (!row) return json({ error: 'Nothing to put that picture on.', code: 'NOT_FOUND' }, 404)
+
+    if (body.remove === true) {
+      const { error } = await db.from(table).update({ picture_path: null }).eq('id', id)
+      if (error) throw error
+      return json({ ok: true, picture_path: null })
+    }
+
+    const type = PICTURE_TYPES[String(body.content_type ?? '')]
+    if (!type) {
+      return json({ error: 'A JPEG, PNG or WebP picture, please.', code: 'BAD_PICTURE' }, 400)
+    }
+    let bytes: Uint8Array
+    try {
+      bytes = Uint8Array.from(atob(String(body.data ?? '')), (c) => c.charCodeAt(0))
+    } catch {
+      return json({ error: 'That picture did not arrive whole. Try again.', code: 'BAD_PICTURE' }, 400)
+    }
+    if (!bytes.length || bytes.length > PICTURE_MAX_BYTES) {
+      return json({ error: 'Pictures up to 5 MB, please.', code: 'PICTURE_TOO_BIG' }, 400)
+    }
+    if (!type.magic(bytes)) {
+      return json({ error: 'That file is not the picture it says it is.', code: 'BAD_PICTURE' }, 400)
+    }
+
+    const path = `${target}/${id}/${crypto.randomUUID()}.${type.ext}`
+    const { error: upErr } = await db.storage.from(PICTURE_BUCKET)
+      .upload(path, bytes, { contentType: String(body.content_type), upsert: false })
+    if (upErr) throw upErr
+    // The path within the bucket, not a full address: the host differs
+    // between projects, and a page builds the address from its own.
+    const { error } = await db.from(table).update({ picture_path: path }).eq('id', id)
+    if (error) throw error
+    return json({ ok: true, picture_path: path })
   },
 }
