@@ -2512,6 +2512,36 @@ textarea.ad-input { resize: vertical; min-height: 56px; font-family: inherit; }
 /* Sites: one driveway's usual spaces, online share and price difference. */
 #ad-site-form { padding: 0 16px 24px; }
 #ad-site-form > .ad-btn { margin-top: 14px; width: 100%; }
+
+/* The Sites page (plan B3): one driveway, in four sections. */
+.ad-site-night-row { margin-top: 12px; }
+.ad-site-section {
+  font-family: var(--display);
+  font-size: 1.2rem;
+  color: var(--blue-deep);
+  margin: 26px 0 4px;
+}
+.ad-site-section:first-child { margin-top: 8px; }
+#ad-site-form > .ad-site-save { margin-top: 14px; width: 100%; }
+.ad-site-grid.has-sold { grid-template-columns: 1fr 4.5rem 4.5rem 3rem; }
+.ad-site-grid.is-two { grid-template-columns: 1fr 8rem; margin-top: 8px; }
+.ad-site-sold { text-align: center; font-variant-numeric: tabular-nums; }
+.ad-site-grid { margin-top: 10px; }
+.ad-site-short { max-width: 7rem; }
+.ad-site-notes-input { width: 100%; resize: vertical; font-family: var(--body); }
+.ad-site-off { color: var(--orange-flag); }
+.ad-site-anchor { margin-top: 12px; }
+.ad-places { display: block; width: 100%; margin: 0 0 8px; }
+.ad-site-nights { margin-top: 10px; border-top: 1px solid #e6e6e1; }
+.ad-site-night { padding: 8px 0; border-bottom: 1px solid #e6e6e1; }
+.ad-site-night-pick { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
+.ad-site-night-pick input { margin-top: 3px; flex: none; }
+.ad-site-night-pick.is-all { padding: 8px 0; border-bottom: 1px solid #e6e6e1; font-weight: 500; }
+.ad-site-night-name { min-width: 0; overflow-wrap: anywhere; }
+.ad-site-night .ad-site-line { padding: 6px 0 0 26px; }
+.ad-site-line .ad-status-set { margin-left: auto; }
+.ad-chip.is-confirmed { color: #1f6b45; background: #eaf5ee; border-color: #c4e2cf; }
+.ad-site-left { font-size: 0.86rem; color: var(--grey); padding: 0 0 4px 2px; }
 .ad-site-meta { margin: 0 0 14px; color: var(--muted, #5b6472); font-size: 0.92rem; }
 .ad-site-grid {
   display: grid;

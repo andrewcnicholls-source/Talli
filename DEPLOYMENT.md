@@ -835,3 +835,22 @@ so deploy state and commits can always be verified.
 To close it, add both hostnames to the environment's allowed hosts at
 https://claude.com/settings/code-environments, or just run releases
 from Claude Code on your own machine, where the checks execute normally.
+
+### 6. Let the Maps key search addresses (Sites page)
+
+The Sites page (plan B3) adds a new site from an address search, which
+fills in the address and the map position. It uses the same browser key
+as the booking map (`googleMapsKey` in `assets/talli-config.js`), which
+today is restricted to the Maps JavaScript API.
+
+**In Google Cloud** (console.cloud.google.com → the project that owns the
+key):
+
+1. APIs & Services → Library → **Places API (New)** → Enable.
+2. APIs & Services → Credentials → the key → *API restrictions* → add
+   **Places API (New)** beside Maps JavaScript API. Leave the *website*
+   restrictions exactly as they are (talli.co.nz and
+   staging.talli.pages.dev): the key stays usable only from those pages.
+
+Until it is done, the page says address search is unavailable and the
+address and position are typed, as before. Nothing else depends on it.

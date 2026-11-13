@@ -79,7 +79,7 @@
       <button type="button" class="ad-tab is-on" id="ad-tab-gate"
               role="tab" aria-selected="true" aria-controls="ad-pane-gate">Arrivals</button>
       <button type="button" class="ad-tab" id="ad-tab-night"
-              role="tab" aria-selected="false" aria-controls="ad-pane-night">Tonight</button>
+              role="tab" aria-selected="false" aria-controls="ad-pane-night">Event</button>
       <button type="button" class="ad-tab" id="ad-tab-insights"
               role="tab" aria-selected="false" aria-controls="ad-pane-insights">Insights</button>
       <button type="button" class="ad-tab" id="ad-tab-sites"
@@ -198,11 +198,13 @@
          The yard used to be its own section above this one, split by corner
          — front lawn, back yard, overflow, valet — which is not how anyone
          thinks about a night, and not how any other car park is laid out. -->
-    <h2 class="ad-section">Spaces, prices &amp; what&rsquo;s left</h2>
+    <!-- The reference price and what is left at each site (plan B3). Which
+         sites sell this night, and how many spaces each has, are on the
+         Sites page: "Change spaces" opens it on this night. -->
+    <h2 class="ad-section">Prices &amp; what&rsquo;s left</h2>
     <p class="ad-section-note">
-      Lost one to a bad park? Tap &minus; on that type. Squeezed one in? Tap +.
-      Prices match whichever cards are on the sign; changing one never touches
-      a booking already taken.
+      The price is set on the reference site and every area follows at its
+      adjustment. Changing it never touches a booking already taken.
     </p>
     <div class="ad-prices" id="ad-prices"></div>
 
@@ -233,13 +235,17 @@
   <!-- ----------------------------------------------------------- insights -->
   <!-- Looking back rather than working the night. Its own picker, because
        the one in the header only carries tonight and what is coming. -->
-  <!-- Each driveway's usual spaces, how many sell online, and its price
-       difference from the reference site (Andrew's house). Operator only
-       for now; the same form becomes the host's own page later. -->
+  <!-- The Sites page (plan B3): everything about one driveway — its
+       details, its usual spaces or one night's, the nights it sells, and
+       its area's prices. Operator only; filled in by assets/admin/sites.js. -->
   <section id="ad-pane-sites" role="tabpanel" aria-labelledby="ad-tab-sites" hidden>
     <div class="ad-insight-pick">
       <label class="ad-label" for="ad-site-pick">Site</label>
       <select id="ad-site-pick" class="ad-select"></select>
+      <div id="ad-site-night-row" class="ad-site-night-row">
+        <label class="ad-label" for="ad-site-night">Spaces for</label>
+        <select id="ad-site-night" class="ad-select"></select>
+      </div>
     </div>
     <div id="ad-site-form"></div>
   </section>

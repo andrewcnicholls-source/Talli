@@ -249,7 +249,7 @@ What to check on the test site:
   sign price plus any extras and no surcharge.
 - **Gate, card** — switch *Paid by* to **Card (tap to pay)** without touching
   anything else; the surcharge line appears and the figure goes up.
-- **Tonight** — each price card shows `cash $x · card $y`, and *Money* has an
+- **Event** (the tab that was Tonight) — each price card shows `cash $x · card $y`, and *Money* has an
   *Of that, card surcharge* line.
 
 A booking never re-prices. Change the rate mid-night and the sales already
@@ -441,7 +441,7 @@ Three of the six functions deployed to a byte-identical bundle hash.
 ## Adding a real fixture to the test site
 
 **For a quick look, do it on the gate screen.** `/admin.html` has a **+**
-beside the event picker on the Tonight tab: pick a template, edit the name, the date and the
+beside the event picker on the Event tab: pick a template, edit the name, the date and the
 prices, and tap *Save event*. It writes the event, its offer against the
 property and its tiers in one transaction, so a half-made event with
 nothing on sale cannot happen. *Save as template* keeps the shape — the
@@ -449,15 +449,45 @@ tier menu and the timings, never the date — for next time.
 
 Arrivals works whichever night is **live**, one at a time, and has no
 picker of its own — for wardens or for you. To work a night at the gate,
-open it on Tonight and tap *Make live* under the status buttons; every
+open it on the Event tab and tap *Make live* under the status buttons; every
 warden's phone moves to it within 30 seconds. A draft or cancelled night
 cannot be live. After the migration that brought this in, nothing is
 live until you choose one.
 
 Use the `TEST — ` prefix in the name so it stays obvious which site you
-are on. New events land as **draft**, which means hidden; the Tonight tab
+are on. New events land as **draft**, which means hidden; the Event tab
 carries the status and the buttons that move it — draft, announced, on
 sale, closed, cancelled.
+
+A new night includes **every active site**: the one it is made at (the
+reference site, 86 Paice Ave, unless the form says otherwise) on sale,
+every other one *pending* at its usual spaces. Put each on sale from the
+**Sites** page — under *Nights*, *Put on sale* — once its host has said
+yes.
+
+### Setting up a site (plan B3)
+
+The **Sites** tab is everything about one driveway, and nothing about a
+site is set anywhere else:
+
+1. *+ Add a new site…* — search the address (it fills in the position),
+   or type both; say whose driveway it is and which area it is in. The
+   first site in a new area is its anchor.
+2. *Usual spaces* — per type, how many it has and how many sell online.
+3. *Nights* — tick the nights it sells (or *All upcoming*), *Save
+   nights*, then *Put on sale* on each.
+4. *Spaces for* at the top — pick a night to set that night's numbers
+   only. Never below what has sold.
+
+Things it refuses, by design: switching off or moving a site with
+bookings on a night still to come; moving or switching off the reference
+site; the anchor leaving an area that still has other sites (make
+another the anchor first); unticking a night anyone is booked on.
+
+On a phone, check: the whole of the above for a new site, start to
+finish, with no SQL and without opening the Event tab; and that the
+Event tab now has the reference price and the night's picture only,
+with *Change spaces or sites for this night* opening Sites on that night.
 
 **Nothing made that way survives a reset.** The modal writes to the test
 database, and `supabase/test-only/reset-test-data.sql` rebuilds it from

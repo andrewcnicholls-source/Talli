@@ -518,6 +518,40 @@ from Tonight. Operator only.
 - Done when: a new site goes from address to on sale at three nights
   with no SQL and no visit to Tonight.
 
+**Status, 14 Nov 2026: built** (`feature/sites-page`), on top of B2.
+What differs from the brief above, and why:
+
+- **The database does the guarding** (`20261117100000_talli_sites_page`):
+  `save_site_details`, `add_site`, `set_block_anchor`, `set_site_nights`
+  and `set_site_night`, each refusing by name — `SITE_HAS_BOOKINGS`,
+  `REFERENCE_SITE`, `SITE_IS_ANCHOR`, `ANCHOR_NOT_IN_AREA`, `BELOW_SOLD`.
+  "Bookings" is what `tier_sold` counts: paid, or a hold still running.
+- **The reference site never moves or switches off**, and stays on every
+  night it is in: every price on the night is measured from it.
+- **Switching a site off takes it off every night still to come** (the
+  guard means nobody is booked on them), so an inactive site sells
+  nothing, online or at the gate.
+- **A host is picked from the hosts on the books, or named new.** Renaming
+  a host is not here: one host can own several sites (Talli Limited owns
+  86 and 84). Real email and payout notes are B7's.
+- **New events include every active site**: `create_gate_event` restated
+  to make the night at `reference_property()` and add every other active
+  site pending through `add_event_offer`. `default_event_property()` is
+  left in the database, called by nothing.
+- **Tonight is renamed Event.** It keeps status, live, series, the
+  reference site's price cards, the template picker, extras and money,
+  plus a read-only "what's left at every site" with a link that opens
+  Sites on that night. The per-site −/+ spaces, the walk-up hold buttons
+  and "Add a site" are gone from it. The `set_capacity`, `set_reserve`
+  and `add_offer` actions stay in `gate-ops`, unused by the screen.
+- **Places is `PlaceAutocompleteElement` (Places API New)**, loaded only
+  on the Sites page, with the typed address and pasted position kept as
+  the fallback. The key needs Places API (New) added to its API
+  restrictions — `DEPLOYMENT.md`, Settings § 6. Not exercised by the
+  tests (no key locally); check on staging.
+- **Lost spaces on the night** (§ 5a's "Andrew adds a space on Tonight")
+  are now the night's numbers on Sites until B5 gives them their own record.
+
 ### B4 — `walk-up-payments`
 
 - The walk-up form opens with **cash** selected.
