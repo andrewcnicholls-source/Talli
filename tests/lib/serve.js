@@ -1,7 +1,14 @@
 /* =====================================================================
-   Serve the repository root as Cloudflare Pages would: static files, and
-   "/admin" finding admin.html. Bound to 127.0.0.1 only. For the browser
-   suite; nothing in production runs this.
+   Serve the repository root as Cloudflare Pages would: static files,
+   "/admin" finding admin.html, and the Pages Functions in functions/ for
+   the routes _routes.json gives them (plan A2). Bound to 127.0.0.1 only.
+   For the browser suite; nothing in production runs this.
+
+   The functions are the real files, called through the same handlers
+   their onRequestGet calls. The one difference is the project they read:
+   in production that comes from the hostname, and 127.0.0.1 would mean
+   the hosted test project, which the suites must never touch. So this
+   passes the local stack instead.
 
        node tests/lib/serve.js [port]
    ===================================================================== */
@@ -34,7 +41,29 @@ function resolve(urlPath) {
   return null;
 }
 
-http.createServer((req, res) => {
+let site;
+async function functionRoute(req, res) {
+  const url = new URL(req.url, `http://127.0.0.1:${PORT}`);
+  const m = url.pathname.match(/^\/events\/?$|^\/events\/([^/]+)\/?$|^\/sitemap\.xml$/);
+  if (!m || req.method !== 'GET') return false;
+  if (!site) site = await import(path.join(ROOT, 'functions', '_lib', 'site.js'));
+  const { stack } = require('./stack');
+  const project = { name: 'local', supabaseUrl: stack.apiUrl, anonKey: stack.anonKey };
+  const request = new Request(url);
+  const answer = url.pathname === '/sitemap.xml' ? await site.handleSitemap(request, project)
+    : m[1] ? await site.handleSeries(request, project, decodeURIComponent(m[1]))
+    : await site.handleCatalogue(request, project);
+  res.writeHead(answer.status, Object.fromEntries(answer.headers));
+  res.end(Buffer.from(await answer.arrayBuffer()));
+  return true;
+}
+
+http.createServer(async (req, res) => {
+  try {
+    if (await functionRoute(req, res)) return;
+  } catch (e) {
+    res.writeHead(500, { 'Content-Type': 'text/plain' }); res.end(String(e)); return;
+  }
   const file = resolve(req.url);
   if (!file) { res.writeHead(404, { 'Content-Type': 'text/plain' }); res.end('not found'); return; }
   res.writeHead(200, {

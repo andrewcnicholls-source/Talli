@@ -200,11 +200,28 @@
         }
 
         listed.forEach(function (ev) { list.appendChild(eventCard(ev)); });
+        preselect(listed);
       })
       .catch(function (err) {
         list.innerHTML = '';
         list.appendChild(make('p', 'bk-empty', err.message));
       });
+  }
+
+  // /book?event=<id>, from a night on an events page (/events/<slug>). The
+  // night is chosen for them, exactly as if they had tapped it: a bookable
+  // one goes on to the types of space, any other opens "tell me". An id
+  // that is not in the list — gone, or never real — changes nothing.
+  function preselect(listed) {
+    var wanted;
+    try { wanted = new URLSearchParams(window.location.search).get('event'); } catch (e) { return; }
+    if (!wanted) return;
+    var ev = listed.filter(function (e) { return e.id === wanted; })[0];
+    if (!ev) return;
+    if (!ev.sellable) { openInterest(ev); return; }
+    var radio = document.querySelector('input[name="bk-event"][value="' + ev.id + '"]');
+    if (radio) radio.checked = true;
+    chooseEvent(ev);
   }
 
   // People pick a night, not an opponent — you go to support your team, and the

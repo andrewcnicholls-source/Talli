@@ -284,6 +284,35 @@ Workstream order in § 5 applies to everything after the first night.
   details and JSON-LD with no JavaScript run, and a draft or cancelled
   night never appears.
 
+**Status, 13 Nov 2026: built**, on top of A1. What differs from the
+brief above, and why:
+
+- **The booking flow is not on the series page yet.** That is A3. Each
+  night links to `/book?event=<id>`, and the booking page now opens
+  with that night chosen (or, for one not on sale, the "tell me"
+  form). A3 replaces the link with the flow and turns the old link
+  round, as its brief says.
+- **"From $X" is filled in by the browser** (`assets/events.js`), on
+  the catalogue and per night: the cheapest headline type still for
+  sale online. When nothing is left it says nothing — the walk-up
+  wording needs A3's flag, and guessing would break § 3.3.
+- **Statuses.** A night appears while it is `announced` or `on_sale`
+  and still to come. `closed` is over and does not appear. The query
+  names those statuses as well as relying on the anon policy.
+- **The JSON-LD has no `offers`.** Prices load after the page, and
+  markup that disagrees with the page is worse than none.
+- **The function's copy of the environment switch** is checked against
+  `assets/talli-config.js` by running both for a list of hostnames
+  (units), and structurally in `scripts/check.sh`, which also keeps
+  `_routes.json` equal to the routes in `functions/`.
+- `sitemap.xml` is no longer committed. Its static part is
+  `STATIC_PAGES` in `functions/_lib/site.js`, which `check.sh` holds
+  to the indexable pages exactly as it held the old file.
+- **Not yet proven on Cloudflare.** Feature branches are not built, so
+  the first real run of a Pages Function is staging after merge. Check
+  there: `curl -s https://staging.talli.pages.dev/events` returns the
+  list with `X-Robots-Tag: noindex`, and `/sitemap.xml` is XML.
+
 ### A3 — `booking-catalogue`
 
 - The flow on a series page: pick the night → pick the block (map and
