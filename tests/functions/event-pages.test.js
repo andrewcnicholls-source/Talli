@@ -76,7 +76,9 @@ test('a series page carries the details and JSON-LD in the HTML as served', asyn
   assert.ok(r.text.includes(`<h1>${series.name}</h1>`), 'the series name is in the page');
   assert.ok(r.text.includes(`id="night-${FIX.night}"`), 'the fixture night is in the page');
   assert.ok(r.text.includes(`id="night-${FIX.soldOutNight}"`), 'so is the second');
-  assert.ok(r.text.includes(`href="/book?event=${FIX.night}"`), 'each night links to booking');
+  assert.ok(r.text.includes(`href="/events/${series.slug}?night=${FIX.night}"`),
+    'each night opens the booking flow on this page');
+  assert.ok(r.text.includes('id="bk-tiers-step"'), 'and the flow is on the page');
 
   const block = r.text.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/);
   assert.ok(block, 'JSON-LD is in the page');

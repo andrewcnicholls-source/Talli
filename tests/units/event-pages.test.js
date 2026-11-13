@@ -102,7 +102,40 @@ test('a series page has its title, canonical, Open Graph and each night', async 
   assert.match(html, /<title>Bruno &lt;\/script&gt;/);
   assert.ok(!/name="robots"/.test(html), 'production with nights to come is indexable');
   assert.match(html, /id="night-e1"[\s\S]*Book parking[\s\S]*id="night-e2"[\s\S]*Tell me when it opens/);
-  assert.match(html, /href="\/book\?event=e1"/);
+  // Plan A3: the flow is on this page, so a night opens it here.
+  assert.match(html, /href="\/events\/bruno-mars\?night=e1"/);
+  assert.match(html, /data-night-id="e1" data-night-state="on_sale"/);
+  assert.match(html, /data-night-id="e2" data-night-state="soon"/);
+  assert.match(html, /id="bk-nights"/);
+  assert.match(html, /<script src="\/assets\/booking\.js"><\/script>/);
+  assert.ok(!/\/book\?event=/.test(html), 'no night leaves the page to book');
+});
+
+test('a series with nothing to come carries no booking flow', async () => {
+  const site = await load();
+  const html = site.renderSeries(PROJECT, Object.assign(series(), { nights: [] }), { now: NOW, noindex: false });
+  assert.ok(!/booking\.js/.test(html));
+  assert.ok(!/id="bk-tiers-step"/.test(html));
+});
+
+// assets/booking.js looks elements up by id. Both pages that run it must
+// carry every one, or a step silently never appears.
+test('book.html and the series page both carry every element booking.js uses', async () => {
+  const site = await load();
+  const js = fs.readFileSync(path.join(ROOT, 'assets', 'booking.js'), 'utf8');
+  const ids = [...new Set([...js.matchAll(/\bel\('([a-z0-9-]+)'\)/g)].map((m) => m[1]))]
+    // Step 1 differs by page: the list of nights is rendered by the series
+    // page, and fetched by book.html. The merch grid is book.html's alone.
+    .filter((id) => !['bk-events', 'bk-nights', 'bk-merch'].includes(id));
+  assert.ok(ids.length > 20, 'found the ids booking.js uses');
+  const book = fs.readFileSync(path.join(ROOT, 'book.html'), 'utf8');
+  const seriesPage = site.renderSeries(PROJECT, series(), { now: NOW, noindex: false });
+  for (const id of ids) {
+    assert.match(book, new RegExp(`id="${id}"`), `book.html has #${id}`);
+    assert.match(seriesPage, new RegExp(`id="${id}"`), `the series page has #${id}`);
+  }
+  assert.match(book, /id="bk-events"/);
+  assert.match(seriesPage, /id="bk-nights"/);
 });
 
 test('noindex on every non-production page, and on a series with nothing to come', async () => {

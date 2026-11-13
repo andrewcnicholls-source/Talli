@@ -16,6 +16,7 @@
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
+const { pathToFileURL } = require('node:url');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const PORT = Number(process.argv[2] || process.env.PORT || 4173);
@@ -46,7 +47,8 @@ async function functionRoute(req, res) {
   const url = new URL(req.url, `http://127.0.0.1:${PORT}`);
   const m = url.pathname.match(/^\/events\/?$|^\/events\/([^/]+)\/?$|^\/sitemap\.xml$/);
   if (!m || req.method !== 'GET') return false;
-  if (!site) site = await import(path.join(ROOT, 'functions', '_lib', 'site.js'));
+  // A file URL, not a path: on Windows import() refuses a bare C:\ path.
+  if (!site) site = await import(pathToFileURL(path.join(ROOT, 'functions', '_lib', 'site.js')).href);
   const { stack } = require('./stack');
   const project = { name: 'local', supabaseUrl: stack.apiUrl, anonKey: stack.anonKey };
   const request = new Request(url);

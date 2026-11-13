@@ -193,7 +193,8 @@ inc = sorted(json.load(open('_routes.json'))['include'])
 found = []
 for d, _, files in os.walk('functions'):
     for f in files:
-        rel = os.path.join(d, f)[len('functions'):]
+        # Forward slashes on every OS, so the routes compare on Windows too.
+        rel = os.path.join(d, f)[len('functions'):].replace(os.sep, '/')
         if '/_' in rel or not f.endswith('.js'):
             continue
         r = rel[:-3]
