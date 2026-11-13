@@ -4,8 +4,8 @@
  */
 
 import { asTime, button, call, el, make, money, state, toast } from './core.js';
-import { byTier, loadList, multiSite, siteName,
-  tierClass } from './night.js';
+import { byTier, chosenHere, loadList, multiSite, siteName,
+  tierClass, view } from './night.js';
 import { openEdit } from './booking-edit.js';
 import { isOperator } from './session.js';
 import { inOtherSpace, sayPlaced, spaceName } from './placement.js';
@@ -27,7 +27,9 @@ export function renderList() {
   var list = el('ad-list');
   list.innerHTML = '';
 
-  var rows = state.rows.filter(matches);
+  // The cars in the selector's scope (plan B6), then the search box.
+  var all = view().rows;
+  var rows = all.filter(matches);
 
   // Arrivals works the live night and only that one (plan B2). With none
   // live there is nothing to work, nothing to sell, and nothing to pick.
@@ -42,7 +44,9 @@ export function renderList() {
 
   if (!rows.length) {
     list.appendChild(make('p', 'ad-empty',
-      state.rows.length ? 'Nothing matches that.' : 'No bookings for this event yet.'));
+      all.length ? 'Nothing matches that.'
+        : state.rows.length ? 'No bookings at these sites yet.'
+        : 'No bookings for this event yet.'));
     return;
   }
 
@@ -176,8 +180,14 @@ function toggleArrived(r, btn) {
   btn.disabled = true;
 
   var params = { booking_id: r.booking_id };
-  // One tap puts the car at the driveway this phone is standing at.
-  if (!r.arrived && multiSite() && state.siteId) params.property_id = state.siteId;
+  // One tap puts the car at the site chosen at the top. With a block or
+  // all chosen there is no one site this phone is at, so the car is
+  // placed from its own site, and the database proposes from there.
+  var here = chosenHere();
+  if (!r.arrived && multiSite()) {
+    var at = here ? here.property_id : r.property_id;
+    if (at) params.property_id = at;
+  }
 
   call(action, params)
     .then(function (data) {

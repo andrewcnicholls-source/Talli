@@ -5,7 +5,7 @@
 
 import { button, call, el, hide, make, money, shortName, show, state,
   surchargeOn, text, toast } from './core.js';
-import { loadList, tiersHere } from './night.js';
+import { chosenHere, loadList, multiSite, siteName, tiersHere } from './night.js';
 import { inGateOrder } from './tonight.js';
 import { openCardQr } from './card-qr.js';
 import { sayPlaced, spillSays } from './placement.js';
@@ -32,10 +32,22 @@ export function openSell() {
     state.sellPrice = null;
   }
   state.sellPriceEditing = false;
+  renderSellAt();
   renderSellTiers();
   renderSellExtras();
   renderSellCharge();
   show(el('ad-sell'));
+}
+
+// Said on the sheet, because with a block or all chosen at the top the
+// site is not the one on screen: it is the block's anchor (plan B6).
+function renderSellAt() {
+  var line = el('ad-sell-at');
+  if (!line) return;
+  line.hidden = !multiSite() || !state.siteId;
+  if (line.hidden) return;
+  text(line, 'At ' + siteName(state.siteId) + (chosenHere() ? ''
+    : ' — choose one site at the top to sell somewhere else.'));
 }
 
 function clearSell() {

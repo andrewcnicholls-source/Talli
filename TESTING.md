@@ -257,8 +257,8 @@ taken keep the surcharge they were charged.
 
 ### Where a car goes, and lost spaces (plan B5)
 
-On the fixture night, signed in as the Gribblehurst warden, with *I'm at*
-on the anchor:
+On the fixture night, signed in as the Gribblehurst warden, with the
+anchor chosen in *Sites* at the top:
 
 - **Walk-ups past Standard** — sell Standard until the anchor's tile says
   *full — takes a Standard space at* the neighbour; the next sale toasts
@@ -276,6 +276,31 @@ on the anchor:
 Automated: `supabase/tests/database/09_placement_oversell_lost.test.sql`
 holds the placement order and the counts; `tests/functions/placement.test.js`
 and `tests/browser/placement.spec.js` the warden's side.
+
+### The selector at the top (plan B6)
+
+*Sites*, under the header on every tab: **All sites**, then each block with
+its sites under it. On a night with one site it is not there.
+
+- **Adds up** — signed in as Andrew on the fixture night, note *arrived* and
+  *taken* on Arrivals for each Gribblehurst site, then choose the block:
+  it is the two added together. Do the same for the blocks against *All
+  sites*, and again on the Event tab (spaces filled, *Taken tonight*).
+- **Every tab follows it** — the list, the counts and the notes under them,
+  the walk-up sheet (*At …* says which site it sells at; with a block chosen
+  that is its anchor), *Space lost*, Site info, the Sites page list and
+  Insights.
+- **Ticking in** — with one site chosen a car goes in at that site; with a
+  block or all chosen it is placed from the site it was booked at.
+- **A warden** — the Gribblehurst warden sees Gribblehurst and its two sites,
+  and no *All sites*. A warden holding every block gets *All sites*.
+- **Remembered** — reload, or close the tab and come back: the same choice.
+  It belongs to the phone, not the night.
+
+Automated: `tests/units/scope.test.js` holds the arithmetic (sites add up
+to blocks, blocks to all, for every figure); `tests/browser/selector.spec.js`
+checks it on screen and the reload; `tests/functions/gate-ops-access.test.js`
+the server's `every_block`.
 
 ---
 

@@ -9,7 +9,8 @@
 import { GATE_ORDER, asDate, asTime, button, call, el, hide, make, money,
   shortName, show, state, surchargeOn, text, toast } from './core.js';
 import { isOperator } from './session.js';
-import { loadList, multiSite, refreshEvents, renderEventOptions, siteName } from './night.js';
+import { loadList, multiSite, refreshEvents, renderEventOptions, siteName,
+  view } from './night.js';
 import { showTab } from './tabs.js';
 import { presetNight } from './sites.js';
 import { seriesLine } from './series.js';
@@ -17,8 +18,8 @@ import { seriesLine } from './series.js';
 /* ------------------------------------------------------ tonight's board */
 
 export function renderBoard() {
-  var s = state.summary;
-  if (!s) return;
+  if (!state.summary) return;
+  var s = view().summary;
   text(el('ad-board-filled'), String(s.filled));
   text(el('ad-board-capacity'), String(s.capacity));
 
@@ -70,8 +71,9 @@ export function renderPrices() {
 // opens it on this night.
 function siteBoard() {
   var box = make('div', 'ad-sites');
-  box.appendChild(make('div', 'ad-sites-head', 'Every site tonight'));
-  state.sites.forEach(function (site) {
+  box.appendChild(make('div', 'ad-sites-head',
+    view().sites.length === state.sites.length ? 'Every site tonight' : 'These sites tonight'));
+  view().sites.forEach(function (site) {
     var line = make('div', 'ad-site-line');
     line.appendChild(make('span', 'ad-site-name',
       (site.block_name ? site.block_name + ' · ' : '') + site.name));
@@ -314,11 +316,12 @@ export function submitPrice(e) {
 export function renderExtras() {
   var wrap = el('ad-extras');
   wrap.innerHTML = '';
-  if (!state.extras.length) {
+  var extras = view().extras;
+  if (!extras.length) {
     wrap.appendChild(make('p', 'ad-empty', 'Nothing pre-purchased for this event.'));
     return;
   }
-  state.extras.forEach(function (item) {
+  extras.forEach(function (item) {
     var row = make('div', 'ad-extra' + (item.pending ? '' : ' is-done'));
     row.appendChild(make('span', 'ad-extra-name', item.name));
     row.appendChild(make('span', 'ad-extra-count',
@@ -382,13 +385,16 @@ export function moneyRows(wrap, lines) {
 }
 
 export function renderMoney() {
-  var s = state.summary;
   var wrap = el('ad-money');
   wrap.innerHTML = '';
-  if (!s) return;
+  if (!state.summary) return;
+  // The sites chosen at the top (plan B6), counted from their own rows,
+  // so each site's money adds up to its block's and the blocks to all.
+  var v = view();
+  var s = v.summary;
 
   var lines = [['Taken tonight', money(s.taken_cents), true]];
-  byChannel(state.rows).forEach(function (c) {
+  byChannel(v.rows).forEach(function (c) {
     lines.push([c.label, money(c.cents), false, c.cars ? cars(c.cars) : null]);
   });
   lines.push(

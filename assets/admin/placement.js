@@ -11,7 +11,7 @@
 
 import { asTime, button, call, el, hide, make, show, state, text,
   toast } from './core.js';
-import { loadList, multiSite, siteName, tierClass } from './night.js';
+import { loadList, multiSite, siteName, tierClass, view } from './night.js';
 import { pickTile } from './walk-up.js';
 
 var SPACE_NAMES = { standard: 'Standard', priority: 'Priority', valet: 'Valet' };
@@ -134,9 +134,12 @@ function reasonName(code) {
 }
 
 export function openLost() {
-  var ids = state.sites.map(function (s) { return s.property_id; });
+  // The sites chosen at the top (plan B6), starting at the one this phone
+  // is taken to be at.
+  var sites = view().sites;
+  var ids = sites.map(function (s) { return s.property_id; });
   state.lostSite = ids.indexOf(state.siteId) > -1 ? state.siteId
-    : (state.tiers[0] || {}).property_id || null;
+    : (sites[0] || {}).property_id || null;
   state.lostTier = null;
   state.lostReason = null;
   el('ad-lost-form').reset();
@@ -148,9 +151,10 @@ export function openLost() {
 export function renderLost() {
   var row = el('ad-lost-site-row');
   var select = el('ad-lost-site');
-  row.hidden = !multiSite();
+  var sites = view().sites;
+  row.hidden = sites.length < 2;
   select.innerHTML = '';
-  state.sites.forEach(function (s) {
+  sites.forEach(function (s) {
     var opt = new Option(s.name, s.property_id);
     opt.selected = s.property_id === state.lostSite;
     select.appendChild(opt);
@@ -194,7 +198,7 @@ export function renderLost() {
 function renderLostList() {
   var list = el('ad-lost-list');
   list.innerHTML = '';
-  var lost = state.lost || [];
+  var lost = view().lost;
   el('ad-lost-list-head').hidden = !lost.length;
   lost.forEach(function (l) {
     var item = make('div', 'ad-lost-item');

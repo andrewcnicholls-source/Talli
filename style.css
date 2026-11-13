@@ -2449,6 +2449,12 @@ textarea.ad-input { resize: vertical; min-height: 56px; font-family: inherit; }
   white-space: nowrap;
 }
 
+/* ------------------------------------------------ the selector (plan B6) */
+/* In the header, so it is on every tab: all sites, a block, or one site. */
+.ad-scope-row { display: flex; gap: 8px; align-items: center; margin: 8px 0 0; }
+.ad-scope-row .ad-select { flex: 1; min-width: 0; }
+.ad-scope-row .ad-site-label { color: var(--white); opacity: 0.8; font-size: 0.9rem; }
+
 /* ------------------------------------------------ multi-site gate nights */
 /* Shown only when an event has more than one driveway selling. */
 .ad-site-row { display: flex; gap: 8px; align-items: center; margin: 0 0 10px; }

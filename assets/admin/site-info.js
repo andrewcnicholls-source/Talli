@@ -43,7 +43,7 @@ export function renderInfo() {
 
   text(el('ad-info-site'), site
     ? site.name + (site.block_name ? ' · ' + site.block_name : '') +
-      (multiSite() ? ' — change site on Arrivals' : '')
+      (multiSite() ? ' — change site at the top' : '')
     : 'No site selling tonight.');
   text(el('ad-info-address'), site ? (site.address || site.name) : '');
 

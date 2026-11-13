@@ -11,6 +11,11 @@ import { renderBoard, renderExtras, renderMoney, renderPricePicker,
   renderPrices, renderStatus, statusMeta } from './tonight.js';
 import { measureHead } from './tabs.js';
 import { renderInfo } from './site-info.js';
+import { renderInsight } from './insights.js';
+import { refillSites } from './sites.js';
+import { isOperator } from './session.js';
+import { ALL, chosenSite, hereSite, resolveScope, scopeLabel, scopeNight,
+  scopeOptions } from './scope.js';
 
 /* ------------------------------------------------------------- events */
 
@@ -112,6 +117,7 @@ function clearNight() {
   state.lost = [];
   state.extras = [];
   state.summary = null;
+  state.view = null;
 }
 
 export function renderLive() {
@@ -166,7 +172,7 @@ export function loadList(quiet) {
       state.tiers = data.tiers || [];
       state.sites = data.sites || [];
       state.lost = data.lost || [];
-      pickSite();
+      pickScope();
       state.extras = data.extras || [];
       state.summary = data.summary || null;
       state.surchargeBps = data.card_surcharge_bps || 0;
@@ -190,27 +196,62 @@ export function loadList(quiet) {
     .finally(function () { el('ad-list').removeAttribute('aria-busy'); });
 }
 
-/* ------------------------------------------------- which driveway */
+/* ----------------------------------------- which sites: the selector */
+
+// One selector at the top of the screen (plan B6): all sites, a block, or
+// one site, and every tab follows it. The choice belongs to the device,
+// not the night: a warden's phone at Gribblehurst is at Gribblehurst on
+// Saturday too. It is kept as chosen even on a night that does not have
+// it to offer, and comes back on the next night that does.
+
+var SCOPE_KEY = 'talli.gate.scope';
 
 export function multiSite() { return state.sites.length > 1; }
 
-function siteKey() { return 'talli.gate.site.' + state.eventId; }
-
-// Sticky per event, per phone: set once at the start of the night.
-function pickSite() {
-  var ids = state.sites.map(function (s) { return s.property_id; });
-  if (state.siteId && ids.indexOf(state.siteId) > -1) return;
-  var saved = null;
-  try { saved = window.localStorage.getItem(siteKey()); } catch (e) { saved = null; }
-  if (saved && ids.indexOf(saved) > -1) { state.siteId = saved; return; }
-  var anchor = state.sites.filter(function (s) { return s.is_anchor; })[0];
-  state.siteId = (anchor || state.sites[0] || {}).property_id || null;
+// "All" is offered to Andrew, and to a warden who holds every block —
+// for anyone else there is no all that is theirs. The server sends a
+// warden only their own sites whatever this says.
+export function canSeeAll() {
+  return isOperator() || !!(state.who && state.who.every_block);
 }
 
-export function setSite(id) {
-  state.siteId = id;
-  try { window.localStorage.setItem(siteKey(), id); } catch (e) { /* private mode */ }
+function savedScope() {
+  if (state.scopeSaved !== undefined) return state.scopeSaved;
+  try { state.scopeSaved = window.localStorage.getItem(SCOPE_KEY); } catch (e) { state.scopeSaved = null; }
+  return state.scopeSaved;
+}
+
+function pickScope() {
+  state.scope = resolveScope(savedScope(), state.sites, canSeeAll());
+  var here = hereSite(state.sites, state.scope);
+  state.siteId = here ? here.property_id : null;
+}
+
+export function setScope(value) {
+  state.scopeSaved = value;
+  try { window.localStorage.setItem(SCOPE_KEY, value); } catch (e) { /* private mode */ }
+  pickScope();
   renderAll();
+  if (state.tab === 'insights') renderInsight();
+  if (state.tab === 'sites') refillSites();
+}
+
+// The night as the selector narrows it: rows, tiers, sites, lost spaces,
+// extras and the totals counted from them. What every tab draws. The
+// full night stays in state: moving a car is to any site in its block,
+// whatever is selected.
+export function view() {
+  if (!state.view) state.view = scopeNight(state, state.scope || ALL);
+  return state.view;
+}
+
+// The site chosen, when one is; null for a block or all.
+export function chosenHere() {
+  return chosenSite(state.sites, state.scope);
+}
+
+export function scopeName() {
+  return scopeLabel(state.sites, state.scope);
 }
 
 export function siteName(id) {
@@ -239,37 +280,42 @@ export function tiersFor(r) {
   return own.length ? own : state.tiers;
 }
 
-function renderSitePicker() {
-  var row = el('ad-site-row');
-  var select = el('ad-site');
+function renderScopePicker() {
+  var row = el('ad-scope-row');
+  var select = el('ad-scope');
   if (!row || !select) return;
-  row.hidden = !multiSite();
-  if (!multiSite()) return;
-  select.innerHTML = '';
-  var group = null;
-  var groupName = null;
-  state.sites.forEach(function (s) {
-    if (s.block_name !== groupName) {
-      groupName = s.block_name;
-      group = document.createElement('optgroup');
-      group.label = groupName || 'Sites';
-      select.appendChild(group);
-    }
-    var opt = document.createElement('option');
-    opt.value = s.property_id;
-    var here = arrivedAt(s.property_id);
-    opt.textContent = s.name + (s.is_anchor ? ' (anchor)' : '') +
-      ' — ' + here + '/' + capacityAt(s.property_id) + ' in' +
-      (s.status !== 'confirmed' ? ' · ' + s.status : '');
-    opt.selected = s.property_id === state.siteId;
-    group.appendChild(opt);
-  });
-  var site = currentSite();
+  var opts = scopeOptions(state.sites, canSeeAll());
+  // One site to the caller's name tonight: nothing to choose.
+  row.hidden = !multiSite() || opts.length < 2;
+  if (!row.hidden) {
+    select.innerHTML = '';
+    opts.forEach(function (o) {
+      var id = o.value.slice(o.value.indexOf(':') + 1);
+      var label = o.label;
+      if (o.value.indexOf('site:') === 0) {
+        label += ' — ' + arrivedAt(id) + '/' + capacityAt(id) + ' in';
+        var s = state.sites.filter(function (x) { return x.property_id === id; })[0];
+        if (s && s.status !== 'confirmed') label += ' · ' + s.status;
+      }
+      // A tree in a native select: what a phone shows best. Indented with
+      // non-breaking spaces, which every platform keeps.
+      var opt = new Option((o.depth ? '    ' : '') + label, o.value);
+      opt.selected = o.value === state.scope;
+      select.appendChild(opt);
+    });
+    select.value = state.scope;
+  }
+
+  // The chosen site's own guide and notes, on Arrivals. Only for one site:
+  // a block's would be one of its sites' notes passed off as the block's.
+  var site = chosenHere() || (multiSite() ? null : state.sites[0] || null);
   var guide = el('ad-site-guide');
   if (guide) {
     guide.hidden = !(site && site.site_guide_url);
     if (site && site.site_guide_url) guide.href = site.site_guide_url;
   }
+  var guideRow = el('ad-site-row');
+  if (guideRow) guideRow.hidden = !(site && site.site_guide_url);
   var notes = el('ad-site-notes');
   if (notes) {
     notes.hidden = !(site && site.fill_notes);
@@ -288,9 +334,10 @@ export function arrivedAt(id) {
   }).length;
 }
 
-function renderAll() {
+export function renderAll() {
+  state.view = null;
   renderLive();
-  renderSitePicker();
+  renderScopePicker();
   renderStats();
   renderSplit();
   renderList();
@@ -305,7 +352,7 @@ function renderAll() {
 }
 
 function renderStats() {
-  var s = state.summary;
+  var s = state.summary ? view().summary : null;
   if (!s) {
     // No night loaded (none live): no numbers left over from the last one.
     ['ad-stat-arrived', 'ad-stat-free', 'ad-stat-taken'].forEach(function (id) {
@@ -392,7 +439,7 @@ function renderSplit() {
 
   var seen = {};
   var codes = [];
-  state.rows.forEach(function (r) {
+  view().rows.forEach(function (r) {
     var code = r.tier_code || 'other';
     if (!seen[code]) { seen[code] = { arrived: 0, total: 0 }; codes.push(code); }
     seen[code].total += 1;

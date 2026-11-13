@@ -40,10 +40,18 @@ export var state = {
   tab: 'gate',
   rows: [],
   tiers: [],
-  // The driveways selling this event, and the one this phone is standing
-  // at. With one site (most nights at Paice Ave) none of this shows.
+  // The driveways selling this event, and the one this phone is taken to
+  // be standing at. With one site (most nights at Paice Ave) none of this
+  // shows.
   sites: [],
   siteId: null,
+  // The selector at the top (plan B6): 'all', 'block:<id>' or 'site:<id>'.
+  // scope is what is in force for the night on screen; scopeSaved is what
+  // this device chose, kept even on a night that cannot offer it. view is
+  // the night narrowed to scope — see view() in night.js.
+  scope: 'all',
+  scopeSaved: undefined,
+  view: null,
   // Spaces lost tonight, and the lost-space sheet's picks (plan B5).
   lost: [],
   lostSite: null,

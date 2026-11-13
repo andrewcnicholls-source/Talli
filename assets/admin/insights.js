@@ -5,6 +5,7 @@
 
 import { GATE_ORDER, asDate, call, el, make, money, shortName, state, toast } from './core.js';
 import { dayKey, todayKey } from './night.js';
+import { ALL, scopeLabel, scopeNight } from './scope.js';
 import { byChannel, cars, moneyRows, statusMeta } from './tonight.js';
 
 /* ----------------------------------------------------------- insights */
@@ -67,6 +68,8 @@ export function loadInsight() {
         eventId: id,
         rows: data.rows || [],
         tiers: data.tiers || [],
+        sites: data.sites || [],
+        lost: data.lost || [],
         summary: data.summary || null,
       };
       renderInsight();
@@ -93,8 +96,13 @@ export function renderInsight() {
     return;
   }
 
-  var s = data.summary;
-  var paid = data.rows.filter(function (r) { return r.status === 'paid'; });
+  // The night's figures for the sites chosen at the top (plan B6), counted
+  // the same way the gate counts them, so a past night's sites add up to
+  // its blocks and its blocks to all.
+  var scope = state.scope || ALL;
+  var v = scopeNight(data, scope);
+  var s = v.summary;
+  var paid = v.rows.filter(function (r) { return r.status === 'paid'; });
 
   // The headline: what came in, and how full the place was.
   var board = make('div', 'ad-board');
@@ -108,13 +116,14 @@ export function renderInsight() {
   bar.appendChild(barFill);
   fill.appendChild(bar);
   fill.appendChild(make('span', 'ad-board-note',
-    [ev.name, asDate(ev.starts_at), ev.venue, statusMeta(ev.status)[1]]
+    [ev.name, asDate(ev.starts_at), ev.venue, statusMeta(ev.status)[1],
+      scope === ALL ? null : scopeLabel(data.sites, scope) || 'not at this site that night']
       .filter(Boolean).join(' · ')));
   board.appendChild(fill);
   wrap.appendChild(board);
 
   // By how it was paid.
-  var channels = byChannel(data.rows);
+  var channels = byChannel(v.rows);
   var pay = insightSection(wrap, 'By payment');
   moneyRows(pay, channels.map(function (c) {
     var share = s.taken_cents ? Math.round(c.cents / s.taken_cents * 100) : 0;
@@ -125,7 +134,7 @@ export function renderInsight() {
   // By the kind of space. Space price only: extras and surcharge are not
   // what the spot was worth, and they have their own lines below.
   var names = {};
-  data.tiers.forEach(function (t) { names[t.code] = shortName(t); });
+  v.tiers.forEach(function (t) { names[t.code] = shortName(t); });
   var tiers = {};
   paid.forEach(function (r) {
     var code = r.tier_code || 'other';

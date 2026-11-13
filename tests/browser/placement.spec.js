@@ -22,8 +22,9 @@ async function openNight(page) {
   await page.goto('/admin');
   await expect(page.locator('#ad-app')).toBeVisible();
   await expect(page.locator('#ad-live')).toContainText('Fixture night');
-  // The night has loaded once the site picker has the block's two sites.
-  await expect(page.locator('#ad-site option')).toHaveCount(2);
+  // The night has loaded once the selector has the block and its two
+  // sites (plan B6).
+  await expect(page.locator('#ad-scope option')).toHaveCount(3);
 }
 
 test('a warden records a lost space, sees it, and undoes it', async ({ page }) => {
@@ -69,7 +70,7 @@ test('a full Standard still sells, and says where the car goes', async ({ page }
 
   await signedIn(page, 'wardenGrib');
   await openNight(page);
-  await page.selectOption('#ad-site', FIX.gribAnchor);
+  await page.selectOption('#ad-scope', 'site:' + FIX.gribAnchor);
   await page.click('#ad-sell-open');
 
   const tile = page.locator('#ad-sell-tiers .ad-pick-opt').first();

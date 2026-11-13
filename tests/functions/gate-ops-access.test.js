@@ -65,6 +65,8 @@ test('the operator gets in and is told so', async () => {
   const r = await gate('operator', { action: 'session' });
   assert.equal(r.status, 200);
   assert.equal(r.body.who.operator, true);
+  // The selector offers "all sites" (plan B6).
+  assert.equal(r.body.who.every_block, true);
 });
 
 test('a warden gets in, as a warden, with their one block', async () => {
@@ -72,6 +74,8 @@ test('a warden gets in, as a warden, with their one block', async () => {
   assert.equal(r.status, 200);
   assert.equal(r.body.who.operator, false);
   assert.equal(r.body.who.blocks.length, 1);
+  // One block of two: no "all sites" on the selector (plan B6).
+  assert.equal(r.body.who.every_block, false);
 });
 
 test('a warden is refused every operator-only action', async () => {

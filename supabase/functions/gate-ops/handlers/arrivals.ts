@@ -20,6 +20,19 @@ async function eventsFor({ caller, live }: Ctx) {
   return data ?? []
 }
 
+// Whether a caller holds every active block (plan B6), which is when the
+// gate screen offers them "all sites". The operator always does. A warden
+// with one block switched off does not — their "all" would be a block
+// short, and a total that silently leaves a block out is worse than none.
+async function holdsEveryBlock(caller: Ctx['caller']): Promise<boolean> {
+  if (caller.all) return true
+  const { data, error } = await db.from('block').select('id').eq('active', true)
+  if (error) throw error
+  const mine = new Set(caller.blocks)
+  const every = ((data ?? []) as Row[]).map((b) => String(b.id))
+  return every.length > 0 && every.every((id) => mine.has(id))
+}
+
 export const arrivals: Record<string, Handler> = {
   // What the screen needs to open: who it just let in, and the list to
   // pick from. One round trip, because the alternative is a screen that
@@ -41,6 +54,10 @@ export const arrivals: Record<string, Handler> = {
         // false for a warden: the screen hides Tonight and Insights.
         operator: caller.all,
         blocks: caller.blocks,
+        // Whether the selector may offer "all sites" (plan B6): Andrew,
+        // or a warden who holds every block there is. Display only — what
+        // each request may see is still decided from the grants.
+        every_block: await holdsEveryBlock(caller),
       },
       events: await eventsFor(ctx),
       // The night Arrivals works (plan B2), or null.
