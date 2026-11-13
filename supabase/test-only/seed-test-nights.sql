@@ -73,3 +73,15 @@ select o.id, v.code, v.label, v.price, '{}'::text[], v.kind, v.code <> 'standard
     on o.event_id = ('7e57e000-0000-4000-8000-00000000000' || v.night)::uuid
    and o.property_id = v.site::uuid
 on conflict (event_offer_id, code) do nothing;
+
+-- One price per block (plan B1): Gribblehurst (test) sells at the
+-- reference price plus $10 for each type, which is what the prices above
+-- already say. Recorded here so a change to the reference price moves
+-- the fixture night's Gribblehurst prices with it rather than flattening
+-- them to $30 / $40.
+insert into block_tier_offset (block_id, code, offset_cents)
+select b.id, v.code, v.cents
+  from block b
+  cross join (values ('standard', 1000), ('priority', 1000), ('valet', 1000)) as v(code, cents)
+ where b.name = 'Gribblehurst (test)'
+on conflict (block_id, code) do update set offset_cents = excluded.offset_cents, updated_at = now();

@@ -56,6 +56,35 @@ test('a checkout Stripe refuses gives the space straight back', async () => {
   assert.equal(await spotsLeft(FIX.night, FIX.berm, 'standard'), before);
 });
 
+// ------------------------------------------- the price shown is the price paid
+// Plan B1. The page sends the price it displayed as an expectation; the
+// database price is still what is charged, and a mismatch stops the sale.
+
+test('checkout refuses by name when the price shown is not the price held', async () => {
+  const before = await spotsLeft(FIX.night, FIX.berm, 'standard');
+  const rego = plate('PX');
+  made.push(rego);
+  const r = await checkout({ vehicle_rego: rego, expected_price_cents: 2500 });
+  assert.equal(r.status, 409, r.text);
+  assert.equal(r.body.code, 'PRICE_CHANGED');
+  assert.equal(r.body.price_cents, 3000, 'and says what the price now is');
+  const rows = await rest(`booking?vehicle_rego=eq.${rego}&select=status`);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].status, 'cancelled', 'the held space is given back');
+  assert.equal(await spotsLeft(FIX.night, FIX.berm, 'standard'), before);
+});
+
+test('checkout goes on to payment when the price shown matches', async () => {
+  // 502: past the price check, refused only by the stand-in Stripe key.
+  const r = await checkout({ expected_price_cents: 3000 });
+  assert.equal(r.status, 502, r.text);
+});
+
+test('an expected price that is not whole cents is refused before anything is held', async () => {
+  const r = await checkout({ expected_price_cents: 'thirty' });
+  assert.equal(r.status, 400, r.text);
+});
+
 // ---------------------------------------------------------------- webhook
 
 async function heldBooking() {

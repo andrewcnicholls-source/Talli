@@ -136,12 +136,16 @@ function tierCard(t) {
   var gone = t.manually_sold_out || t.spots_left_gate <= 0;
   var card = make('div', 'ad-price' + (gone ? ' is-gone' : ''));
 
+  // One price per area (plan B1): a price is set on the reference site
+  // and every other site follows at its area's adjustment, so only the
+  // reference site's card can move a price. The server refuses the rest.
+  var priced = isReferenceSite(t.property_id);
   var head = make('div', 'ad-price-head');
   head.appendChild(make('span', 'ad-price-name',
     (multiSite() ? siteName(t.property_id) + ' · ' : '') + shortName(t)));
-  head.appendChild(button('ad-price-tag', money(t.price_cents), function () {
-    openPrice(t);
-  }));
+  head.appendChild(priced
+    ? button('ad-price-tag', money(t.price_cents), function () { openPrice(t); })
+    : make('span', 'ad-price-tag', money(t.price_cents)));
   card.appendChild(head);
 
   // The number above is what goes on the sign, and it is what a cash
@@ -153,14 +157,19 @@ function tierCard(t) {
       money(t.price_cents + surchargeOn(t.price_cents, 'tap_to_pay'))));
   }
 
-  var row = make('div', 'ad-price-actions');
-  row.appendChild(button('ad-nudge', '−$5', function () {
-    setPrice(t, t.price_cents - 500);
-  }));
-  row.appendChild(button('ad-nudge', '+$5', function () {
-    setPrice(t, t.price_cents + 500);
-  }));
-  card.appendChild(row);
+  if (priced) {
+    var row = make('div', 'ad-price-actions');
+    row.appendChild(button('ad-nudge', '−$5', function () {
+      setPrice(t, t.price_cents - 500);
+    }));
+    row.appendChild(button('ad-nudge', '+$5', function () {
+      setPrice(t, t.price_cents + 500);
+    }));
+    card.appendChild(row);
+  } else {
+    card.appendChild(make('div', 'ad-price-card',
+      'follows the reference site at this area’s adjustment (Sites tab)'));
+  }
 
   var spaces = spacesRow(t);
   if (spaces) card.appendChild(spaces);
@@ -171,6 +180,10 @@ function tierCard(t) {
   card.appendChild(make('div', 'ad-price-left', leftLine(t)));
 
   return card;
+}
+
+function isReferenceSite(id) {
+  return state.sites.some(function (s) { return s.property_id === id && s.is_reference; });
 }
 
 // The conclusion the other two rows add up to, in the words the question

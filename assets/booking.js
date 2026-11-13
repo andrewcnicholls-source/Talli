@@ -1094,6 +1094,10 @@
       // The area, not the driveway: the system picks the site within it.
       block_id: state.tier.block_id,
       tier_code: state.tier.code,
+      // The price this page showed. Not what is charged — the database
+      // decides that — but checkout refuses if the two differ, so nobody
+      // pays a figure they were never shown.
+      expected_price_cents: state.tier.price_cents,
       name: form.name.value.trim(),
       email: form.email.value.trim(),
       phone: form.phone.value.trim() || null,

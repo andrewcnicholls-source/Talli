@@ -83,20 +83,38 @@ export const sites: Record<string, Handler> = {
   // Every driveway with its area, host, offset and usual counts, for the
   // Sites tab. Short lists; one round trip.
   async sites_setup(_: Ctx) {
-    const [propRes, defRes, blockRes, refRes] = await Promise.all([
+    const [propRes, defRes, blockRes, refRes, offRes] = await Promise.all([
       db.from('property')
-        .select('id, name, address, lat, lng, active, block_id, price_offset_cents, ' +
+        .select('id, name, address, lat, lng, active, block_id, ' +
                 'host:host_id(name), block:block_id(name, sort_order, anchor_property_id)')
         .order('name', { ascending: true }),
       db.from('property_tier_default').select('property_id, code, capacity, online'),
       db.from('block').select('id, name, sort_order').eq('active', true)
         .order('sort_order', { ascending: true }),
       db.rpc('reference_property'),
+      db.from('block_tier_offset').select('block_id, code, offset_cents'),
     ])
     if (propRes.error) throw propRes.error
     if (defRes.error) throw defRes.error
     if (blockRes.error) throw blockRes.error
+    if (offRes.error) throw offRes.error
     const ref = refRes.data ? String(refRes.data) : null
+    const refBlock = ref
+      ? ((propRes.data ?? []) as Row[]).find((p) => String(p.id) === ref)?.block_id ?? null
+      : null
+    // A block's price per type, as a difference from the reference site.
+    // A type with no row is zero.
+    const offsets = new Map<string, Record<string, number>>()
+    for (const o of (offRes.data ?? []) as Row[]) {
+      const m = offsets.get(String(o.block_id)) ?? {}
+      m[String(o.code)] = Number(o.offset_cents ?? 0)
+      offsets.set(String(o.block_id), m)
+    }
+    const blocks = ((blockRes.data ?? []) as Row[]).map((b) => ({
+      ...b,
+      is_reference: refBlock !== null && String(b.id) === String(refBlock),
+      offsets: offsets.get(String(b.id)) ?? {},
+    }))
     const defaults = new Map<string, Row[]>()
     for (const d of (defRes.data ?? []) as Row[]) {
       const list = defaults.get(String(d.property_id)) ?? []
@@ -115,29 +133,43 @@ export const sites: Record<string, Handler> = {
       block_sort: p.block?.sort_order ?? 0,
       is_anchor: p.block?.anchor_property_id === p.id,
       host_name: p.host?.name ?? null,
-      price_offset_cents: p.price_offset_cents ?? 0,
       is_reference: String(p.id) === ref,
       defaults: defaults.get(String(p.id)) ?? [],
     })).sort((a: Row, b: Row) => (a.block_sort - b.block_sort) ||
       String(a.name).localeCompare(String(b.name)))
-    return json({ sites, blocks: blockRes.data ?? [] })
+    return json({ sites, blocks })
   },
 
-  // A site's usual counts per type and its price offset; optionally
-  // pushed to the upcoming events it is already in.
+  // A site's usual counts per type; optionally pushed to the upcoming
+  // events it is already in. Its price is its block's (save_block_pricing).
   async save_site({ body }: Ctx) {
-    const offset = Number(body.price_offset_cents ?? 0)
-    if (!Number.isInteger(offset)) {
-      return json({ error: 'The price difference must be whole cents.' }, 400)
-    }
     const { data, error } = await db.rpc('save_site_setup', {
       p_property_id: String(body.property_id ?? ''),
-      p_offset_cents: offset,
+      // Retired column (plan B1): written as zero, read by nothing.
+      p_offset_cents: 0,
       p_tiers: Array.isArray(body.tiers) ? body.tiers : [],
       p_apply_upcoming: body.apply_upcoming === true,
     })
     if (error) return json(named(error), 409)
     return json({ ok: true, ...(data as Row) })
+  },
+
+  // A block's price per type of park, as a difference from the reference
+  // site. Every site in the block charges the same, and every upcoming
+  // night the block sells is re-priced before this returns.
+  async save_block_pricing({ body }: Ctx) {
+    const raw = Array.isArray(body.offsets) ? body.offsets as Row[] : []
+    const offsets = raw.map((o) => ({ code: String(o?.code ?? ''), offset_cents: Number(o?.offset_cents) }))
+    if (!offsets.length) return json({ error: 'offsets is required' }, 400)
+    if (offsets.some((o) => !Number.isInteger(o.offset_cents))) {
+      return json({ error: 'An adjustment must be whole cents.' }, 400)
+    }
+    const { data, error } = await db.rpc('set_block_offsets', {
+      p_block_id: String(body.block_id ?? ''),
+      p_offsets: offsets,
+    })
+    if (error) return json(named(error), 409)
+    return json({ ok: true, events_updated: data })
   },
 
   // A new driveway: its host by name, and its area, new or existing.

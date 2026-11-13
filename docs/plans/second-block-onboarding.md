@@ -424,6 +424,32 @@ wardens can reach.
 - Done when: on test, two sites in one block always show and charge the
   same figure, and one surge change re-prices every block.
 
+**Status, 13 Nov 2026: built** (`feature/block-pricing`), on top of A3.
+What differs from the brief above, and why:
+
+- **The database does the following, not `gate-ops`.** `set_tier_price`
+  and `apply_price_template` call `apply_price_offsets` before they
+  return, so there is no moment at which two sites in a block disagree.
+  `gate-ops` no longer makes the second call.
+- **The reference block's adjustment is always zero**, refused by name
+  (`REFERENCE_BLOCK`) otherwise, and 84 Paice Ave follows 86 exactly.
+  A price on any other site is `REFERENCE_PRICE_ONLY`.
+- **The adjustments are set from the Sites tab as it is,** under the
+  site's details ("Prices in <area>"), until B3 replaces that tab. The
+  per-site price difference is gone from it. Tonight shows price
+  buttons on the reference site's cards only; the rest say they follow.
+- **The checkout guard is `expected_price_cents`**, refused as
+  `PRICE_CHANGED` with the new price, and the space given back. A page
+  that sends none (one cached from before this change) is not refused:
+  it is still charged the database price.
+- **An event the reference site does not sell is not re-priced** —
+  there is nothing to measure it from, and no price on it can be set.
+  Every event today includes 86 Paice Ave.
+- **At release:** a new block starts at zero for every type. Gribblehurst
+  Rd's adjustments are its $40 / $50 less 86 Paice Ave's prices for that
+  night (zero if they match); check them on the Sites tab before it is
+  confirmed for sale.
+
 ### B2 — `live-event`
 
 - `event.is_live`, at most one true (partial unique index). Set and

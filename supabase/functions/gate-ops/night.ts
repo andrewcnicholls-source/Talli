@@ -6,7 +6,7 @@ import { db, isGateAddress, type Row } from './shared.ts'
 // end of a driveway, one request that sometimes carries a little too much
 // beats four that each might not arrive.
 export async function nightState(eventId: string, allowed: Set<string> | null = null) {
-  const [listRes, tierRes, rateRes, chargeRes, siteRes] = await Promise.all([
+  const [listRes, tierRes, rateRes, chargeRes, siteRes, refRes] = await Promise.all([
     db.from('v_gate_list').select('*').eq('event_id', eventId),
     db.from('v_tier_availability').select('*').eq('event_id', eventId)
       .order('sort_order', { ascending: true }),
@@ -27,8 +27,11 @@ export async function nightState(eventId: string, allowed: Set<string> | null = 
       .select('property_id, status, property:property_id(name, address, lat, lng, site_guide_url, ' +
               'fill_notes, block_id, block:block_id(name, sort_order, anchor_property_id))')
       .eq('event_id', eventId),
+    // The one site a price is set on (plan B1); every other follows it.
+    db.rpc('reference_property'),
   ])
   if (listRes.error) throw listRes.error
+  const ref = refRes.data ? String(refRes.data) : null
   if (siteRes.error) throw siteRes.error
   if (tierRes.error) throw tierRes.error
   if (chargeRes.error) throw chargeRes.error
@@ -97,6 +100,7 @@ export async function nightState(eventId: string, allowed: Set<string> | null = 
       block_id: o.property?.block_id ?? null,
       block_name: o.property?.block?.name ?? null,
       is_anchor: o.property?.block?.anchor_property_id === o.property_id,
+      is_reference: ref !== null && String(o.property_id) === ref,
       block_sort: o.property?.block?.sort_order ?? 0,
     }))
     .sort((a: Row, b: Row) =>

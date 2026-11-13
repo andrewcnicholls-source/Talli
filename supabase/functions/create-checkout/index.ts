@@ -222,6 +222,22 @@ const SALE_ERRORS: Record<string, { status: number; message: string }> = {
       'The only space left is on the street verge, which we place by hand on ' +
       'the night. Come to the parking address and ask the warden.',
   },
+  PRICE_CHANGED: {
+    status: 409,
+    message:
+      'The price for that option has just changed. Check the new price and book again.',
+  },
+}
+
+// What the page showed the customer for the space, sent as an expectation
+// and never as an amount: it is compared with what the database charged and
+// can only stop a sale, never change one. Absent (an older cached page) the
+// check is skipped — the database price is charged either way.
+function expectedPrice(body: Record<string, unknown>): number | null {
+  const v = body.expected_price_cents
+  if (v === undefined || v === null || v === '') return null
+  const n = Number(v)
+  return Number.isInteger(n) ? n : NaN
 }
 
 Deno.serve(async (req) => {
@@ -273,6 +289,10 @@ Deno.serve(async (req) => {
   }
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
     return json({ error: 'That email address does not look right' }, 400)
+  }
+  const expected = expectedPrice(body)
+  if (Number.isNaN(expected)) {
+    return json({ error: 'expected_price_cents must be whole cents' }, 400)
   }
 
   // Extras arrive as {code, qty} and are taken no further than that. The
@@ -412,6 +432,19 @@ Deno.serve(async (req) => {
     return json({ error: 'Could not read the booking back' }, 500)
   }
   const booking = bookingRow as Row
+
+  // ---- 3b. The price shown is the price paid (plan B1). A surge between
+  // the page loading and the tap on Pay, or a block whose sites disagree,
+  // would otherwise charge a figure the customer never saw. Give the space
+  // back and say so by name; the page reloads and shows the new price.
+  if (expected !== null && booking.amount_cents !== expected) {
+    await abandon()
+    return json({
+      error: SALE_ERRORS.PRICE_CHANGED.message,
+      code: 'PRICE_CHANGED',
+      price_cents: booking.amount_cents,
+    }, SALE_ERRORS.PRICE_CHANGED.status)
+  }
 
   const [{ data: tier }, { data: property }] = await Promise.all([
     db.from('offer_tier').select('label, event_offer_id').eq('code', tierCode)
