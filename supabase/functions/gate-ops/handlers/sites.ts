@@ -80,24 +80,75 @@ export const sites: Record<string, Handler> = {
 
   // ---------------------------------------------- setting up sites
 
-  // Every driveway with its area, host, offset and usual counts, for the
-  // Sites tab. Short lists; one round trip.
+  // Everything the Sites page draws (plan B3), in one round trip: every
+  // driveway with its details, usual counts and the upcoming nights it
+  // sells (with that night's counts and what has sold); the areas with
+  // their anchor and price adjustments; the hosts to choose from; and the
+  // upcoming nights, for the tick list and the night filter. Short lists.
   async sites_setup(_: Ctx) {
-    const [propRes, defRes, blockRes, refRes, offRes] = await Promise.all([
+    // A night still in progress is still upcoming: its numbers can move.
+    const since = new Date(Date.now() - 24 * 3600 * 1000).toISOString()
+    const [propRes, defRes, blockRes, refRes, offRes, hostRes, nightRes] = await Promise.all([
       db.from('property')
-        .select('id, name, address, lat, lng, active, block_id, ' +
+        .select('id, name, address, lat, lng, active, block_id, host_id, walk_minutes, ' +
+                'site_guide_url, fill_notes, ' +
                 'host:host_id(name), block:block_id(name, sort_order, anchor_property_id)')
         .order('name', { ascending: true }),
       db.from('property_tier_default').select('property_id, code, capacity, online'),
-      db.from('block').select('id, name, sort_order').eq('active', true)
+      db.from('block').select('id, name, sort_order, anchor_property_id').eq('active', true)
         .order('sort_order', { ascending: true }),
       db.rpc('reference_property'),
       db.from('block_tier_offset').select('block_id, code, offset_cents'),
+      db.from('host').select('id, name').order('name', { ascending: true }),
+      db.from('event').select('id, name, starts_at, expected_end_at, status, is_live')
+        .not('status', 'in', '(closed,cancelled)')
+        .gt('starts_at', since)
+        .order('starts_at', { ascending: true }),
     ])
-    if (propRes.error) throw propRes.error
-    if (defRes.error) throw defRes.error
-    if (blockRes.error) throw blockRes.error
-    if (offRes.error) throw offRes.error
+    for (const r of [propRes, defRes, blockRes, offRes, hostRes, nightRes]) {
+      if (r.error) throw r.error
+    }
+    const now = Date.now()
+    const nights = ((nightRes.data ?? []) as Row[])
+      .filter((e) => new Date(e.expected_end_at ?? e.starts_at).getTime() > now)
+      .map((e) => ({ id: e.id, name: e.name, starts_at: e.starts_at, status: e.status,
+        is_live: e.is_live === true }))
+    const nightIds = nights.map((n) => String(n.id))
+
+    // Which of those nights each site sells, and its numbers on each.
+    const offersBySite = new Map<string, Row[]>()
+    if (nightIds.length) {
+      const [eoRes, tierRes] = await Promise.all([
+        db.from('event_offer').select('event_id, property_id, status').in('event_id', nightIds),
+        db.from('v_tier_availability')
+          .select('event_id, property_id, code, capacity, gate_reserve, sold')
+          .in('event_id', nightIds),
+      ])
+      if (eoRes.error) throw eoRes.error
+      if (tierRes.error) throw tierRes.error
+      const tiers = new Map<string, Row[]>()
+      for (const t of (tierRes.data ?? []) as Row[]) {
+        const k = `${t.event_id}|${t.property_id}`
+        const list = tiers.get(k) ?? []
+        list.push({
+          code: t.code,
+          capacity: t.capacity ?? 0,
+          online: Math.max(0, (t.capacity ?? 0) - (t.gate_reserve ?? 0)),
+          sold: t.sold ?? 0,
+        })
+        tiers.set(k, list)
+      }
+      for (const o of (eoRes.data ?? []) as Row[]) {
+        const list = offersBySite.get(String(o.property_id)) ?? []
+        list.push({
+          event_id: o.event_id,
+          status: o.status,
+          tiers: tiers.get(`${o.event_id}|${o.property_id}`) ?? [],
+        })
+        offersBySite.set(String(o.property_id), list)
+      }
+    }
+
     const ref = refRes.data ? String(refRes.data) : null
     const refBlock = ref
       ? ((propRes.data ?? []) as Row[]).find((p) => String(p.id) === ref)?.block_id ?? null
@@ -132,12 +183,92 @@ export const sites: Record<string, Handler> = {
       block_name: p.block?.name ?? null,
       block_sort: p.block?.sort_order ?? 0,
       is_anchor: p.block?.anchor_property_id === p.id,
+      host_id: p.host_id,
       host_name: p.host?.name ?? null,
+      walk_minutes: p.walk_minutes ?? null,
+      site_guide_url: p.site_guide_url ?? null,
+      fill_notes: p.fill_notes ?? null,
       is_reference: String(p.id) === ref,
       defaults: defaults.get(String(p.id)) ?? [],
+      nights: offersBySite.get(String(p.id)) ?? [],
     })).sort((a: Row, b: Row) => (a.block_sort - b.block_sort) ||
       String(a.name).localeCompare(String(b.name)))
-    return json({ sites, blocks })
+    return json({ sites, blocks, hosts: hostRes.data ?? [], nights })
+  },
+
+  // A site's details (plan B3). Each field sent is written; one left out
+  // is left alone. The database refuses, by name, a booked site leaving
+  // its area or switching off (SITE_HAS_BOOKINGS), the reference site
+  // doing either (REFERENCE_SITE), and an anchor leaving an area that
+  // still has other sites (SITE_IS_ANCHOR).
+  async save_site_details({ body }: Ctx) {
+    const details = siteDetails(body)
+    if (typeof details === 'string') return json({ error: details }, 400)
+    const { data, error } = await db.rpc('save_site_details', {
+      p_property_id: String(body.property_id ?? ''),
+      p_details: details,
+    })
+    if (error) return json(named(error), 409)
+    return json({ ok: true, ...(data as Row) })
+  },
+
+  // A new site from one set of details: the address and position the
+  // Places picker filled in (or typed), its host and its area. It joins
+  // no night until it is ticked onto one.
+  async add_site({ body }: Ctx) {
+    const details = siteDetails(body)
+    if (typeof details === 'string') return json({ error: details }, 400)
+    const { data, error } = await db.rpc('add_site', { p_details: details })
+    if (error) return json(named(error), 409)
+    return json({ ok: true, property_id: data })
+  },
+
+  // Which of an area's sites is its anchor: the address a customer is
+  // told, "<anchor> or within 100m". Always one of its own active sites.
+  async set_block_anchor({ body }: Ctx) {
+    const { error } = await db.rpc('set_block_anchor', {
+      p_block_id: String(body.block_id ?? ''),
+      p_property_id: String(body.property_id ?? ''),
+    })
+    if (error) return json(named(error), 409)
+    return json({ ok: true })
+  },
+
+  // The nights a site sells, as ticks. It joins a night pending, at its
+  // usual numbers; going on sale online is set_offer_status, a separate
+  // tap. Unticking a night anyone is booked on is refused.
+  async set_site_nights({ body }: Ctx) {
+    const ids = (v: unknown) => Array.isArray(v) ? v.map((x) => String(x)).filter(Boolean) : []
+    const { data, error } = await db.rpc('set_site_nights', {
+      p_property_id: String(body.property_id ?? ''),
+      p_add: ids(body.add),
+      p_remove: ids(body.remove),
+    })
+    if (error) return json(named(error), 409)
+    return json({ ok: true, ...(data as Row) })
+  },
+
+  // One night's actual spaces per type at one site, overriding its usual
+  // numbers for that night only. Never below what has sold (BELOW_SOLD).
+  async save_site_night({ body, eventId }: Ctx) {
+    if (!eventId) return json({ error: 'event_id is required' }, 400)
+    const tiers = Array.isArray(body.tiers) ? (body.tiers as Row[]).map((t) => ({
+      code: String(t?.code ?? ''),
+      capacity: Number(t?.capacity),
+      online: Number(t?.online),
+    })) : []
+    if (!tiers.length) return json({ error: 'tiers is required' }, 400)
+    if (tiers.some((t) => !Number.isInteger(t.capacity) || !Number.isInteger(t.online) ||
+        t.capacity < 0 || t.online < 0)) {
+      return json({ error: 'Counts are whole numbers, none below zero.' }, 400)
+    }
+    const { data, error } = await db.rpc('set_site_night', {
+      p_event_id: eventId,
+      p_property_id: String(body.property_id ?? ''),
+      p_tiers: tiers,
+    })
+    if (error) return json(named(error), 409)
+    return json({ ok: true, ...(data as Row) })
   },
 
   // A site's usual counts per type; optionally pushed to the upcoming
@@ -191,4 +322,42 @@ export const sites: Record<string, Handler> = {
     if (error) return json(named(error), 409)
     return json({ ok: true, property_id: data })
   },
+}
+
+// The details a site may be given, from the request body, keeping only the
+// keys that were sent: absent means "leave it". Returns a message when a
+// field is the wrong shape; the database checks the rest.
+const TEXT_FIELDS = ['name', 'address', 'site_guide_url', 'fill_notes', 'new_host_name',
+  'new_block_name', 'host_id', 'block_id']
+function siteDetails(body: Record<string, unknown>): Row | string {
+  const out: Row = {}
+  for (const k of TEXT_FIELDS) {
+    if (body[k] !== undefined && body[k] !== null) out[k] = String(body[k])
+  }
+  const blank = (v: unknown) => v === null || v === undefined || v === ''
+  if (body.lat !== undefined || body.lng !== undefined) {
+    if (blank(body.lat) && blank(body.lng)) {
+      out.lat = null
+      out.lng = null
+    } else {
+      const lat = Number(body.lat)
+      const lng = Number(body.lng)
+      if (blank(body.lat) || blank(body.lng) || !Number.isFinite(lat) || !Number.isFinite(lng)) {
+        return 'That map position does not look right.'
+      }
+      out.lat = lat
+      out.lng = lng
+    }
+  }
+  if (body.walk_minutes !== undefined) {
+    if (blank(body.walk_minutes)) {
+      out.walk_minutes = null
+    } else {
+      const n = Number(body.walk_minutes)
+      if (!Number.isInteger(n) || n < 0 || n > 999) return 'Walking time is whole minutes.'
+      out.walk_minutes = n
+    }
+  }
+  if (body.active !== undefined) out.active = body.active === true
+  return out
 }

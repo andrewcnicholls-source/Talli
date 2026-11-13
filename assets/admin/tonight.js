@@ -1,7 +1,9 @@
 /* Talli Parking — gate screen: tonight.js
 
-   The Tonight tab: the board, prices, spaces, extras, money and the
-   event's status.
+   The Event tab (Tonight, before plan B3): the event's status and live
+   switch, the reference price, and the night's running picture — the
+   board, what is left at each site, extras and money. Sites and their
+   spaces are set on the Sites page.
  */
 
 import { GATE_ORDER, asDate, asTime, button, call, el, hide, make, money,
@@ -9,6 +11,7 @@ import { GATE_ORDER, asDate, asTime, button, call, el, hide, make, money,
 import { isOperator } from './session.js';
 import { loadList, multiSite, refreshEvents, renderEventOptions, siteName } from './night.js';
 import { showTab } from './tabs.js';
+import { presetNight } from './sites.js';
 import { seriesLine } from './series.js';
 
 /* ------------------------------------------------------ tonight's board */
@@ -48,86 +51,50 @@ export function renderPrices() {
     return;
   }
 
+  // One price per area (plan B1): the price is set on the reference site
+  // and every other site follows at its area's adjustment, so only the
+  // reference site's cards are here. The server refuses any other.
+  var priced = tiers.filter(function (t) { return isReferenceSite(t.property_id); });
+  if (priced.length) {
+    priced.forEach(function (t) { wrap.appendChild(tierCard(t)); });
+  } else {
+    wrap.appendChild(make('p', 'ad-empty',
+      'The reference site is not selling this night, so there is no price to move here.'));
+  }
   if (isOperator()) wrap.appendChild(siteBoard());
-  tiers.forEach(function (t) { wrap.appendChild(tierCard(t)); });
 }
 
-// Each driveway's online status for this event. A host's site sells
-// online only once it is confirmed; paused stops the website and leaves
-// the gate working.
+// The night's running picture at every site: whether it sells online, and
+// what is left of each type. Read-only. Which sites sell this night and
+// how many spaces each has are set on the Sites page (plan B3); this link
+// opens it on this night.
 function siteBoard() {
   var box = make('div', 'ad-sites');
-  box.appendChild(make('div', 'ad-sites-head', 'Sites tonight'));
+  box.appendChild(make('div', 'ad-sites-head', 'Every site tonight'));
   state.sites.forEach(function (site) {
     var line = make('div', 'ad-site-line');
     line.appendChild(make('span', 'ad-site-name',
       (site.block_name ? site.block_name + ' · ' : '') + site.name));
-    line.appendChild(make('span', 'ad-chip is-' + site.status, site.status));
-    var next = site.status === 'confirmed' ? 'paused' : 'confirmed';
-    line.appendChild(button('ad-nudge', next === 'confirmed' ? 'Put on sale' : 'Pause online',
-      function () {
-        call('set_offer_status', {
-          event_id: state.eventId, property_id: site.property_id, status: next,
-        })
-          .then(function () {
-            toast(site.name + ' ' + (next === 'confirmed' ? 'on sale online' : 'paused online'), 'good');
-            return loadList(true);
-          })
-          .catch(function (err) { toast(err.message, 'bad'); });
-      }));
+    line.appendChild(make('span', 'ad-chip is-' + site.status,
+      site.status === 'confirmed' ? 'on sale' : site.status));
     box.appendChild(line);
+    inGateOrder(state.tiers.filter(function (t) { return t.property_id === site.property_id; }))
+      .forEach(function (t) {
+        box.appendChild(make('div', 'ad-site-left', shortName(t) + ': ' + leftLine(t)));
+      });
   });
-
-  // Another driveway for this event. It joins as pending with no spaces:
-  // set its counts on its cards below, then put it on sale.
-  var add = make('div', 'ad-site-line');
-  var picker = document.createElement('select');
-  picker.className = 'ad-select';
-  picker.setAttribute('aria-label', 'Add a site to this event');
-  var first = document.createElement('option');
-  first.value = '';
-  first.textContent = 'Add a site…';
-  picker.appendChild(first);
-  picker.addEventListener('focus', function () { fillSiteOptions(picker); }, { once: true });
-  picker.addEventListener('change', function () {
-    var id = picker.value;
-    if (!id) return;
-    var label = picker.options[picker.selectedIndex].textContent;
-    call('add_offer', { event_id: state.eventId, property_id: id })
-      .then(function () {
-        toast(label + ' added — set its spaces, then put it on sale', 'good');
-        return loadList(true);
-      })
-      .catch(function (err) { toast(err.message, 'bad'); picker.value = ''; });
-  });
-  add.appendChild(picker);
-  box.appendChild(add);
+  var more = make('p', 'ad-money-more');
+  more.appendChild(button('ad-link', 'Change spaces or sites for this night', function () {
+    presetNight(state.eventId);
+    showTab('sites');
+  }));
+  more.appendChild(document.createTextNode(' on the Sites page.'));
+  box.appendChild(more);
   return box;
 }
 
-function fillSiteOptions(picker) {
-  call('site_options', { event_id: state.eventId })
-    .then(function (data) {
-      var sites = data.sites || [];
-      if (!sites.length) {
-        picker.options[0].textContent = 'Every site is already in this event';
-        return;
-      }
-      sites.forEach(function (s) {
-        var opt = document.createElement('option');
-        opt.value = s.property_id;
-        opt.textContent = (s.block_name ? s.block_name + ' · ' : '') + s.name;
-        picker.appendChild(opt);
-      });
-    })
-    .catch(function (err) { toast(err.message, 'bad'); });
-}
-
-// Everything about one type of space on one card: what it is, what it
-// costs, how many there are, how many have gone, how many are being kept
-// back for walk-ups, and what that leaves the website. The yard used to
-// be a separate section of four cards split by corner, which is a fact
-// about 86 Paice Ave rather than about parking.
+// Everything about one type of space at the reference site: what it
+// costs, cash and card, and what is left.
 //
 // There is no Sold out button. Sold out is what the count says, and a
 // button that could disagree with the count is a second version of the
@@ -136,16 +103,10 @@ function tierCard(t) {
   var gone = t.manually_sold_out || t.spots_left_gate <= 0;
   var card = make('div', 'ad-price' + (gone ? ' is-gone' : ''));
 
-  // One price per area (plan B1): a price is set on the reference site
-  // and every other site follows at its area's adjustment, so only the
-  // reference site's card can move a price. The server refuses the rest.
-  var priced = isReferenceSite(t.property_id);
   var head = make('div', 'ad-price-head');
   head.appendChild(make('span', 'ad-price-name',
     (multiSite() ? siteName(t.property_id) + ' · ' : '') + shortName(t)));
-  head.appendChild(priced
-    ? button('ad-price-tag', money(t.price_cents), function () { openPrice(t); })
-    : make('span', 'ad-price-tag', money(t.price_cents)));
+  head.appendChild(button('ad-price-tag', money(t.price_cents), function () { openPrice(t); }));
   card.appendChild(head);
 
   // The number above is what goes on the sign, and it is what a cash
@@ -157,25 +118,14 @@ function tierCard(t) {
       money(t.price_cents + surchargeOn(t.price_cents, 'tap_to_pay'))));
   }
 
-  if (priced) {
-    var row = make('div', 'ad-price-actions');
-    row.appendChild(button('ad-nudge', '−$5', function () {
-      setPrice(t, t.price_cents - 500);
-    }));
-    row.appendChild(button('ad-nudge', '+$5', function () {
-      setPrice(t, t.price_cents + 500);
-    }));
-    card.appendChild(row);
-  } else {
-    card.appendChild(make('div', 'ad-price-card',
-      'follows the reference site at this area’s adjustment (Sites tab)'));
-  }
-
-  var spaces = spacesRow(t);
-  if (spaces) card.appendChild(spaces);
-
-  var reserve = reserveRow(t);
-  if (reserve) card.appendChild(reserve);
+  var row = make('div', 'ad-price-actions');
+  row.appendChild(button('ad-nudge', '−$5', function () {
+    setPrice(t, t.price_cents - 500);
+  }));
+  row.appendChild(button('ad-nudge', '+$5', function () {
+    setPrice(t, t.price_cents + 500);
+  }));
+  card.appendChild(row);
 
   card.appendChild(make('div', 'ad-price-left', leftLine(t)));
 
@@ -186,8 +136,8 @@ function isReferenceSite(id) {
   return state.sites.some(function (s) { return s.property_id === id && s.is_reference; });
 }
 
-// The conclusion the other two rows add up to, in the words the question
-// gets asked in: how many have gone, and can the website still sell one.
+// The conclusion the counts add up to, in the words the question gets
+// asked in: how many have gone, and can the website still sell one.
 function leftLine(t) {
   if (t.manually_sold_out) return 'Marked sold out';
   if (!t.capacity) return 'No spaces set for tonight';
@@ -198,104 +148,6 @@ function leftLine(t) {
   return t.gate_reserve > 0
     ? taken + ' · nothing online, the rest is held for walk-ups'
     : taken + ' · nothing online';
-}
-
-// How many of this type there are tonight. A space lost to a bad park is
-// one tap here: Andrew knows which bays are which, so a lost one in the
-// back yard is one fewer Standard and he does not have to say which bay.
-function spacesRow(t) {
-  if (typeof t.capacity !== 'number') return null;
-
-  var row = make('div', 'ad-tally');
-  row.appendChild(make('span', 'ad-tally-key', 'spaces tonight'));
-
-  var down = button('ad-count-btn', '−', function () { nudgeSpaces(t, -1); });
-  down.title = 'One fewer — a space lost tonight';
-  row.appendChild(down);
-
-  row.appendChild(make('span', 'ad-tally-num', String(t.capacity)));
-
-  var up = button('ad-count-btn', '+', function () { nudgeSpaces(t, 1); });
-  up.title = 'One more — a space squeezed in tonight';
-  row.appendChild(up);
-
-  return row;
-}
-
-// A delta, for the same reason the reserve sends one: the figure on the
-// glass may be another phone's work, and a tap must move the count the
-// way it was meant rather than write back what happened to be showing.
-function nudgeSpaces(tier, delta) {
-  call('set_capacity', {
-    event_id: state.eventId,
-    property_id: tier.property_id,
-    tier_code: tier.code,
-    delta: delta,
-  })
-    .then(function (data) {
-      toast(shortName(tier) + ': ' + data.capacity + ' space' +
-        (data.capacity === 1 ? '' : 's') + ' tonight', 'good');
-      return loadList(true);
-    })
-    .catch(function (err) { toast(err.message, 'bad'); });
-}
-
-// Spaces of this tier the website may not sell down into, for tonight and
-// tonight only. Two taps, the same − / + as the row above it, because it
-// is the same kind of decision made at the same moment: one more, one fewer.
-//
-// "Release" rather than "−" in words, because that is what lowering it
-// does — Standard nearly gone an hour before kickoff is the reason this
-// control exists, and the answer is to put two of the held spaces back on
-// the website rather than to stand at the gate hoping.
-function reserveRow(t) {
-  // No reserve in the payload means the backend predates it: an older
-  // gate-ops, or a database without the column. Drawing a 0 there would
-  // be a claim about the night that nothing has told us, so draw nothing.
-  if (typeof t.gate_reserve !== 'number') return null;
-
-  var row = make('div', 'ad-reserve');
-
-  row.appendChild(make('span', 'ad-reserve-key', 'held for walk-ups'));
-
-  var down = button('ad-count-btn', '−', function () {
-    nudgeReserve(t, -1);
-  });
-  // Not disabled at zero. The number beside it is thirty seconds old at
-  // worst and may be another phone's work at best; the database clamps,
-  // and a button that refuses to press is worse than one that no-ops.
-  down.title = 'Release one to the website';
-  row.appendChild(down);
-
-  row.appendChild(make('span', 'ad-reserve-num', String(t.gate_reserve)));
-
-  var up = button('ad-count-btn', '+', function () {
-    nudgeReserve(t, 1);
-  });
-  up.title = 'Hold one more back from the website';
-  row.appendChild(up);
-
-  return row;
-}
-
-// One more, one fewer — never "set it to this". What the screen is showing
-// can be stale, and a tap must move the reserve the way it was meant
-// rather than write back the figure that happened to be on the glass.
-function nudgeReserve(tier, delta) {
-  call('set_reserve', {
-    event_id: state.eventId,
-    property_id: tier.property_id,
-    tier_code: tier.code,
-    delta: delta,
-  })
-    .then(function (data) {
-      var n = data.reserve;
-      toast(shortName(tier) + ': ' +
-        (n === 0 ? 'nothing held back now' :
-          n + ' held for walk-ups'), 'good');
-      return loadList(true);
-    })
-    .catch(function (err) { toast(err.message, 'bad'); });
 }
 
 // The dropdown under the price cards. It reads the same templates the

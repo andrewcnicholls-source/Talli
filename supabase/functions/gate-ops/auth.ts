@@ -164,6 +164,7 @@ export const OPERATOR_ONLY = new Set([
   'set_capacity', 'set_price', 'apply_price_template', 'set_reserve',
   'set_offer_status', 'site_options', 'add_offer',
   'sites_setup', 'save_site', 'create_site', 'save_block_pricing',
+  'save_site_details', 'add_site', 'set_block_anchor', 'set_site_nights', 'save_site_night',
   'series_list', 'save_series', 'set_event_series', 'upload_picture',
   'set_live_event',
 ])

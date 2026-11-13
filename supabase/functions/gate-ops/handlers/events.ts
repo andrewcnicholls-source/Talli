@@ -40,7 +40,9 @@ export const events: Record<string, Handler> = {
     if (tplRes.error) throw tplRes.error
     if (propRes.error) throw propRes.error
 
-    const { data: fallback } = await db.rpc('default_event_property')
+    // The reference site (plan B3): a new night is made there, and every
+    // other active site joins it pending, at its own usual numbers.
+    const { data: fallback } = await db.rpc('reference_property')
     return json({
       templates: tplRes.data ?? [],
       properties: propRes.data ?? [],
