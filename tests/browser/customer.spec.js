@@ -84,7 +84,9 @@ test('a customer books a block from the series page, and is sent to that block',
 
   await expect(page.locator('#cf-come-to')).toContainText('Gribblehurst');
   await expect(page.locator('#cf-come-to')).not.toContainText('Paice');
-  await expect(page.locator('#cf-directions')).toHaveAttribute('href', /getting-here\.html\?block=/);
+  // Directions are the booked block's /go/ page (plan A4), never Paice Ave's.
+  const [booked] = await rest(`property?id=eq.${FIX.gribAnchor}&select=block:block_id(slug)`);
+  await expect(page.locator('#cf-directions')).toHaveAttribute('href', '/go/' + booked.block.slug);
 
   const [row] = await rest(`booking?vehicle_rego=eq.${rego}&select=status,amount_cents`);
   expect(row).toEqual({ status: 'paid', amount_cents: 4000 });

@@ -1235,25 +1235,69 @@ fi
 # ---------------------------------------------------------------------
 head "A customer is sent to the block they booked, not to Paice Ave"
 # ---------------------------------------------------------------------
-# getting-here.html on its own is 86 Paice Ave. The confirmation page and
-# email must hand it the booked block, and the page must drop the Paice
-# Ave directions if it cannot show that block.
-if grep -q "getting-here.html?block=" assets/confirmed.js; then
-  pass "the confirmation page links to directions for the booked block"
+# The confirmation page and email link to the booked block's /go/ page
+# (plan A4), the one its Locate Us card opens. getting-here.html lists
+# every area and states no address of its own; an old ?block=<id> link
+# forwards to that block's /go/ page, and never falls back to Paice Ave.
+if grep -q "'/go/' + encodeURIComponent(go)" assets/confirmed.js &&
+   grep -q "b.property.block && b.property.block.slug" assets/confirmed.js; then
+  pass "the confirmation page links to the booked block's /go/ page"
 else
   fail "the confirmation page's directions ignore the booked block"
 fi
-if grep -q 'getting-here` +' supabase/functions/stripe-webhook/index.ts &&
-   grep -q '?block=${encodeURIComponent(String(property.block_id))}' supabase/functions/stripe-webhook/index.ts; then
-  pass "the confirmation email links to directions for the booked block"
+if grep -q 'block?.slug ?? (property as Row | null)?.slug' supabase/functions/stripe-webhook/index.ts &&
+   grep -q '${SITE_URL}/go/${encodeURIComponent(String(goSlug))}' supabase/functions/stripe-webhook/index.ts; then
+  pass "the confirmation email links to the booked block's /go/ page"
 else
   fail "the confirmation email's directions ignore the booked block"
 fi
 if grep -q '<script src="assets/getting-here.js">' getting-here.html &&
-   grep -q "function noDirections" assets/getting-here.js; then
-  pass "getting-here takes a block, and hides Paice Ave when it cannot show it"
+   grep -q "window.location.replace('/go/'" assets/getting-here.js &&
+   ! grep -qi 'paice' assets/getting-here.js &&
+   ! grep -q 'maps?q=86' getting-here.html; then
+  pass "getting-here lists the areas, forwards ?block= to /go/, and names no address itself"
 else
-  fail "getting-here.html no longer handles ?block="
+  fail "getting-here.html still states an address of its own, or no longer handles ?block="
+fi
+if ! grep -qi 'walking time from 86 paice' eden-park.html; then
+  pass "the Eden Park guide gives no walk from Paice Ave"
+else
+  fail "eden-park.html still gives the walk from 86 Paice Ave to everyone"
+fi
+
+# ---------------------------------------------------------------------
+head "The Locate Us card opens a public page that never shows bank details"
+# ---------------------------------------------------------------------
+# Plan A4. The card's QR opens /go/<slug>, rendered by a Pages Function
+# with the anon key. The bank details are on the warden's Site guide only,
+# through gate-ops; the public page must never ask for them. Pictures are
+# written only by gate-ops with the service role, so no storage policy may
+# let a browser write to the bucket.
+if grep -q '"/go/\*"' _routes.json && [ -f 'functions/go/[slug].js' ]; then
+  pass "/go/<slug> is served by a Pages Function"
+else
+  fail "/go/<slug> is not routed to functions/go/[slug].js"
+fi
+if ! grep -qiE 'bank_transfer|bank_details|account_number' functions/_lib/site.js; then
+  pass "the public pages never read the bank details"
+else
+  fail "functions/_lib/site.js mentions the bank details — the public /go/ page must never show them"
+fi
+if ! grep -qiE 'on storage\.objects' supabase/migrations/*site_guide_and_qr*.sql; then
+  pass "no storage policy lets a browser write site pictures"
+else
+  fail "a storage policy was added for site pictures — only gate-ops may write them"
+fi
+if grep -q "window.qrcode(0, 'H')" assets/locate-card.js; then
+  pass "the card's QR code uses error correction H"
+else
+  fail "the Locate Us card's QR code is no longer error correction H — the pin and a photo of the card need it"
+fi
+if grep -q "'save_place_slug', 'upload_site_picture', 'save_site_picture', 'remove_site_picture'" \
+     supabase/functions/gate-ops/auth.ts; then
+  pass "changing a card's address or pictures is Andrew's alone"
+else
+  fail "the card's address or picture actions are not in OPERATOR_ONLY"
 fi
 
 # ---------------------------------------------------------------------

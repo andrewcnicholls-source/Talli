@@ -3,22 +3,11 @@
 // alone (OPERATOR_ONLY in auth.ts).
 
 import { type Ctx, type Handler } from '../auth.ts'
-import { db, json, minutes, named, type Row } from '../shared.ts'
+import { db, json, minutes, named, pictureFrom, type Row } from '../shared.ts'
 
-// Pictures for series pages and nights (plan A1). The bucket is public to
-// read and has no storage policy for browsers: only this function writes
-// to it, with the service role, for Andrew.
+// Pictures for series pages and nights (plan A1). The checks are
+// pictureFrom() in shared.ts, which the site pictures (plan A4) use too.
 const PICTURE_BUCKET = 'event-pictures'
-const PICTURE_MAX_BYTES = 5 * 1024 * 1024
-const PICTURE_TYPES: Record<string, { ext: string; magic: (b: Uint8Array) => boolean }> = {
-  'image/jpeg': { ext: 'jpg', magic: (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff },
-  'image/png': { ext: 'png', magic: (b) => b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47 },
-  'image/webp': {
-    ext: 'webp',
-    magic: (b) => String.fromCharCode(...b.slice(0, 4)) === 'RIFF' &&
-      String.fromCharCode(...b.slice(8, 12)) === 'WEBP',
-  },
-}
 const SERIES_FIELDS = 'id, slug, name, kind, venue, summary, picture_path, sort_order, active'
 
 export const events: Record<string, Handler> = {
@@ -308,26 +297,12 @@ export const events: Record<string, Handler> = {
       return json({ ok: true, picture_path: null })
     }
 
-    const type = PICTURE_TYPES[String(body.content_type ?? '')]
-    if (!type) {
-      return json({ error: 'A JPEG, PNG or WebP picture, please.', code: 'BAD_PICTURE' }, 400)
-    }
-    let bytes: Uint8Array
-    try {
-      bytes = Uint8Array.from(atob(String(body.data ?? '')), (c) => c.charCodeAt(0))
-    } catch {
-      return json({ error: 'That picture did not arrive whole. Try again.', code: 'BAD_PICTURE' }, 400)
-    }
-    if (!bytes.length || bytes.length > PICTURE_MAX_BYTES) {
-      return json({ error: 'Pictures up to 5 MB, please.', code: 'PICTURE_TOO_BIG' }, 400)
-    }
-    if (!type.magic(bytes)) {
-      return json({ error: 'That file is not the picture it says it is.', code: 'BAD_PICTURE' }, 400)
-    }
+    const pic = pictureFrom(body)
+    if (pic instanceof Response) return pic
 
-    const path = `${target}/${id}/${crypto.randomUUID()}.${type.ext}`
+    const path = `${target}/${id}/${crypto.randomUUID()}.${pic.ext}`
     const { error: upErr } = await db.storage.from(PICTURE_BUCKET)
-      .upload(path, bytes, { contentType: String(body.content_type), upsert: false })
+      .upload(path, pic.bytes, { contentType: pic.type, upsert: false })
     if (upErr) throw upErr
     // The path within the bucket, not a full address: the host differs
     // between projects, and a page builds the address from its own.

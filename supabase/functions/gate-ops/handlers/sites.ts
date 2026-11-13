@@ -2,7 +2,16 @@
 // info tab shows, and the Sites tab, which is Andrew's alone.
 
 import { type Ctx, type Handler } from '../auth.ts'
-import { db, json, named, type Row } from '../shared.ts'
+import { db, json, named, pictureFrom, type Row } from '../shared.ts'
+
+// The pictures of where to park at a site (plan A4). Public to read; only
+// this function writes, with the service role.
+const SITE_PICTURE_BUCKET = 'site-pictures'
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const caption = (v: unknown) => {
+  const t = String(v ?? '').trim()
+  return t ? t.slice(0, 200) : null
+}
 
 export const sites: Record<string, Handler> = {
   // The account a walk-up pays into by bank transfer, for the Site info
@@ -88,14 +97,14 @@ export const sites: Record<string, Handler> = {
   async sites_setup(_: Ctx) {
     // A night still in progress is still upcoming: its numbers can move.
     const since = new Date(Date.now() - 24 * 3600 * 1000).toISOString()
-    const [propRes, defRes, blockRes, refRes, offRes, hostRes, nightRes] = await Promise.all([
+    const [propRes, defRes, blockRes, refRes, offRes, hostRes, nightRes, picRes] = await Promise.all([
       db.from('property')
         .select('id, name, address, lat, lng, active, block_id, host_id, walk_minutes, ' +
-                'site_guide_url, fill_notes, ' +
+                'site_guide_url, fill_notes, slug, ' +
                 'host:host_id(name), block:block_id(name, sort_order, anchor_property_id)')
         .order('name', { ascending: true }),
       db.from('property_tier_default').select('property_id, code, capacity, online'),
-      db.from('block').select('id, name, sort_order, anchor_property_id').eq('active', true)
+      db.from('block').select('id, name, slug, sort_order, anchor_property_id').eq('active', true)
         .order('sort_order', { ascending: true }),
       db.rpc('reference_property'),
       db.from('block_tier_offset').select('block_id, code, offset_cents'),
@@ -104,8 +113,10 @@ export const sites: Record<string, Handler> = {
         .not('status', 'in', '(closed,cancelled)')
         .gt('starts_at', since)
         .order('starts_at', { ascending: true }),
+      db.from('site_picture').select('id, property_id, path, caption, sort_order')
+        .order('sort_order', { ascending: true }).order('created_at', { ascending: true }),
     ])
-    for (const r of [propRes, defRes, blockRes, offRes, hostRes, nightRes]) {
+    for (const r of [propRes, defRes, blockRes, offRes, hostRes, nightRes, picRes]) {
       if (r.error) throw r.error
     }
     const now = Date.now()
@@ -172,6 +183,12 @@ export const sites: Record<string, Handler> = {
       list.push({ code: d.code, capacity: d.capacity, online: d.online })
       defaults.set(String(d.property_id), list)
     }
+    const pictures = new Map<string, Row[]>()
+    for (const p of (picRes.data ?? []) as Row[]) {
+      const list = pictures.get(String(p.property_id)) ?? []
+      list.push({ id: p.id, path: p.path, caption: p.caption ?? null })
+      pictures.set(String(p.property_id), list)
+    }
     const sites = ((propRes.data ?? []) as Row[]).map((p) => ({
       property_id: p.id,
       name: p.name,
@@ -188,6 +205,8 @@ export const sites: Record<string, Handler> = {
       walk_minutes: p.walk_minutes ?? null,
       site_guide_url: p.site_guide_url ?? null,
       fill_notes: p.fill_notes ?? null,
+      slug: p.slug,
+      pictures: pictures.get(String(p.id)) ?? [],
       is_reference: String(p.id) === ref,
       defaults: defaults.get(String(p.id)) ?? [],
       nights: offersBySite.get(String(p.id)) ?? [],
@@ -321,6 +340,102 @@ export const sites: Record<string, Handler> = {
     })
     if (error) return json(named(error), 409)
     return json({ ok: true, property_id: data })
+  },
+
+  // ------------------------------------- the Locate Us card (plan A4)
+
+  // A site's or an area's address on the Talli site, /go/<slug>. The
+  // database checks the shape and that no other site or area has it.
+  // Printed cards carry the old one: the Sites page warns before this.
+  async save_place_slug({ body }: Ctx) {
+    const kind = String(body.kind ?? '')
+    const id = String(body.id ?? '')
+    if (!['site', 'block'].includes(kind) || !UUID.test(id)) {
+      return json({ error: 'kind (site or block) and id are required' }, 400)
+    }
+    const { data, error } = await db.rpc('set_place_slug', {
+      p_kind: kind, p_id: id, p_slug: String(body.slug ?? ''),
+    })
+    if (error) return json(named(error), 409)
+    return json({ ok: true, slug: data })
+  },
+
+  // A picture of where to park, added to the end of a site's list. Sent
+  // as base64 on the same signed-in call as everything else, and checked
+  // for type, size and the file's own first bytes (pictureFrom).
+  async upload_site_picture({ body }: Ctx) {
+    const id = String(body.property_id ?? '')
+    if (!UUID.test(id)) return json({ error: 'property_id is required' }, 400)
+    const { data: site, error: sErr } = await db.from('property').select('id').eq('id', id).maybeSingle()
+    if (sErr) throw sErr
+    if (!site) return json({ error: 'That site does not exist.', code: 'NOT_FOUND' }, 404)
+
+    const pic = pictureFrom(body)
+    if (pic instanceof Response) return pic
+
+    const { data: last, error: lErr } = await db.from('site_picture').select('sort_order')
+      .eq('property_id', id).order('sort_order', { ascending: false }).limit(1)
+    if (lErr) throw lErr
+    const path = `site/${id}/${crypto.randomUUID()}.${pic.ext}`
+    const { error: upErr } = await db.storage.from(SITE_PICTURE_BUCKET)
+      .upload(path, pic.bytes, { contentType: pic.type, upsert: false })
+    if (upErr) throw upErr
+    const { data, error } = await db.from('site_picture').insert({
+      property_id: id, path, caption: caption(body.caption),
+      sort_order: ((last ?? [])[0]?.sort_order ?? -1) + 1,
+    }).select('id, property_id, path, caption, sort_order').single()
+    if (error) {
+      await db.storage.from(SITE_PICTURE_BUCKET).remove([path])
+      throw error
+    }
+    return json({ ok: true, picture: data })
+  },
+
+  // A picture's caption, or its place in the list (move: -1 up, 1 down).
+  async save_site_picture({ body }: Ctx) {
+    const id = String(body.picture_id ?? '')
+    if (!UUID.test(id)) return json({ error: 'picture_id is required' }, 400)
+    const { data: pic, error: pErr } = await db.from('site_picture')
+      .select('id, property_id').eq('id', id).maybeSingle()
+    if (pErr) throw pErr
+    if (!pic) return json({ error: 'That picture is gone.', code: 'NOT_FOUND' }, 404)
+
+    if (body.caption !== undefined) {
+      const { error } = await db.from('site_picture').update({ caption: caption(body.caption) }).eq('id', id)
+      if (error) throw error
+    }
+    const move = Number(body.move ?? 0)
+    if (move === -1 || move === 1) {
+      const { data: all, error } = await db.from('site_picture').select('id')
+        .eq('property_id', pic.property_id)
+        .order('sort_order', { ascending: true }).order('created_at', { ascending: true })
+      if (error) throw error
+      const ids = ((all ?? []) as Row[]).map((r) => String(r.id))
+      const at = ids.indexOf(id)
+      const to = at + move
+      if (at >= 0 && to >= 0 && to < ids.length) {
+        const swap = ids[at]
+        ids[at] = ids[to]
+        ids[to] = swap
+        for (let i = 0; i < ids.length; i++) {
+          const { error: oErr } = await db.from('site_picture').update({ sort_order: i }).eq('id', ids[i])
+          if (oErr) throw oErr
+        }
+      }
+    }
+    return json({ ok: true })
+  },
+
+  // A picture comes off the site, and out of the bucket.
+  async remove_site_picture({ body }: Ctx) {
+    const id = String(body.picture_id ?? '')
+    if (!UUID.test(id)) return json({ error: 'picture_id is required' }, 400)
+    const { data, error } = await db.from('site_picture').delete().eq('id', id).select('path')
+    if (error) throw error
+    if (!data?.length) return json({ error: 'That picture is gone.', code: 'NOT_FOUND' }, 404)
+    const { error: rmErr } = await db.storage.from(SITE_PICTURE_BUCKET).remove([String(data[0].path)])
+    if (rmErr) console.error('site picture left in the bucket', data[0].path, rmErr)
+    return json({ ok: true })
   },
 }
 

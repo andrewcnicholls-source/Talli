@@ -167,6 +167,7 @@ export const OPERATOR_ONLY = new Set([
   'save_site_details', 'add_site', 'set_block_anchor', 'set_site_nights', 'save_site_night',
   'series_list', 'save_series', 'set_event_series', 'upload_picture',
   'set_live_event',
+  'save_place_slug', 'upload_site_picture', 'save_site_picture', 'remove_site_picture',
 ])
 
 export const denied = (c: Caller | Denied): c is Denied =>

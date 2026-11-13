@@ -6,7 +6,7 @@ import { db, isGateAddress, type Row } from './shared.ts'
 // end of a driveway, one request that sometimes carries a little too much
 // beats four that each might not arrive.
 export async function nightState(eventId: string, allowed: Set<string> | null = null) {
-  const [listRes, tierRes, rateRes, chargeRes, siteRes, refRes, lostRes] = await Promise.all([
+  const [listRes, tierRes, rateRes, chargeRes, siteRes, refRes, lostRes, picRes] = await Promise.all([
     db.from('v_gate_list').select('*').eq('event_id', eventId),
     db.from('v_tier_availability').select('*').eq('event_id', eventId)
       .order('sort_order', { ascending: true }),
@@ -25,7 +25,8 @@ export async function nightState(eventId: string, allowed: Set<string> | null = 
     // offer "I'm at …" and say which site each car is at.
     db.from('event_offer')
       .select('property_id, status, property:property_id(name, address, lat, lng, site_guide_url, ' +
-              'fill_notes, block_id, block:block_id(name, sort_order, anchor_property_id))')
+              'fill_notes, slug, walk_minutes, block_id, ' +
+              'block:block_id(name, slug, sort_order, anchor_property_id))')
       .eq('event_id', eventId),
     // The one site a price is set on (plan B1); every other follows it.
     db.rpc('reference_property'),
@@ -34,6 +35,10 @@ export async function nightState(eventId: string, allowed: Set<string> | null = 
       .select('id, property_id, tier_code, reason, note, recorded_at')
       .eq('event_id', eventId).is('undone_at', null)
       .order('recorded_at', { ascending: true }),
+    // The pictures of where to park, for the Site guide (plan A4). Every
+    // site's, filtered below to the sites this caller may see.
+    db.from('site_picture').select('id, property_id, path, caption, sort_order')
+      .order('sort_order', { ascending: true }).order('created_at', { ascending: true }),
   ])
   if (listRes.error) throw listRes.error
   const ref = refRes.data ? String(refRes.data) : null
@@ -114,6 +119,13 @@ export async function nightState(eventId: string, allowed: Set<string> | null = 
 
   const lost = ((lostRes.data ?? []) as Row[])
     .filter((l: Row) => allowed === null || allowed.has(String(l.property_id)))
+  if (picRes.error) throw picRes.error
+  const pictures = new Map<string, Row[]>()
+  for (const p of (picRes.data ?? []) as Row[]) {
+    const list = pictures.get(String(p.property_id)) ?? []
+    list.push({ id: p.id, path: p.path, caption: p.caption ?? null })
+    pictures.set(String(p.property_id), list)
+  }
   const sites = ((siteRes.data ?? []) as Row[])
     .filter((o: Row) => allowed === null || allowed.has(String(o.property_id)))
     .map((o: Row) => ({
@@ -125,8 +137,12 @@ export async function nightState(eventId: string, allowed: Set<string> | null = 
       lng: o.property?.lng ?? null,
       site_guide_url: o.property?.site_guide_url ?? null,
       fill_notes: o.property?.fill_notes ?? null,
+      slug: o.property?.slug ?? null,
+      walk_minutes: o.property?.walk_minutes ?? null,
+      pictures: pictures.get(String(o.property_id)) ?? [],
       block_id: o.property?.block_id ?? null,
       block_name: o.property?.block?.name ?? null,
+      block_slug: o.property?.block?.slug ?? null,
       is_anchor: o.property?.block?.anchor_property_id === o.property_id,
       is_reference: ref !== null && String(o.property_id) === ref,
       block_sort: o.property?.block?.sort_order ?? 0,

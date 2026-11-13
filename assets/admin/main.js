@@ -36,6 +36,7 @@ import { measureHead, showTab } from './tabs.js';
 import { renderSiteForm, setNightFilter } from './sites.js';
 import { initSeries } from './series.js';
 import { openLost, pickLostSite, submitLost, submitPlace } from './placement.js';
+import { closeCard, openCard } from './site-info.js';
 
 /* ------------------------------------------------------------------ init */
 
@@ -78,6 +79,13 @@ function init() {
   el('ad-tab-insights').addEventListener('click', function () { showTab('insights'); });
   el('ad-tab-sites').addEventListener('click', function () { showTab('sites'); });
   el('ad-tab-info').addEventListener('click', function () { showTab('info'); });
+  // The Locate Us card full screen (plan A4): tap it to open, tap anywhere
+  // or press Escape to close.
+  el('ad-guide-card').addEventListener('click', openCard);
+  el('ad-guide-full').addEventListener('click', closeCard);
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && !el('ad-guide-full').hidden) closeCard();
+  });
   el('ad-site-pick').addEventListener('change', function (e) { renderSiteForm(e.target.value); });
   el('ad-site-night').addEventListener('change', function (e) { setNightFilter(e.target.value); });
 
