@@ -134,16 +134,28 @@ export async function allowedProperties(c: Caller): Promise<Set<string> | null> 
   return new Set(((data ?? []) as Row[]).map((r) => String(r.id)))
 }
 
-// A warden may touch a booking that is, or was booked, at one of their sites.
-export async function mayTouchBooking(allowed: Set<string> | null, bookingId: string) {
+// A warden may touch a booking that is, or was booked, at one of their
+// sites, on the live night (plan B2). With no night live a warden touches
+// nothing. The operator (allowed === null) may touch any booking.
+export async function mayTouchBooking(
+  allowed: Set<string> | null, bookingId: string, liveId: string | null,
+) {
   if (allowed === null) return true
+  if (liveId === null) return false
   const { data, error } = await db.from('booking')
-    .select('property_id, booked_property_id').eq('id', bookingId).maybeSingle()
+    .select('event_id, property_id, booked_property_id').eq('id', bookingId).maybeSingle()
   if (error) throw error
   if (!data) return false
+  if (String(data.event_id) !== liveId) return false
   return allowed.has(String(data.property_id)) ||
     (data.booked_property_id !== null && allowed.has(String(data.booked_property_id)))
 }
+
+// Arrivals actions that work on a night (plan B2). index.ts resolves the
+// live event for each: a warden cannot name another, and the operator's
+// Arrivals names none. The operator may still name any night, which is
+// how Tonight and Insights read the rest.
+export const LIVE_SCOPED = new Set(['list', 'tiers', 'sell'])
 
 // The night's prices, capacity, templates and event set-up are Andrew's.
 // A warden works the gate: check-in, walk-ups, fixing a booking.
@@ -153,6 +165,7 @@ export const OPERATOR_ONLY = new Set([
   'set_offer_status', 'site_options', 'add_offer',
   'sites_setup', 'save_site', 'create_site', 'save_block_pricing',
   'series_list', 'save_series', 'set_event_series', 'upload_picture',
+  'set_live_event',
 ])
 
 export const denied = (c: Caller | Denied): c is Denied =>
@@ -168,6 +181,8 @@ export type Ctx = {
   eventId: string
   allowed: Set<string> | null
   bookingGuard: () => Promise<Response | null>
+  // The night the gate is working, or null (plan B2).
+  live: Row | null
 }
 
 export type Handler = (ctx: Ctx) => Promise<Response>

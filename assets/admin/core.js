@@ -31,7 +31,12 @@ export var state = {
   // every request is authorised again on its own.
   who: null,
   events: [],
+  // The night the loaded list is for. On Arrivals and Site info that is
+  // the live night (plan B2), liveId, which the server decides; on Tonight
+  // it is the one picked in the header, pickId. See workingEventId().
   eventId: null,
+  liveId: null,
+  pickId: null,
   tab: 'gate',
   rows: [],
   tiers: [],

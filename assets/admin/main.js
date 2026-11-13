@@ -23,7 +23,7 @@
 
 import { AUTH, REFRESH_MS, el, hide, state } from './core.js';
 import { openSession, showSignIn } from './session.js';
-import { dayKey, loadList, setSite, todayKey } from './night.js';
+import { dayKey, loadList, setSite, syncEvent, todayKey } from './night.js';
 import { renderList } from './arrivals.js';
 import { applyPricePick, paintPriceHint, paintPricePick, submitPrice } from './tonight.js';
 import { loadInsight, renderInsight } from './insights.js';
@@ -54,9 +54,10 @@ function init() {
     });
   });
 
+  // Tonight's picker. Arrivals has none: it works the live night (plan B2).
   el('ad-event').addEventListener('change', function () {
-    state.eventId = this.value;
-    loadList();
+    state.pickId = this.value;
+    syncEvent();
   });
 
   el('ad-search').addEventListener('input', function () {
@@ -128,7 +129,9 @@ function init() {
   // Someone else may be selling at the gate while this phone is open.
   setInterval(function () {
     if (document.hidden || el('ad-app').hidden) return;
-    if (state.eventId) loadList(true);
+    // On Arrivals this also notices the live night moving, or a night
+    // becoming live after none was.
+    loadList(true);
     // A finished night does not move; tonight's "so far" does.
     var seen = state.insight && state.events.filter(function (e) {
       return e.id === state.insight.eventId;

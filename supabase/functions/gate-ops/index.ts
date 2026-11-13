@@ -39,8 +39,8 @@
 // Every action goes through the one Deno.serve below. A handler is only
 // ever called from it, after the caller has been resolved and checked.
 
-import { allowedProperties, type Caller, callerFrom, type Denied, denied, type Handler, mayTouchBooking, OPERATOR_ONLY } from './auth.ts'
-import { cors, json } from './shared.ts'
+import { allowedProperties, type Caller, callerFrom, type Denied, denied, type Handler, LIVE_SCOPED, mayTouchBooking, OPERATOR_ONLY } from './auth.ts'
+import { cors, json, liveEvent } from './shared.ts'
 import { arrivals } from './handlers/arrivals.ts'
 import { events } from './handlers/events.ts'
 import { sites } from './handlers/sites.ts'
@@ -75,7 +75,7 @@ Deno.serve(async (req) => {
   }
 
   const action = String(body.action ?? '')
-  const eventId = String(body.event_id ?? '')
+  let eventId = String(body.event_id ?? '')
 
   if (!caller.all && OPERATOR_ONLY.has(action)) {
     return json({ error: 'Only Andrew can change that.', code: 'OPERATOR_ONLY' }, 403)
@@ -83,11 +83,31 @@ Deno.serve(async (req) => {
 
   try {
     const allowed = await allowedProperties(caller)
+    const live = await liveEvent()
+    const liveId = live ? String(live.id) : null
+
+    // One night at the gate (plan B2). An Arrivals action works on the
+    // live event, resolved here, never on one the request names: a warden
+    // who sends another is refused, and one who sends none is given the
+    // live one. The operator may name any night (Tonight, Insights); the
+    // operator's Arrivals names none and gets the live one too.
+    if (LIVE_SCOPED.has(action) && (!caller.all || !eventId)) {
+      if (!liveId) {
+        return json({ error: 'No event is live at the gate.', code: 'NO_LIVE_EVENT' }, 409)
+      }
+      if (eventId && eventId !== liveId) {
+        return json({ error: 'That is not the live event any more. Refresh.',
+          code: 'NOT_LIVE_EVENT' }, 409)
+      }
+      eventId = liveId
+    }
+
     const bookingGuard = async () => {
       const id = String(body.booking_id ?? '')
       if (!id) return json({ error: 'booking_id is required' }, 400)
-      if (!(await mayTouchBooking(allowed, id))) {
-        return json({ error: 'That booking is not at one of your sites.', code: 'NOT_YOUR_SITE' }, 403)
+      if (!(await mayTouchBooking(allowed, id, liveId))) {
+        return json({ error: 'That booking is not at one of your sites tonight.',
+          code: 'NOT_YOUR_SITE' }, 403)
       }
       return null
     }
@@ -99,7 +119,7 @@ Deno.serve(async (req) => {
     if (!handler) return json({ error: 'Unknown action' }, 400)
     // Awaited here, inside the try, so a handler that throws is answered
     // by the catch below rather than escaping it.
-    return await handler({ caller, body, eventId, allowed, bookingGuard })
+    return await handler({ caller, body, eventId, allowed, bookingGuard, live })
   } catch (err) {
     console.error(action, err)
     return json({ error: (err as Error).message ?? 'Something went wrong' }, 500)

@@ -7,7 +7,7 @@
    ===================================================================== */
 'use strict';
 const { test, expect, signedIn } = require('./fixtures');
-const { FIX, PASSWORD, rest, rpc, plate, forget } = require('../lib/stack');
+const { FIX, PASSWORD, gate, rest, rpc, plate, forget } = require('../lib/stack');
 
 const made = [];
 let gribCar;
@@ -27,12 +27,16 @@ test.beforeAll(async () => {
 });
 test.afterAll(() => forget(made));
 
+// Arrivals opens on the live night (plan B2) — the seed makes it the
+// fixture night — with no picker to choose another.
 async function openNight(page) {
   await page.goto('/admin');
   await expect(page.locator('#ad-app')).toBeVisible();
-  await page.selectOption('#ad-event', FIX.night);
+  await expect(page.locator('#ad-live')).toContainText('Fixture night');
   await expect(page.locator('#ad-list .ad-row').first()).toBeVisible();
 }
+
+const setLive = (body) => gate('operator', { action: 'set_live_event', ...body });
 
 test('a warden sees their own block and nothing else', async ({ page }) => {
   await signedIn(page, 'wardenGrib');
@@ -104,4 +108,54 @@ test('on the test site, the card signs in as a test user with no Google account'
   await expect(page.locator('#ad-app')).toBeVisible();
   await expect(page.locator('#ad-who')).toHaveText('warden.test@example.com');
   await expect(page.locator('#ad-tab-night')).toBeHidden();
+});
+
+/* ------------------------------------------------ the live night (B2) */
+
+test('Arrivals has no event picker, for a warden or the operator', async ({ page }) => {
+  for (const who of ['wardenGrib', 'operator']) {
+    await signedIn(page, who);
+    await openNight(page);
+    await expect(page.locator('#ad-event')).toBeHidden();
+    await expect(page.locator('#ad-live')).toBeVisible();
+  }
+});
+
+test('the operator makes a night live from Tonight, and Arrivals follows', async ({ page }) => {
+  await signedIn(page, 'operator');
+  await openNight(page);
+  try {
+    await page.click('#ad-tab-night');
+    await expect(page.locator('#ad-event')).toBeVisible();
+    await page.selectOption('#ad-event', FIX.soldOutNight);
+    await expect(page.locator('#ad-status-name')).toContainText('sold out online');
+    await expect(page.locator('#ad-status-live')).toContainText('Not live');
+    await page.click('#ad-status-live button');
+    await expect(page.locator('#ad-status-live')).toContainText('Live at the gate');
+
+    await page.click('#ad-tab-gate');
+    await expect(page.locator('#ad-live')).toContainText('sold out online');
+    await expect(page.locator('#ad-list')).not.toContainText(gribCar);
+  } finally {
+    await setLive({ event_id: FIX.night });
+  }
+});
+
+test("a warden's phone follows the live night, and says when there is none", async ({ page }) => {
+  await signedIn(page, 'wardenGrib');
+  await openNight(page);
+  try {
+    await setLive({ live: false });
+    await page.click('#ad-refresh');
+    await expect(page.locator('#ad-live')).toContainText('No event is live');
+    await expect(page.locator('#ad-list')).toContainText('No event is live at the gate yet');
+    await expect(page.locator('#ad-sell-open')).toBeHidden();
+
+    await setLive({ event_id: FIX.night });
+    await page.click('#ad-refresh');
+    await expect(page.locator('#ad-live')).toContainText('Fixture night');
+    await expect(page.locator('#ad-list')).toContainText(gribCar);
+  } finally {
+    await setLive({ event_id: FIX.night });
+  }
 });

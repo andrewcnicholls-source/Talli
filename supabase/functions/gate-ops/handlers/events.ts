@@ -110,6 +110,20 @@ export const events: Record<string, Handler> = {
     return json({ ok: true, status: data })
   },
 
+  // The night the gate works (plan B2). One at a time: making one live
+  // clears the last, in the database, in the same transaction. `live:
+  // false` clears it without choosing another. Every warden's phone moves
+  // with it on its next refresh.
+  async set_live_event({ body, eventId }: Ctx) {
+    const off = body.live === false
+    if (!off && !eventId) return json({ error: 'event_id is required' }, 400)
+    const { data, error } = await db.rpc('set_live_event', {
+      p_event_id: off ? null : eventId,
+    })
+    if (error) return json(named(error), 409)
+    return json({ ok: true, live_event_id: data ?? null })
+  },
+
   // ------------------------------------------------ the night's levers
 
   // A space lost to a bad park, or found because a hatchback fitted where

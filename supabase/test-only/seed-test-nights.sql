@@ -20,6 +20,8 @@
 --    held for the gate. The website must say walk-ups only; the gate can
 --    still sell.
 --
+--  Night 1 is the live night at the gate (plan B2).
+--
 --  Re-runnable: the two nights are deleted and rebuilt (with any
 --  bookings on them — this is test data). Needs seed-test-block.sql.
 --  Never run against production.
@@ -85,3 +87,7 @@ select b.id, v.code, v.cents
   cross join (values ('standard', 1000), ('priority', 1000), ('valet', 1000)) as v(code, cents)
  where b.name = 'Gribblehurst (test)'
 on conflict (block_id, code) do update set offset_cents = excluded.offset_cents, updated_at = now();
+
+-- The night the gate is working (plan B2). Arrivals shows this one, and a
+-- warden cannot name another. Moves the live flag off any other night.
+select set_live_event('7e57e000-0000-4000-8000-000000000001');

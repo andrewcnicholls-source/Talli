@@ -7,6 +7,7 @@ import { el, state } from './core.js';
 import { openInsights } from './insights.js';
 import { openInfo } from './site-info.js';
 import { openSites } from './sites.js';
+import { syncEvent } from './night.js';
 
 // The sticky search bar has to sit directly under the header, whose height
 // depends on the safe-area inset and the length of the event name. Measure
@@ -39,9 +40,13 @@ export function showTab(which) {
     el('ad-tab-' + name).classList.toggle('is-on', on);
     el('ad-tab-' + name).setAttribute('aria-selected', String(on));
   });
-  // The header picker drives Arrivals and Tonight. Insights has its own,
-  // and two pickers on one screen is one too many to read at a glance.
-  el('ad-event-row').hidden = which === 'insights' || which === 'sites';
+  // Arrivals and Site info work the live night (plan B2) and name it, with
+  // nothing to pick. The header picker is Tonight's alone, for opening any
+  // night. Insights has its own, and two pickers on one screen is one too
+  // many to read at a glance.
+  el('ad-event-row').hidden = which !== 'night';
+  el('ad-live').hidden = which !== 'gate' && which !== 'info';
+  if (which === 'gate' || which === 'info' || which === 'night') syncEvent();
   measureHead();
   if (which === 'insights') openInsights();
   if (which === 'sites') openSites();

@@ -2126,6 +2126,50 @@ footer a { color: var(--blue); }
 }
 .ad-event-new:hover { background: rgba(255, 255, 255, 0.22); }
 
+/* The live night, where the picker used to be on Arrivals (plan B2). Same
+   height as the picker, so the tabs below do not jump on switching. */
+.ad-live {
+  margin: 0;
+  max-width: none;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.95rem;
+  color: var(--white);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.ad-live-dot {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #4CC38A;
+}
+.ad-live.is-none { color: rgba(255, 255, 255, 0.75); }
+.ad-live.is-none .ad-live-dot { background: rgba(255, 255, 255, 0.35); }
+.ad-live-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
+/* "Live at the gate" on the Tonight card: its own row under the statuses,
+   because it is a different question from whether the website sells. */
+.ad-status-live {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  font-size: 0.84rem;
+  font-weight: 300;
+  color: var(--ink);
+}
+.ad-status-live:empty { display: none; }
+.ad-status-live .ad-status-set { flex: 0 0 auto; }
+.ad-status-live-text { flex: 1 1 12em; }
+.ad-status-live.is-live .ad-status-live-text { color: #23503B; font-weight: 500; }
+
 /* ---------- Is this night actually on sale ----------
 
    Top of Tonight, above the fill count, because a night that never went on

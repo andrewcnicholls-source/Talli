@@ -419,11 +419,18 @@ Three of the six functions deployed to a byte-identical bundle hash.
 ## Adding a real fixture to the test site
 
 **For a quick look, do it on the gate screen.** `/admin.html` has a **+**
-beside the event picker: pick a template, edit the name, the date and the
+beside the event picker on the Tonight tab: pick a template, edit the name, the date and the
 prices, and tap *Save event*. It writes the event, its offer against the
 property and its tiers in one transaction, so a half-made event with
 nothing on sale cannot happen. *Save as template* keeps the shape — the
 tier menu and the timings, never the date — for next time.
+
+Arrivals works whichever night is **live**, one at a time, and has no
+picker of its own — for wardens or for you. To work a night at the gate,
+open it on Tonight and tap *Make live* under the status buttons; every
+warden's phone moves to it within 30 seconds. A draft or cancelled night
+cannot be live. After the migration that brought this in, nothing is
+live until you choose one.
 
 Use the `TEST — ` prefix in the name so it stays obvious which site you
 are on. New events land as **draft**, which means hidden; the Tonight tab

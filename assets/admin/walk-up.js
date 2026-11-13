@@ -362,6 +362,9 @@ export function submitSell(e) {
       var box = el('ad-sell-error');
       box.textContent = err.message;
       show(box);
+      // Andrew moved the gate to another night while this form was open.
+      // Nothing was sold; bring the list round to the live night.
+      if (err.code === 'NOT_LIVE_EVENT' || err.code === 'NO_LIVE_EVENT') loadList(true);
     })
     .finally(function () { btn.disabled = false; });
 }

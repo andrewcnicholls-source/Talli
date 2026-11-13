@@ -1163,6 +1163,33 @@ else
 fi
 
 # ---------------------------------------------------------------------
+head "A warden works the live night, and only that one"
+# ---------------------------------------------------------------------
+# Plan B2. gate-ops resolves the live event for every Arrivals action;
+# the screen having no picker is not what stops a warden naming another
+# night. Losing either check below fails open, as the auth checks would.
+IDX=supabase/functions/gate-ops/index.ts
+AUTH_TS=supabase/functions/gate-ops/auth.ts
+if grep -q "LIVE_SCOPED.has(action) && (!caller.all || !eventId)" "$IDX" \
+   && grep -q "code: 'NOT_LIVE_EVENT'" "$IDX" \
+   && grep -q "LIVE_SCOPED = new Set(\['list', 'tiers', 'sell'\])" "$AUTH_TS"; then
+  pass "gate-ops pins a warden's list, tiers and sell to the live night"
+else
+  fail "gate-ops no longer pins a warden's Arrivals actions to the live night"
+fi
+if grep -q "mayTouchBooking(allowed, id, liveId)" "$IDX" \
+   && grep -q "if (String(data.event_id) !== liveId) return false" "$AUTH_TS"; then
+  pass "a warden touches bookings on the live night only"
+else
+  fail "a warden can touch a booking on a night that is not live"
+fi
+if grep -q "'set_live_event'," "$AUTH_TS"; then
+  pass "only the operator moves the live night"
+else
+  fail "set_live_event is not OPERATOR_ONLY"
+fi
+
+# ---------------------------------------------------------------------
 head "Bank details reach a signed-in host or warden, and nobody else"
 # ---------------------------------------------------------------------
 # The account walk-ups pay into is shown on the warden's Site info tab.

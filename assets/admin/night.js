@@ -37,7 +37,7 @@ function headerEvents() {
   return state.events.filter(function (ev) {
     return dayKey(ev.starts_at) >= today ||
       FINISHED.indexOf(ev.status) === -1 ||
-      ev.id === state.eventId;
+      ev.id === state.pickId || ev.id === state.liveId;
   });
 }
 
@@ -54,39 +54,113 @@ export function renderEventOptions() {
   events.forEach(function (ev) {
     var label = asDate(ev.starts_at) + ' — ' + ev.name +
       (ev.status !== 'on_sale' ? ' (' + statusMeta(ev.status)[1].toLowerCase() + ')' : '');
-    sel.appendChild(new Option(label, ev.id));
+    var live = ev.id === state.liveId ? ' · live' : '';
+    sel.appendChild(new Option(label + live, ev.id));
   });
-  if (state.eventId) sel.value = state.eventId;
+  if (state.pickId) sel.value = state.pickId;
 }
 
 export function renderEvents() {
-  // Default to tonight's event, and keep it until midnight: kickoff
-  // passing is the middle of the night's work, not the end of it. Failing
-  // that, the next one coming. A cancelled night is passed over if there
-  // is anything else on the same day or later.
+  // Tonight opens on the live night when there is one. Failing that, on
+  // tonight's event, kept until midnight: kickoff passing is the middle of
+  // the night's work, not the end of it. Failing that, the next one
+  // coming. A cancelled night is passed over if there is anything else on
+  // the same day or later.
   var today = todayKey();
   var ahead = state.events.filter(function (e) { return dayKey(e.starts_at) >= today; });
-  var pick = ahead.filter(function (e) { return e.status !== 'cancelled'; })[0] ||
+  var pick = liveEvent() ||
+    ahead.filter(function (e) { return e.status !== 'cancelled'; })[0] ||
     ahead[0] || headerEvents().slice(-1)[0] || null;
 
-  state.eventId = pick ? pick.id : null;
+  state.pickId = pick ? pick.id : null;
   renderEventOptions();
-  if (!state.eventId) {
+  renderLive();
+  syncEvent();
+}
+
+/* ------------------------------------------------- the live night */
+
+// One event is live at a time (plan B2), and Arrivals and Site info work
+// that one. There is no picker for it on those tabs: the server resolves
+// it, and refuses a warden who names another. Tonight keeps its picker so
+// Andrew can open any night.
+export function liveEvent() {
+  return state.events.filter(function (e) { return e.id === state.liveId; })[0] || null;
+}
+
+export function workingEventId() {
+  return state.tab === 'night' ? state.pickId : state.liveId;
+}
+
+function onLiveNight() { return state.tab !== 'night'; }
+
+// Point the screen at the night the current tab works, loading it if that
+// is not the one already on screen.
+export function syncEvent() {
+  var want = workingEventId();
+  if (want === state.eventId && (want || !onLiveNight())) return;
+  state.eventId = want;
+  clearNight();
+  renderAll();
+  return loadList();
+}
+
+function clearNight() {
+  state.rows = [];
+  state.tiers = [];
+  state.sites = [];
+  state.extras = [];
+  state.summary = null;
+}
+
+export function renderLive() {
+  var line = el('ad-live');
+  if (!line) return;
+  line.innerHTML = '';
+  var ev = liveEvent();
+  line.classList.toggle('is-none', !ev);
+  line.appendChild(make('span', 'ad-live-dot'));
+  line.appendChild(make('span', 'ad-live-name', ev
+    ? 'Live: ' + asDate(ev.starts_at) + ' — ' + ev.name
+    : 'No event is live at the gate'));
+}
+
+// The events list and which one is live, again. After the live night or
+// an event's status moves, and when a refresh finds the gate has moved on.
+export function refreshEvents() {
+  return call('events').then(function (data) {
+    state.events = data.events || [];
+    state.liveId = data.live_event_id || null;
+    renderEventOptions();
+    renderLive();
     renderStatus();
-    return;
-  }
-  el('ad-event').value = state.eventId;
-  loadList();
+  });
 }
 
 /* ---------------------------------------------------- the whole night */
 
+// Each load is numbered so one that comes back after the screen has moved
+// to another night (a tab switch, the live night changing) is dropped.
+var loadSeq = 0;
+
 export function loadList(quiet) {
-  if (!state.eventId) return;
+  var live = onLiveNight();
+  // On Arrivals the phone asks for the live night by not naming one: the
+  // server says which it is. That is how a warden's phone follows Andrew
+  // moving the gate on, at the next refresh, with nothing to pick.
+  if (!live && !state.eventId) return;
+  var seq = ++loadSeq;
   if (!quiet) el('ad-list').setAttribute('aria-busy', 'true');
 
-  return call('list', { event_id: state.eventId })
+  return call('list', live ? {} : { event_id: state.eventId })
     .then(function (data) {
+      if (seq !== loadSeq) return;
+      if (live) {
+        var moved = data.event_id !== state.liveId;
+        state.liveId = data.event_id;
+        state.eventId = data.event_id;
+        if (moved) refreshEvents().catch(function () {});
+      }
       state.rows = data.rows || [];
       state.tiers = data.tiers || [];
       state.sites = data.sites || [];
@@ -96,7 +170,21 @@ export function loadList(quiet) {
       state.surchargeBps = data.card_surcharge_bps || 0;
       renderAll();
     })
-    .catch(function (err) { toast(err.message, 'bad'); })
+    .catch(function (err) {
+      if (seq !== loadSeq) return;
+      // Nothing live is a state of the gate, not a failure: say so in the
+      // list and the header, and keep refreshing until Andrew picks one.
+      if (err && err.code === 'NO_LIVE_EVENT') {
+        var had = state.liveId;
+        state.liveId = null;
+        state.eventId = null;
+        clearNight();
+        renderAll();
+        if (had) refreshEvents().catch(function () {});
+        return;
+      }
+      toast(err.message, 'bad');
+    })
     .finally(function () { el('ad-list').removeAttribute('aria-busy'); });
 }
 
@@ -199,6 +287,7 @@ export function arrivedAt(id) {
 }
 
 function renderAll() {
+  renderLive();
   renderSitePicker();
   renderStats();
   renderSplit();
@@ -215,7 +304,14 @@ function renderAll() {
 
 function renderStats() {
   var s = state.summary;
-  if (!s) return;
+  if (!s) {
+    // No night loaded (none live): no numbers left over from the last one.
+    ['ad-stat-arrived', 'ad-stat-free', 'ad-stat-taken'].forEach(function (id) {
+      text(el(id), '—');
+    });
+    hide(el('ad-holds'));
+    return;
+  }
   text(el('ad-stat-arrived'), s.arrived + '/' + s.total);
   text(el('ad-stat-free'), String(s.free));
   text(el('ad-stat-taken'), money(s.taken_cents));

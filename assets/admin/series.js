@@ -221,8 +221,8 @@ function submitSeries(e) {
       toast('Saved', 'good');
       return call('events').then(function (list) {
         state.events = list.events || [];
+        state.liveId = list.live_event_id || null;
         renderEventOptions();
-        el('ad-event').value = state.eventId;
         renderStatus();
       });
     })
