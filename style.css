@@ -2623,3 +2623,54 @@ textarea.ad-input { resize: vertical; min-height: 56px; font-family: inherit; }
   .ev-night-go { flex: 1 1 100%; }
 }
 .ev-note { margin-top: 18px; font-size: 0.92rem; color: var(--grey); }
+
+/* ---------- The booking catalogue (plan A3) ----------
+   The type of space is a filter over the blocks: a row of chips, one on.
+   Big enough to hit with a thumb at the gate, and a real radio inside for
+   keyboards and screen readers. */
+.bk-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 14px 0 6px;
+}
+.bk-chips:empty { display: none; }
+.bk-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: var(--white);
+  cursor: pointer;
+  font-size: 0.95rem;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.bk-chip:hover { background: var(--blue-tint); }
+.bk-chip-input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+}
+.bk-chip:has(.bk-chip-input:checked) {
+  background: var(--blue);
+  border-color: var(--blue);
+  color: var(--white);
+}
+.bk-chip:has(.bk-chip-input:focus-visible) { outline: 2px solid var(--blue); outline-offset: 2px; }
+
+.bk-blocks-lead { padding: 14px 22px; background: var(--white); margin: 0; }
+
+/* Walk-ups are the useful news under a sold-out block, so it reads as
+   news rather than as small print. */
+.bk-soldout-note.is-walk-up { color: var(--ink); font-weight: 400; }
+
+/* On a series page, the night being booked stays marked. */
+.ev-step-head { margin-top: 8px; }
+.ev-night.is-chosen { background: var(--blue-tint); box-shadow: inset 3px 0 0 var(--blue); }
+.ev-flow { margin-top: 28px; }
+.ev-from.is-walk-up { color: var(--ink); font-weight: 400; }

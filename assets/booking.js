@@ -1,10 +1,25 @@
 /* =====================================================================
-   Talli Parking — booking flow
+   Talli Parking — booking flow (plan A3: a shopping catalogue)
 
-   Three steps, revealed one at a time: pick the event, pick the tier,
-   give us your details. The last step posts to the create-checkout edge
-   function, which holds a real bay before it ever talks to Stripe, and
-   hands back a Checkout URL to redirect to.
+   Night → block → type of space → details → checkout, revealed one step
+   at a time. The type is a filter over the blocks (Standard / Priority /
+   Valet chips, Standard first), so a block card always shows the price
+   and what is left for the type being looked at. The last step posts to
+   the create-checkout edge function, which holds a real space before it
+   ever talks to Stripe, and hands back a Checkout URL to redirect to.
+
+   Two pages run this file:
+     /events/<slug>  a series page. The nights are on the page already
+                     (rendered on the server); tapping one opens the flow
+                     under them. ?night=<id> chooses one on arrival.
+     /book           every night on sale, listed here. An old link,
+                     /book?event=<id>, is sent to that night's series page
+                     with the night chosen.
+
+   "Sold out online" is not sold out (plan § 3.3): when the website's
+   share of a type is gone but the gate still holds some, the card says
+   walk-ups are possible on the night, with the block's address. It never
+   says how many — the view only carries a yes/no.
 
    No price is ever sent from here. The browser names a tier and, if they
    want them, a few extras; the database decides what all of that costs.
@@ -21,8 +36,11 @@
 
   var state = {
     event: null,
-    tiers: [],
-    tier: null,
+    rows: [],        // v_block_tier_availability for the chosen night
+    pins: [],        // v_event_site_map for the chosen night
+    type: null,      // the type chip that is on: 'standard', 'priority', …
+    block: null,     // the block row chosen, for the type that is on
+    tier: null,      // that same row, once chosen: what is being bought
     extras: [],      // the catalogue, as the database has it
     picked: {},      // code -> quantity
     interestEvent: null,
@@ -208,19 +226,87 @@
       });
   }
 
-  // /book?event=<id>, from a night on an events page (/events/<slug>). The
-  // night is chosen for them, exactly as if they had tapped it: a bookable
-  // one goes on to the types of space, any other opens "tell me". An id
-  // that is not in the list — gone, or never real — changes nothing.
+  function param(name) {
+    try { return new URLSearchParams(window.location.search).get(name); } catch (e) { return null; }
+  }
+
+  var UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  // /book?event=<id> is the old way in, from emails and links already out
+  // there. The flow lives on the series page now, so send them there with
+  // the night chosen. Resolves true when the browser is on its way; false
+  // (an unknown night, or the series cannot be read) leaves them here,
+  // where the same night is chosen from the list as before.
+  function sendToSeries(id) {
+    if (!id || !UUID.test(id)) return Promise.resolve(false);
+    return read('/event?id=eq.' + encodeURIComponent(id) +
+                '&status=in.(on_sale,announced)&select=id,event_series(slug)&limit=1')
+      .then(function (rows) {
+        var slug = rows && rows[0] && rows[0].event_series && rows[0].event_series.slug;
+        if (!slug || !/^[a-z0-9]+(-[a-z0-9]+)*$/.test(slug)) return false;
+        window.location.replace('/events/' + slug + '?night=' + encodeURIComponent(id));
+        return true;
+      })
+      .catch(function () { return false; });
+  }
+
+  // A night chosen on arrival, exactly as if they had tapped it: a bookable
+  // one goes on to the blocks, any other opens "tell me". An id that is not
+  // in the list — gone, or never real — changes nothing.
   function preselect(listed) {
-    var wanted;
-    try { wanted = new URLSearchParams(window.location.search).get('event'); } catch (e) { return; }
+    var wanted = param('event');
     if (!wanted) return;
     var ev = listed.filter(function (e) { return e.id === wanted; })[0];
     if (!ev) return;
     if (!ev.sellable) { openInterest(ev); return; }
     var radio = document.querySelector('input[name="bk-event"][value="' + ev.id + '"]');
     if (radio) radio.checked = true;
+    chooseEvent(ev);
+  }
+
+  /* ------------------------------------------ step 1 on a series page */
+
+  // The nights are already on the page, rendered on the server with what
+  // a night is and whether it is on sale. Each carries its id and state in
+  // data attributes; "Book parking" opens the flow underneath instead of
+  // leaving the page.
+  function nightFrom(li) {
+    var state = li.getAttribute('data-night-state');
+    return {
+      id: li.getAttribute('data-night-id'),
+      name: li.getAttribute('data-night-name'),
+      starts_at: li.getAttribute('data-night-starts'),
+      sellable: state === 'on_sale',
+      closed: state === 'closed',
+    };
+  }
+
+  function bindNights(list) {
+    var items = Array.prototype.slice.call(list.querySelectorAll('[data-night-id]'));
+    items.forEach(function (li) {
+      var go = li.querySelector('.ev-night-go');
+      if (!go) return;
+      go.addEventListener('click', function (e) {
+        e.preventDefault();
+        pickNight(items, li, true);
+      });
+    });
+
+    var wanted = param('night');
+    var li = wanted && items.filter(function (x) {
+      return x.getAttribute('data-night-id') === wanted;
+    })[0];
+    if (li) pickNight(items, li, false);
+  }
+
+  function pickNight(items, li, tapped) {
+    var ev = nightFrom(li);
+    if (!ev.sellable) { openInterest(ev); return; }
+    items.forEach(function (x) { x.classList.toggle('is-chosen', x === li); });
+    // The address bar names the night, so a shared link opens it again.
+    if (tapped && window.history && history.replaceState) {
+      try { history.replaceState(null, '', '?night=' + encodeURIComponent(ev.id)); } catch (e) { /* cosmetic */ }
+    }
     chooseEvent(ev);
   }
 
@@ -324,27 +410,27 @@
   }
 
   function chooseEvent(ev) {
+    var sameNight = state.event && state.event.id === ev.id;
     state.event = ev;
     state.tier = null;
     state.block = null;
+    if (!sameNight) state.rows = [];
     el('bk-details').hidden = true;
     el('bk-extras-step').hidden = true;
     clearError();
 
     text(el('bk-tier-event'), ev.name + ' · ' + asDate(ev.starts_at));
     reveal(el('bk-tiers-step'));
-    loadTiers(ev.id);
+    loadNight(ev.id);
   }
 
-  /* ---------------------------------------------------------- step 2: tier */
+  /* ------------------------------------------- step 2: block and type */
 
-  function loadTiers(eventId) {
-    var primary = el('bk-tiers');
-    var extra = el('bk-tiers-more');
-    primary.innerHTML = '';
-    extra.innerHTML = '';
-    el('bk-more-toggle').hidden = true;
-    primary.appendChild(make('p', 'bk-empty', 'Loading options…'));
+  function loadNight(eventId) {
+    var cards = el('bk-blocks');
+    cards.innerHTML = '';
+    el('bk-types').innerHTML = '';
+    cards.appendChild(make('p', 'bk-empty', 'Loading options…'));
 
     loadMap(eventId);
 
@@ -353,62 +439,104 @@
       '&order=block_sort.asc,sort_order.asc'
     )
       .then(function (rows) {
-        state.blockRows = rows;
-        var blocks = blocksIn(rows);
-        // Most nights there is one area, and the page reads exactly as it
-        // always has. With several, the area comes first: where you park
-        // decides what is left.
-        if (!state.block && blocks.length === 1) state.block = blocks[0];
-        if (!state.block && blocks.length > 1) {
-          primary.innerHTML = '';
-          renderBlocks(primary, blocks);
+        // A slow answer for a night they have since moved off is dropped.
+        if (!state.event || state.event.id !== eventId) return;
+        state.rows = rows || [];
+        var types = typesIn(state.rows);
+        if (!types.length) {
+          cards.innerHTML = '';
+          cards.appendChild(make('p', 'bk-empty',
+            'Nothing is on sale for this night yet. We take arrivals on the night ' +
+            'as well — come to one of our parking addresses and ask the warden.'));
           return;
         }
-        var tiers = rows.filter(function (r) {
-          return !state.block || r.block_id === state.block.block_id;
-        });
-        state.tiers = tiers;
-        primary.innerHTML = '';
-        if (blocks.length > 1 && state.block) primary.appendChild(blockBanner(state.block));
-
-        var sellable = tiers.filter(function (t) { return t.spots_left > 0; });
-        if (!sellable.length) {
-          primary.appendChild(
-            make(
-              'p',
-              'bk-empty',
-              'Everything for this event is sold out online. There may still be ' +
-              'space on the night — come to ' + whereToCome() + ' and ask the warden.'
-            )
-          );
-          return;
+        // Keep the chip they had on, if this night sells it; else Standard,
+        // else the first type there is.
+        var codes = types.map(function (t) { return t.code; });
+        if (codes.indexOf(state.type) === -1) {
+          state.type = codes.indexOf('standard') !== -1 ? 'standard' : codes[0];
         }
-
-        // Headline order follows the config list, not the database's
-        // sort_order — the point of the trio is a deliberate running order.
-        var headline = [];
-        HEADLINE.forEach(function (code) {
-          tiers.forEach(function (t) { if (t.code === code) headline.push(t); });
-        });
-        var rest = tiers.filter(function (t) { return headline.indexOf(t) === -1; });
-
-        // If none of the usual three exist for this fixture, promote the first
-        // few rather than hiding every option behind the toggle.
-        if (!headline.length) {
-          headline = rest.splice(0, 3);
-        }
-
-        headline.forEach(function (t) { addTier(primary, t); });
-
-        if (rest.length) {
-          el('bk-more-toggle').hidden = false;
-          rest.forEach(function (t) { addTier(extra, t); });
-        }
+        renderTypes(types);
+        renderBlocks();
       })
       .catch(function (err) {
-        primary.innerHTML = '';
-        primary.appendChild(make('p', 'bk-empty', err.message));
+        cards.innerHTML = '';
+        cards.appendChild(make('p', 'bk-empty', err.message));
       });
+  }
+
+  // The types this night sells, in the running order of the config's
+  // headline list (Standard, Priority, Valet), then any others by the
+  // database's sort order. One entry per code, whatever the block.
+  function typesIn(rows) {
+    var seen = {};
+    var out = [];
+    rows.forEach(function (r) {
+      if (seen[r.code]) return;
+      seen[r.code] = true;
+      out.push({ code: r.code, label: r.label, sort: r.sort_order });
+    });
+    var rank = function (t) {
+      var i = HEADLINE.indexOf(t.code);
+      return i === -1 ? HEADLINE.length + (t.sort || 0) : i;
+    };
+    return out.sort(function (a, b) { return rank(a) - rank(b); });
+  }
+
+  function rowsOfType() {
+    return state.rows.filter(function (r) { return r.code === state.type; });
+  }
+
+  // The chips: one per type, Standard first. They filter; they do not
+  // choose anything. Picking a block is what moves the booking on.
+  function renderTypes(types) {
+    var box = el('bk-types');
+    box.innerHTML = '';
+    types.forEach(function (t) {
+      var chip = make('label', 'bk-chip');
+      var input = document.createElement('input');
+      input.type = 'radio';
+      input.name = 'bk-type';
+      input.value = t.code;
+      input.className = 'bk-chip-input';
+      input.checked = t.code === state.type;
+      input.addEventListener('change', function () { chooseType(t.code); });
+      chip.appendChild(input);
+      chip.appendChild(make('span', 'bk-chip-name', splitLabel(t.label).name));
+      box.appendChild(chip);
+    });
+    paintTypeNote();
+  }
+
+  function chooseType(code) {
+    if (code === state.type) return;
+    state.type = code;
+    // A block chosen for another type is no longer the thing being bought.
+    if (state.tier) {
+      state.tier = null;
+      state.block = null;
+      el('bk-details').hidden = true;
+      el('bk-extras-step').hidden = true;
+    }
+    paintTypeNote();
+    renderBlocks();
+    if (state.pins.length) drawMap(el('bk-map'), state.pins);
+  }
+
+  // What the type on means, and when to arrive: the same for every block,
+  // so it is said once above the cards rather than on each of them.
+  function paintTypeNote() {
+    var note = el('bk-type-note');
+    var row = rowsOfType()[0];
+    if (!row) { note.hidden = true; return; }
+    var parts = splitLabel(row.label);
+    var bits = [];
+    if (parts.detail) bits.push(parts.detail.charAt(0).toUpperCase() + parts.detail.slice(1) + '.');
+    if (row.arrival_from && row.arrival_until) {
+      bits.push('Arrive ' + asTime(row.arrival_from) + '–' + asTime(row.arrival_until) + '.');
+    }
+    text(note, bits.join(' '));
+    note.hidden = !bits.length;
   }
 
   /* ------------------------------------------------- the map */
@@ -423,9 +551,15 @@
   // cards below still sell everything, so the map just stays hidden.
   function loadMap(eventId) {
     var box = el('bk-map');
+    state.pins = [];
     if (!box || (!window.L && !CFG.googleMapsKey)) return;
-    read('/v_event_site_map?event_id=eq.' + encodeURIComponent(eventId))
-      .then(function (pins) { drawMap(box, pins || []); })
+    read('/v_event_site_map?event_id=eq.' + encodeURIComponent(eventId) +
+         '&select=block_id,block_name,lat,lng,is_anchor')
+      .then(function (pins) {
+        if (!state.event || state.event.id !== eventId) return;
+        state.pins = (pins || []).filter(function (p) { return p.lat != null && p.lng != null; });
+        drawMap(box, state.pins);
+      })
       .catch(function () { box.hidden = true; });
   }
 
@@ -551,42 +685,47 @@
   // What both maps draw: one pill per area at its anchor house, the other
   // houses as dots, and a frame centred on Eden Park (every point mirrored
   // through the stadium, so there is as much ground above it as below).
+  // Each pill is the block's price for the type chip that is on, so the
+  // map and the cards below it always say the same thing. A block that
+  // does not sell that type is drawn as full.
   function mapModel(pins) {
     var byBlock = {};
     var order = [];
     var framed = [EDEN_PARK];
+    var offer = {};
+    rowsOfType().forEach(function (r) { offer[r.block_id] = r; });
     pins.forEach(function (p) {
       var a = byBlock[p.block_id];
       if (!a) {
         a = byBlock[p.block_id] = {
-          block_id: p.block_id, block_name: p.block_name, spots: 0, from: null, at: null, houses: [],
+          block_id: p.block_id, block_name: p.block_name, at: null, houses: [],
         };
         order.push(a);
       }
       var at = [Number(p.lat), Number(p.lng)];
       framed.push(at, [2 * EDEN_PARK[0] - at[0], 2 * EDEN_PARK[1] - at[1]]);
-      a.spots += Math.max(0, p.spots_left || 0);
-      if ((p.spots_left || 0) > 0 && (a.from === null || p.from_cents < a.from)) a.from = p.from_cents;
       if (p.is_anchor || !a.at) a.at = at;
       a.houses.push(at);
     });
     order.forEach(function (a) {
-      a.full = a.spots <= 0;
+      var r = offer[a.block_id];
+      a.full = !r || r.spots_left <= 0;
       a.chosen = !!(state.block && state.block.block_id === a.block_id);
-      a.label = a.full ? 'Full' : money(a.from);
-      a.title = a.block_name + (a.full ? ' — sold out online' : ' — from ' + a.label + ', ' +
-        a.spots + ' space' + (a.spots === 1 ? '' : 's') + ' left');
+      a.label = a.full ? (r && r.walk_ups_on_the_night ? 'Walk-up' : 'Full') : money(r.price_cents);
+      a.title = a.block_name + (a.full
+        ? (r && r.walk_ups_on_the_night ? ' — sold out online, walk-up spaces on the night'
+                                        : ' — sold out online')
+        : ' — ' + a.label);
     });
     return { areas: order, framed: framed };
   }
 
   function pickArea(blockId) {
-    if (state.block && state.block.block_id === blockId) return;
-    var b = blocksIn(state.blockRows || []).filter(function (x) { return x.block_id === blockId; })[0];
-    if (!b) return;
-    state.block = b;
-    state.tier = null;
-    loadTiers(state.event.id);
+    var r = rowsOfType().filter(function (x) { return x.block_id === blockId; })[0];
+    if (!r || r.spots_left <= 0) return;
+    var radio = document.querySelector('input[name="bk-block"][value="' + blockId + '"]');
+    if (radio) radio.checked = true;
+    chooseBlock(r);
   }
 
   /* ---- OpenStreetMap (Leaflet) ---- */
@@ -658,87 +797,87 @@
     });
   }
 
-  /* ------------------------------------------------- step 2a: the area */
+  /* ------------------------------------------------ step 2a: the block */
 
-  function blocksIn(rows) {
-    var seen = {};
-    var out = [];
-    rows.forEach(function (r) {
-      if (!seen[r.block_id]) {
-        seen[r.block_id] = {
-          block_id: r.block_id, block_name: r.block_name,
-          anchor_address: r.anchor_address, spots_left: 0, from_cents: null,
-        };
-        out.push(seen[r.block_id]);
-      }
-      var b = seen[r.block_id];
-      b.spots_left += Math.max(0, r.spots_left || 0);
-      if (r.spots_left > 0 && (b.from_cents === null || r.price_cents < b.from_cents)) {
-        b.from_cents = r.price_cents;
-      }
-    });
-    return out;
-  }
-
-  function whereToCome() {
-    if (state.block && state.block.anchor_address) return shortAddress(state.block.anchor_address);
+  function whereToCome(row) {
+    if (row && row.anchor_address) return shortAddress(row.anchor_address);
     return 'one of our parking addresses';
   }
 
   function shortAddress(a) { return String(a || '').split(',')[0]; }
 
-  function renderBlocks(container, blocks) {
-    container.appendChild(make('p', 'bk-card-meta',
-      'Pick where you\u2019d like to park. You\u2019re booked for that address or a ' +
-      'driveway within 100m \u2014 a Talli warden will show you in.'));
-    blocks.forEach(function (b) {
-      var soldOut = b.spots_left <= 0;
-      var label = make('label', 'bk-card bk-card-tier' + (soldOut ? ' is-soldout' : ''));
-      var input = document.createElement('input');
-      input.type = 'radio';
-      input.name = 'bk-block';
-      input.value = b.block_id;
-      input.className = 'bk-radio';
-      input.disabled = soldOut;
-      input.addEventListener('change', function () {
-        state.block = b;
-        state.tier = null;
-        loadTiers(state.event.id);
-      });
-      var body = make('span', 'bk-card-body');
-      var head = make('span', 'bk-tier-head');
-      head.appendChild(make('span', 'bk-card-title', b.block_name));
-      if (b.from_cents !== null) head.appendChild(make('span', 'bk-tier-price', 'from ' + money(b.from_cents)));
-      body.appendChild(head);
-      if (b.anchor_address) {
-        body.appendChild(make('span', 'bk-card-meta', shortAddress(b.anchor_address) + ' or within 100m'));
-      }
-      var facts = make('span', 'bk-tier-facts');
-      facts.appendChild(make('span', 'bk-fact' + (soldOut ? ' bk-fact-warn' : ''),
-        soldOut ? 'Sold out online' : b.spots_left + ' left'));
-      body.appendChild(facts);
-      label.appendChild(input);
-      label.appendChild(body);
-      container.appendChild(label);
+  // One card per block that sells the type chip that is on: its price,
+  // "<anchor> or within 100m", and what is left. Blocks that do not sell
+  // that type are not shown at all — the chip is a filter.
+  function renderBlocks() {
+    var box = el('bk-blocks');
+    box.innerHTML = '';
+    var rows = rowsOfType();
+
+    if (!rows.length) {
+      box.appendChild(make('p', 'bk-empty', 'Nothing of this type for this night.'));
+      return;
+    }
+
+    box.appendChild(make('p', 'bk-card-meta bk-blocks-lead',
+      rows.length > 1
+        ? 'Pick where you’d like to park. You’re booked for that address or a ' +
+          'driveway within 100m — a Talli warden will show you in.'
+        : 'You’re booked for this address or a driveway within 100m — ' +
+          'a Talli warden will show you in.'));
+
+    rows.forEach(function (r) {
+      box.appendChild(blockCard(r));
+      if (r.spots_left <= 0) box.appendChild(soldOutNote(r));
     });
+    if (state.pins.length) drawMap(el('bk-map'), state.pins);
   }
 
-  function blockBanner(b) {
-    var line = make('p', 'bk-card-meta');
-    line.appendChild(document.createTextNode(
-      b.block_name + (b.anchor_address ? ' \u2014 ' + shortAddress(b.anchor_address) + ' or within 100m. ' : '. ')));
-    var change = make('a', '', 'Change area');
-    change.href = '#';
-    change.addEventListener('click', function (e) {
-      e.preventDefault();
-      state.block = null;
-      state.tier = null;
-      el('bk-details').hidden = true;
-      el('bk-extras-step').hidden = true;
-      loadTiers(state.event.id);
-    });
-    line.appendChild(change);
-    return line;
+  function blockCard(r) {
+    var soldOut = r.spots_left <= 0;
+    var label = make('label', 'bk-card bk-card-tier bk-card-block' + (soldOut ? ' is-soldout' : ''));
+    label.setAttribute('data-block-id', r.block_id);
+
+    var input = document.createElement('input');
+    input.type = 'radio';
+    input.name = 'bk-block';
+    input.value = r.block_id;
+    input.className = 'bk-radio';
+    input.disabled = soldOut;
+    input.checked = !!(state.block && state.block.block_id === r.block_id && !soldOut);
+    input.addEventListener('change', function () { chooseBlock(r); });
+
+    var body = make('span', 'bk-card-body');
+    var head = make('span', 'bk-tier-head');
+    head.appendChild(make('span', 'bk-card-title', r.block_name));
+    head.appendChild(make('span', 'bk-tier-price', money(r.price_cents)));
+    body.appendChild(head);
+    if (r.anchor_address) {
+      body.appendChild(make('span', 'bk-card-meta', shortAddress(r.anchor_address) + ' or within 100m'));
+    }
+
+    var facts = make('span', 'bk-tier-facts');
+    if (soldOut) {
+      facts.appendChild(make('span', 'bk-fact bk-fact-warn', 'Sold out online'));
+    } else if (r.spots_left <= 3) {
+      facts.appendChild(make('span', 'bk-fact bk-fact-low', r.spots_left + ' left'));
+    }
+    if (facts.childNodes.length) body.appendChild(facts);
+
+    label.appendChild(input);
+    label.appendChild(body);
+    return label;
+  }
+
+  // Under a sold-out card, in its own row so it is not faded with the card.
+  // Walk-ups are promised only when the database says the gate still has
+  // one; it never says how many.
+  function soldOutNote(r) {
+    return make('p', 'bk-soldout-note' + (r.walk_ups_on_the_night ? ' is-walk-up' : ''),
+      r.walk_ups_on_the_night
+        ? 'Sold out online — walk-up spaces on the night. Come to ' +
+          whereToCome(r) + ' and a Talli warden will park you.'
+        : 'Sold out online for this type.');
   }
 
   // The tier labels in the database read as "Standard — best value, expect to
@@ -747,66 +886,6 @@
   function splitLabel(label) {
     var parts = String(label || '').split(/\s+—\s+/);
     return { name: parts[0], detail: parts.slice(1).join(' — ') };
-  }
-
-  // A sold-out card is faded, and opacity carries to everything inside it —
-  // so the "still worth turning up" line goes in its own row underneath,
-  // where it stays readable. .bk-cards is a one-column grid, so the row sits
-  // directly under the option it is talking about.
-  function addTier(container, tier) {
-    container.appendChild(tierCard(tier));
-    if (tier.spots_left <= 0) {
-      container.appendChild(
-        make(
-          'p',
-          'bk-soldout-note',
-          'Sold out online — but there may still be space on the night. ' +
-          'Come to ' + whereToCome() + ' and ask the warden.'
-        )
-      );
-    }
-  }
-
-  function tierCard(tier) {
-    var soldOut = tier.spots_left <= 0;
-    var label = make('label', 'bk-card bk-card-tier' + (soldOut ? ' is-soldout' : ''));
-    var parts = splitLabel(tier.label);
-
-    var input = document.createElement('input');
-    input.type = 'radio';
-    input.name = 'bk-tier';
-    input.value = tier.code;
-    input.className = 'bk-radio';
-    input.disabled = soldOut;
-    input.addEventListener('change', function () { chooseTier(tier); });
-
-    var body = make('span', 'bk-card-body');
-
-    var head = make('span', 'bk-tier-head');
-    head.appendChild(make('span', 'bk-card-title', parts.name));
-    head.appendChild(make('span', 'bk-tier-price', money(tier.price_cents)));
-    body.appendChild(head);
-
-    if (parts.detail) body.appendChild(make('span', 'bk-card-meta', parts.detail));
-
-    var facts = make('span', 'bk-tier-facts');
-    if (tier.arrival_from && tier.arrival_until) {
-      facts.appendChild(
-        make('span', 'bk-fact', 'Arrive ' + asTime(tier.arrival_from) + '–' + asTime(tier.arrival_until))
-      );
-    }
-    if (soldOut) {
-      facts.appendChild(make('span', 'bk-fact bk-fact-warn', 'Sold out online'));
-    } else if (tier.spots_left <= 3) {
-      facts.appendChild(
-        make('span', 'bk-fact bk-fact-low', tier.spots_left + (tier.spots_left === 1 ? ' left' : ' left'))
-      );
-    }
-    if (facts.childNodes.length) body.appendChild(facts);
-
-    label.appendChild(input);
-    label.appendChild(body);
-    return label;
   }
 
   /* -------------------------------------------------------- step 3: extras */
@@ -966,16 +1045,21 @@
     }
   }
 
-  function chooseTier(tier) {
+  // A block chosen for the type that is on: that row is what is bought.
+  function chooseBlock(tier) {
+    if (tier.spots_left <= 0) return;
+    state.block = tier;
     state.tier = tier;
     clearError();
+    if (state.pins.length) drawMap(el('bk-map'), state.pins);
 
     var parts = splitLabel(tier.label);
-    text(el('bk-summary-tier'), parts.name);
+    text(el('bk-summary-tier'), parts.name + ' · ' + tier.block_name);
     text(el('bk-summary-price'), money(tier.price_cents));
     text(
       el('bk-summary-event'),
-      state.event.name + ' · ' + asDate(state.event.starts_at)
+      state.event.name + ' · ' + asDate(state.event.starts_at) +
+      (tier.anchor_address ? ' · ' + shortAddress(tier.anchor_address) + ' or within 100m' : '')
     );
 
     var arrival = el('bk-summary-arrival');
@@ -1061,7 +1145,7 @@
 
         fail(result.data.error || 'Something went wrong starting checkout.');
         // Availability may have moved under us; refresh so the counts are honest.
-        loadTiers(state.event.id);
+        loadNight(state.event.id);
       })
       .catch(function () {
         fail('We could not reach the booking system. Check your connection and try again.');
@@ -1078,23 +1162,24 @@
   function init() {
     if (!CFG.supabaseUrl || !CFG.anonKey) return;
 
-    el('bk-more-toggle').addEventListener('click', function () {
-      var more = el('bk-tiers-more');
-      var open = !more.hidden;
-      more.hidden = open;
-      text(this, open ? 'More options' : 'Fewer options');
-      this.setAttribute('aria-expanded', String(!open));
-    });
-
     el('bk-form').addEventListener('submit', submit);
     el('bk-interest-form').addEventListener('submit', submitInterest);
     el('bk-interest-close').addEventListener('click', function () {
       el('bk-interest').hidden = true;
     });
 
-    loadEvents();
     loadExtras();
     loadSurcharge();
+
+    // A series page: its nights are on the page already.
+    var nights = el('bk-nights');
+    if (nights) { bindNights(nights); return; }
+
+    // /book. An old link to one night goes to that night's series page;
+    // if that cannot be done, the night is chosen here instead.
+    sendToSeries(param('event')).then(function (leaving) {
+      if (!leaving) loadEvents();
+    });
   }
 
   if (document.readyState === 'loading') {

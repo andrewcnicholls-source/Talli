@@ -1,6 +1,7 @@
 /* =====================================================================
-   The events catalogue (plan A2): from "what's on" to the booking page
-   with the night already chosen.
+   The events catalogue (plan A2): from "what's on" to a series, where
+   a night opens the booking flow on the same page (plan A3). Old links
+   to /book?event=<id> come back to the series with that night chosen.
 
    The pages come from the real functions (tests/lib/serve.js runs them
    against the local stack). The price is filled in afterwards in the
@@ -10,7 +11,7 @@
 const { test, expect } = require('./fixtures');
 const { FIX, rest } = require('../lib/stack');
 
-test('what\'s on → a series → its night, chosen on the booking page', async ({ page }) => {
+test('what\'s on → a series → its night, booked on the series page', async ({ page }) => {
   const [{ event_series: series }] =
     await rest(`event?id=eq.${FIX.night}&select=event_series(slug,name)`);
 
@@ -29,10 +30,21 @@ test('what\'s on → a series → its night, chosen on the booking page', async 
   await expect(night.locator('.ev-from')).toHaveText(/^Parking from \$\d+/);
   await night.getByRole('link', { name: 'Book parking' }).click();
 
-  await expect(page).toHaveURL(new RegExp(`/book\\?event=${FIX.night}$`));
-  await expect(page.locator(`input[name="bk-event"][value="${FIX.night}"]`)).toBeChecked();
+  // The flow opens under the nights; the address names the night chosen.
+  await expect(page).toHaveURL(new RegExp(`/events/${series.slug}\\?night=${FIX.night}$`));
+  await expect(night).toHaveClass(/is-chosen/);
   await expect(page.locator('#bk-tiers-step')).toBeVisible();
   await expect(page.locator('#bk-tier-event')).toContainText('Fixture night');
+});
+
+test('an old /book?event= link lands on the series page with that night chosen', async ({ page }) => {
+  const [{ event_series: series }] =
+    await rest(`event?id=eq.${FIX.night}&select=event_series(slug)`);
+  await page.goto(`/book?event=${FIX.night}`);
+  await expect(page).toHaveURL(new RegExp(`/events/${series.slug}\\?night=${FIX.night}$`));
+  await expect(page.locator(`#night-${FIX.night}`)).toHaveClass(/is-chosen/);
+  await expect(page.locator('#bk-tiers-step')).toBeVisible();
+  await expect(page.locator('label.bk-card-block').first()).toBeVisible();
 });
 
 test('a booking link to a night that is not listed leaves the page as it was', async ({ page }) => {

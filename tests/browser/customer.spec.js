@@ -15,21 +15,30 @@ const { deliver, sessionCompleted } = require('../lib/stripe');
 const made = [];
 test.afterAll(() => forget(made));
 
-async function chooseNight(page, name) {
-  await page.goto('/book.html');
-  await page.locator('label.bk-fixture', { hasText: name }).first().click();
+// The fixture nights' series page (plan A3: the flow lives there).
+async function seriesOf(night) {
+  const [{ event_series: series }] = await rest(`event?id=eq.${night}&select=event_series(slug)`);
+  return series.slug;
 }
 
-test('a customer books a block and is sent to that block, not Paice Ave', async ({ page }) => {
+test('a customer books a block from the series page, and is sent to that block', async ({ page }) => {
   const rego = plate('BC');
   made.push(rego);
+  const taps = [];
+  const tap = async (locator) => { taps.push(locator); await locator.click(); };
 
-  await chooseNight(page, 'TEST — Fixture night');
-  // Two areas sell this night, so the area comes first.
-  await page.locator('label.bk-card', { hasText: 'Gribblehurst (test)' }).click();
-  await page.locator('label.bk-card', { hasText: 'Standard' }).first().click();
+  await page.goto(`/events/${await seriesOf(FIX.night)}`);
+  await tap(page.locator(`#night-${FIX.night}`).getByRole('link', { name: 'Book parking' }));
+  await expect(page.locator('#bk-tiers-step')).toBeVisible();
+
+  // Standard is the chip that is on, and every block shows its Standard price.
+  await expect(page.locator('input[name="bk-type"][value="standard"]')).toBeChecked();
+  const grib = page.locator('label.bk-card-block', { hasText: 'Gribblehurst (test)' });
+  await expect(grib.locator('.bk-tier-price')).toHaveText('$40');
+  await expect(grib).toContainText('or within 100m');
+
+  await tap(grib);
   await expect(page.locator('#bk-summary-price')).toHaveText('$40');
-
   await page.fill('#bk-name', 'Browser Buyer');
   await page.fill('#bk-email', 'browser.buyer@example.com');
   await page.fill('#bk-rego', rego);
@@ -56,8 +65,10 @@ test('a customer books a block and is sent to that block, not Paice Ave', async 
     } });
   });
 
-  await page.click('#bk-submit');
+  await tap(page.locator('#bk-submit'));
   await expect(page.locator('#cf-headline')).toHaveText(/booked in/);
+  // Night, block, pay: the details are typed, not tapped.
+  expect(taps.length).toBeLessThanOrEqual(4);
 
   // What the page asked for: a night, an area, a type. Never a price.
   expect(sent).toMatchObject({ event_id: FIX.night, tier_code: 'standard', vehicle_rego: rego });
@@ -71,11 +82,52 @@ test('a customer books a block and is sent to that block, not Paice Ave', async 
   expect(row).toEqual({ status: 'paid', amount_cents: 4000 });
 });
 
-test('a night sold out online says walk-ups are still possible, never how many', async ({ page }) => {
-  await chooseNight(page, 'TEST — Fixture night (sold out online)');
-  const tiers = page.locator('#bk-tiers');
-  await expect(tiers).toContainText(/sold out online/i);
-  await expect(tiers).toContainText(/on the night/i);
-  await expect(tiers).not.toContainText(/\b\d+ left\b/);
+test('the type chips filter the blocks and their prices', async ({ page }) => {
+  await page.goto(`/events/${await seriesOf(FIX.night)}?night=${FIX.night}`);
+  const blocks = page.locator('#bk-blocks');
+  await expect(blocks.locator('label.bk-card-block')).toHaveCount(2);
+
+  await page.locator('label.bk-chip', { hasText: 'Valet' }).click();
+  // Only Paice Ave sells Valet on this night.
+  await expect(blocks.locator('label.bk-card-block')).toHaveCount(1);
+  await expect(blocks).not.toContainText('Gribblehurst');
+  await expect(blocks.locator('.bk-tier-price')).toHaveText('$45');
+
+  await page.locator('label.bk-chip', { hasText: 'Priority' }).click();
+  await expect(page.locator('label.bk-card-block', { hasText: 'Gribblehurst (test)' })
+    .locator('.bk-tier-price')).toHaveText('$50');
+  await page.locator('label.bk-card-block', { hasText: 'Gribblehurst (test)' }).click();
+  await expect(page.locator('#bk-summary-tier')).toContainText('Priority');
+  await expect(page.locator('#bk-summary-price')).toHaveText('$50');
+
+  // Changing the chip lets go of the block chosen for the other type.
+  await page.locator('label.bk-chip', { hasText: 'Standard' }).click();
   await expect(page.locator('#bk-details')).toBeHidden();
+  await expect(page.locator('input[name="bk-block"]:checked')).toHaveCount(0);
+});
+
+test('a night sold out online says walk-ups are still possible, never how many', async ({ page }) => {
+  await page.goto(`/events/${await seriesOf(FIX.soldOutNight)}?night=${FIX.soldOutNight}`);
+  const blocks = page.locator('#bk-blocks');
+  const paice = blocks.locator('label.bk-card-block', { hasText: 'Paice' });
+  await expect(paice).toHaveClass(/is-soldout/);
+  await expect(paice.locator('input')).toBeDisabled();
+  const note = blocks.locator('.bk-soldout-note');
+  await expect(note).toHaveText(/Sold out online — walk-up spaces on the night/);
+  await expect(note).toContainText('86 Paice Ave');
+  await expect(blocks).not.toContainText(/\b\d+ (left|walk-up|space)/);
+  await expect(page.locator('#bk-details')).toBeHidden();
+
+  // Priority still has one online, so it is still for sale.
+  await page.locator('label.bk-chip', { hasText: 'Priority' }).click();
+  await expect(blocks.locator('label.bk-card-block').first()).not.toHaveClass(/is-soldout/);
+});
+
+test('/book still sells a night chosen from its own list', async ({ page }) => {
+  await page.goto('/book.html');
+  await page.locator('label.bk-fixture', { hasText: 'TEST — Fixture night' }).first().click();
+  await expect(page.locator('#bk-tiers-step')).toBeVisible();
+  await page.locator('label.bk-card-block', { hasText: 'Gribblehurst (test)' }).click();
+  await expect(page.locator('#bk-summary-price')).toHaveText('$40');
+  await expect(page.locator('#bk-details')).toBeVisible();
 });

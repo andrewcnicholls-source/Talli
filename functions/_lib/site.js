@@ -6,7 +6,8 @@
    as the static files it always has.
 
      /events          every series with a night coming up, soonest first
-     /events/<slug>   one series: what, where, when, and each night
+     /events/<slug>   one series: what, where, when, each night, and the
+                      booking flow under them (plan A3, BOOKING_FLOW)
      /sitemap.xml     the static pages, the catalogue and every series
 
    Why on the server at all: the details of an event have to be in the
@@ -253,6 +254,135 @@ function describe(series) {
     '. Book a driveway space online in under a minute.';
 }
 
+// --- the booking flow (plan A3) ----------------------------------------------
+//
+// Steps 2–4 of the booking flow and the "tell me" sheet, as book.html has
+// them. assets/booking.js drives them on both pages; step 1 here is the
+// list of nights above. tests/units/event-pages.test.js checks that this
+// and book.html both carry every element booking.js looks for.
+
+export const BOOKING_FLOW = `<div class="bk-flow ev-flow">
+
+    <section class="bk-step" id="bk-tiers-step" aria-labelledby="bk-h-tier" hidden>
+      <div class="bk-step-head">
+        <span class="bk-step-num">02</span>
+        <h2 id="bk-h-tier">Where to park?</h2>
+      </div>
+      <p class="bk-step-context" id="bk-tier-event"></p>
+      <div class="bk-chips" id="bk-types" role="radiogroup" aria-label="Type of space"></div>
+      <p class="bk-step-note" id="bk-type-note" hidden></p>
+      <p class="bk-step-note bk-surcharge-note" id="bk-tier-surcharge" hidden></p>
+      <div class="bk-map" id="bk-map" role="region" aria-label="Map of parking near Eden Park" hidden></div>
+      <div class="bk-cards" id="bk-blocks"></div>
+    </section>
+
+    <section class="bk-step" id="bk-extras-step" aria-labelledby="bk-h-extras" hidden>
+      <div class="bk-step-head">
+        <span class="bk-step-num">03</span>
+        <h2 id="bk-h-extras">Anything else?</h2>
+      </div>
+      <p class="bk-step-note">
+        Worth deciding now rather than in the rain. Add them here and they&rsquo;ll be
+        waiting when you pull in &mdash; no cash, no queue. Skip straight past if you&rsquo;re sorted.
+      </p>
+      <div class="bk-extras" id="bk-extras"></div>
+    </section>
+
+    <section class="bk-step" id="bk-details" aria-labelledby="bk-h-details" hidden>
+      <div class="bk-step-head">
+        <span class="bk-step-num">04</span>
+        <h2 id="bk-h-details">Your details</h2>
+      </div>
+
+      <div class="bk-summary">
+        <div class="bk-summary-line">
+          <span class="bk-summary-tier" id="bk-summary-tier"></span>
+          <span class="bk-summary-price" id="bk-summary-price"></span>
+        </div>
+        <div class="bk-summary-extras" id="bk-summary-extras" hidden></div>
+        <div class="bk-summary-line bk-summary-extra bk-summary-surcharge" id="bk-summary-surcharge" hidden>
+          <span id="bk-summary-surcharge-label">Card payment surcharge</span>
+          <span id="bk-summary-surcharge-price"></span>
+        </div>
+        <div class="bk-summary-total" id="bk-summary-total" hidden>
+          <span>Total</span>
+          <strong id="bk-summary-total-price"></strong>
+        </div>
+        <div class="bk-summary-meta" id="bk-summary-event"></div>
+        <div class="bk-summary-meta" id="bk-summary-arrival" hidden></div>
+      </div>
+
+      <form id="bk-form">
+        <div class="bk-field">
+          <label for="bk-name">Name</label>
+          <input type="text" id="bk-name" name="name" autocomplete="name" required>
+        </div>
+        <div class="bk-field">
+          <label for="bk-email">Email</label>
+          <input type="email" id="bk-email" name="email" autocomplete="email" required>
+          <span class="bk-hint">Your receipt and arrival instructions go here.</span>
+        </div>
+        <div class="bk-field-row">
+          <div class="bk-field">
+            <label for="bk-phone">Phone <span class="bk-optional">optional</span></label>
+            <input type="tel" id="bk-phone" name="phone" autocomplete="tel">
+          </div>
+          <div class="bk-field">
+            <label for="bk-rego">Number plate</label>
+            <input type="text" id="bk-rego" name="rego" required maxlength="8" autocapitalize="characters" spellcheck="false">
+            <span class="bk-hint">Helps us find you fast. Add it later if you don't know it yet.</span>
+          </div>
+        </div>
+        <div class="bk-check-field">
+          <label class="bk-check" for="bk-low">
+            <input type="checkbox" id="bk-low" name="low">
+            <span>My car is lowered or sits low to the ground</span>
+          </label>
+          <span class="bk-hint">
+            Some spots have a steep entry. Tick this and the marshal will put you
+            somewhere flat &mdash; it costs nothing and doesn&rsquo;t change your spot.
+          </span>
+        </div>
+
+        <p class="bk-error" id="bk-error" role="alert" hidden></p>
+        <button type="submit" class="btn btn-primary bk-submit" id="bk-submit">Continue to payment</button>
+        <p class="bk-fineprint">
+          You&rsquo;ll be taken to Stripe to pay by card. Your space is held while you check out.
+          A marshal will show you where to park on the night. Your vehicle needs a current WOF and
+          registration. By booking you agree to our <a href="/terms">terms &amp; conditions</a>.
+        </p>
+      </form>
+    </section>
+
+  </div>`;
+
+const INTEREST_SHEET = `<div class="bk-sheet" id="bk-interest" hidden>
+  <div class="bk-sheet-card">
+    <div class="bk-sheet-head">
+      <div>
+        <h2 id="bk-interest-name"></h2>
+        <p class="bk-sheet-when" id="bk-interest-when"></p>
+      </div>
+      <button type="button" class="bk-sheet-close" id="bk-interest-close" aria-label="Close">&times;</button>
+    </div>
+    <p class="bk-sheet-lead" id="bk-interest-lead"></p>
+    <form id="bk-interest-form">
+      <div class="bk-field">
+        <label for="bk-interest-email">Email</label>
+        <input type="email" id="bk-interest-email" name="interestemail" autocomplete="email" required>
+      </div>
+      <div class="bk-field">
+        <label for="bk-interest-yourname">Name <span class="bk-optional">optional</span></label>
+        <input type="text" id="bk-interest-yourname" name="interestname" autocomplete="name">
+      </div>
+      <p class="bk-error" id="bk-interest-error" role="alert" hidden></p>
+      <button type="submit" class="btn btn-primary" id="bk-interest-submit">Tell me when it opens</button>
+      <p class="bk-fineprint">We&rsquo;ll only email you about this event. No newsletter, and we don&rsquo;t share your address.</p>
+    </form>
+    <p class="bk-sheet-done" id="bk-interest-done" role="status" hidden></p>
+  </div>
+</div>`;
+
 // --- the page around it ------------------------------------------------------
 
 function page(opts) {
@@ -279,7 +409,7 @@ function page(opts) {
 ${og.map(([k, v]) => `<meta property="${k}" content="${esc(v)}">`).join('\n')}
 <meta name="twitter:card" content="${opts.image ? 'summary_large_image' : 'summary'}">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Poiret+One&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Poiret+One&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">${opts.booking ? '\n<link rel="stylesheet" href="/assets/vendor/leaflet/leaflet.css">' : ''}
 <link rel="stylesheet" href="/style.css">
 <script src="/assets/talli-config.js"></script>
 <script src="/assets/talli-testgate.js"></script>${ld}
@@ -316,7 +446,9 @@ ${opts.body}
   </div>
 </footer>
 
-<script src="/assets/events.js"></script>
+${opts.booking ? INTEREST_SHEET + '\n\n' : ''}<script src="/assets/events.js"></script>${opts.booking
+    ? '\n<script src="/assets/vendor/leaflet/leaflet.js"></script>\n<script src="/assets/booking.js"></script>'
+    : ''}
 </body>
 </html>
 `;
@@ -391,7 +523,12 @@ export function renderSeries(project, series, opts) {
   const nights = series.nights.map((n) => {
     const state = nightState(n, now);
     const nightPicture = n.picture_path ? pictureUrl(project, n.picture_path) : null;
-    return `    <li class="ev-night is-${state.key}" id="night-${esc(n.id)}">
+    // The data-night-* attributes are what assets/booking.js needs to open
+    // the flow for this night without asking the database what it is.
+    const fullName = n.night_label ? series.name + ' — ' + n.night_label : n.name;
+    return `    <li class="ev-night is-${state.key}" id="night-${esc(n.id)}"
+        data-night-id="${esc(n.id)}" data-night-state="${esc(state.key)}"
+        data-night-name="${esc(fullName)}" data-night-starts="${esc(n.starts_at)}">
       ${dateBlock(n.starts_at)}
       <span class="ev-night-body">
         <span class="ev-night-name">${esc(nightTitle(n))}</span>
@@ -401,7 +538,7 @@ export function renderSeries(project, series, opts) {
       </span>
       ${nightPicture ? `<img class="ev-night-pic" src="${esc(nightPicture)}" alt="" loading="lazy">` : ''}
       <a class="btn ${state.key === 'on_sale' ? 'btn-primary' : 'btn-outline'} ev-night-go"
-         href="/book?event=${esc(encodeURIComponent(n.id))}">${esc(state.action)}</a>
+         href="/events/${esc(series.slug)}?night=${esc(encodeURIComponent(n.id))}">${esc(state.action)}</a>
     </li>`;
   }).join('\n');
 
@@ -415,11 +552,16 @@ export function renderSeries(project, series, opts) {
 </header>
 
 <main class="wrap tight">
-  <div class="section-label">${series.nights.length === 1 ? 'The night' : 'Pick your night'}</div>
+  <div class="bk-step-head ev-step-head">
+    <span class="bk-step-num">01</span>
+    <h2>${series.nights.length === 1 ? 'The night' : 'Pick your night'}</h2>
+  </div>
 ${series.nights.length
-    ? `  <ul class="ev-nights">\n${nights}\n  </ul>
+    ? `  <ul class="ev-nights" id="bk-nights">\n${nights}\n  </ul>
   <p class="ev-note">Parking is in driveways a few minutes' walk from the gates. Prices are set per area
-  and type of space, and the price you see when you book is the price you pay.</p>`
+  and type of space, and the price you see when you book is the price you pay.</p>
+
+  ${BOOKING_FLOW}`
     : `  <p class="ev-empty">No nights on sale for ${esc(series.name)} just now.
   <a href="/events">See what else is on</a>.</p>`}
 </main>`;
@@ -432,6 +574,7 @@ ${series.nights.length
     // A series with nothing coming up has nothing to offer a searcher.
     noindex: opts.noindex || !series.nights.length,
     jsonLd: eventJsonLd(project, series, url),
+    booking: series.nights.length > 0,
     body,
   });
 }

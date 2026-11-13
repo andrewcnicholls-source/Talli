@@ -328,6 +328,33 @@ brief above, and why:
 - Done when: on a phone, Bruno Mars night two can be booked in four
   taps to checkout, and a night sold out online shows walk-ups.
 
+**Status, 14 Nov 2026: built**, on top of A2. What differs from the
+brief above, and why:
+
+- **Night, then the type chip, then the block.** The chips sit above the
+  map and cards and filter them; picking a block is what moves the
+  booking on. Standard is on by default, so the usual path is three
+  taps: the night, the block, "Continue to payment".
+- **The walk-up flag is `walk_ups_on_the_night`** on
+  `v_block_tier_availability` (`20261114100000_talli_walk_up_flag`):
+  true when a confirmed site in the block has a space of that type held
+  for the gate and unsold. A yes/no, so the page cannot show a count.
+  `/events` uses it too: a night with nothing left online but gate
+  spaces says "Walk-up spaces on the night" instead of nothing.
+- **`/book` stays**, and runs the same flow from its own list of nights.
+  `/book?event=<id>` is sent to the series page by the browser
+  (`assets/booking.js`), not by a Pages Function, so `/book` remains a
+  static file; an id with no readable series is chosen on `/book` as
+  before.
+- **The flow's markup is in two places**: `book.html` and
+  `BOOKING_FLOW` in `functions/_lib/site.js`. A unit test fails if
+  either is missing an element `booking.js` looks up.
+- **Prices are still each block's anchor price.** One price per block is
+  B1's guard; until it lands, two sites in a block priced differently
+  would show the anchor's figure and charge the site's.
+- **Not yet proven on Cloudflare** for the same reason as A2: check the
+  series page on staging after merge, on a phone.
+
 ### A4 — `site-guide-and-qr`
 
 Andrew holds up a "Locate Us" card many times every event. The one in

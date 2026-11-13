@@ -52,24 +52,27 @@
       </div>
     </section>
 
-    <!-- ------------------------------------------------- step 2: the spot -->
+    <!-- ------------------------------- step 2: where, and which type -->
+    <!-- Kept the same as BOOKING_FLOW in functions/_lib/site.js, which
+         puts this flow on every series page. tests/units checks both
+         carry every element assets/booking.js looks for. -->
     <section class="bk-step" id="bk-tiers-step" aria-labelledby="bk-h-tier" hidden>
       <div class="bk-step-head">
         <span class="bk-step-num">02</span>
-        <h2 id="bk-h-tier">Which spot?</h2>
+        <h2 id="bk-h-tier">Where to park?</h2>
       </div>
       <p class="bk-step-context" id="bk-tier-event"></p>
-      <p class="bk-step-note">The difference is how quickly you can get out afterwards.</p>
 
+      <!-- The type of space is a filter over the blocks, Standard first. -->
+      <div class="bk-chips" id="bk-types" role="radiogroup" aria-label="Type of space"></div>
+      <p class="bk-step-note" id="bk-type-note" hidden></p>
       <p class="bk-step-note bk-surcharge-note" id="bk-tier-surcharge" hidden></p>
 
       <!-- Every driveway selling this event, and Eden Park, fitted to the
            frame. Hidden until there is at least one house with a position. -->
       <div class="bk-map" id="bk-map" role="region" aria-label="Map of parking near Eden Park" hidden></div>
 
-      <div class="bk-cards" id="bk-tiers"></div>
-      <div class="bk-cards" id="bk-tiers-more" hidden></div>
-      <button type="button" class="bk-more" id="bk-more-toggle" aria-expanded="false" hidden>More options</button>
+      <div class="bk-cards" id="bk-blocks"></div>
     </section>
 
     <!-- ----------------------------------------------- step 3: the extras -->
