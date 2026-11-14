@@ -43,12 +43,13 @@ test('a customer books a block from the series page, and is sent to that block',
   await expect(page.locator('#bk-blocks .bk-map-prompt')).toHaveCount(0);
   await expect(page.locator('#bk-blocks .bk-area')).toHaveCount(1);
   await expect(page.locator('#bk-blocks .bk-area .bk-card-area')).toContainText('Paice');
-  // Before an area is picked: every type's cheapest price on its chip,
-  // and nothing yet about "this address or within 100m".
+  // Every type's cheapest price on its chip, before any area is picked.
   await expect(page.locator('label.bk-chip', { hasText: 'Standard' }).locator('.bk-chip-price')).toHaveText('$30+');
   await expect(page.locator('label.bk-chip', { hasText: 'Priority' }).locator('.bk-chip-price')).toHaveText('$40+');
   await expect(page.locator('label.bk-chip', { hasText: 'Valet' }).locator('.bk-chip-price')).toHaveText('$45');
-  await expect(page.locator('#bk-blocks')).not.toContainText('within 100m');
+  // The area at 86 Paice Ave is open by default, so the note about it is
+  // said under that area, the same as any other open area.
+  await expect(page.locator('#bk-blocks .bk-area-note')).toContainText('within 100m');
 
   await tap(pin(page, '$40+'));
   const grib = page.locator('#bk-blocks .bk-area', { hasText: 'Gribblehurst (test)' });
