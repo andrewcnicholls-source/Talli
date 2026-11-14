@@ -76,17 +76,18 @@ select o.id, v.code, v.label, v.price, '{}'::text[], v.kind, v.code <> 'standard
    and o.property_id = v.site::uuid
 on conflict (event_offer_id, code) do nothing;
 
--- One price per block (plan B1): Gribblehurst (test) sells at the
--- reference price plus $10 for each type, which is what the prices above
--- already say. Recorded here so a change to the reference price moves
--- the fixture night's Gribblehurst prices with it rather than flattening
--- them to $30 / $40.
-insert into block_tier_offset (block_id, code, offset_cents)
-select b.id, v.code, v.cents
-  from block b
-  cross join (values ('standard', 1000), ('priority', 1000), ('valet', 1000)) as v(code, cents)
- where b.name = 'Gribblehurst (test)'
-on conflict (block_id, code) do update set offset_cents = excluded.offset_cents, updated_at = now();
+-- Prices by ring (20261124100000): Gribblehurst (test) is put in ring 5
+-- by hand, and ring 5 sells at the reference price plus $10 for each
+-- type — which is what the prices above already say. By distance it
+-- would share 86 Paice Ave's ring and price; the override is the
+-- boundary case Andrew asked for. Recorded here so a change to the
+-- reference price moves the fixture night's Gribblehurst prices with it
+-- rather than flattening them to $30 / $40.
+insert into ring_tier_offset (ring, code, offset_cents)
+select 5, v.code, v.cents
+  from (values ('standard', 1000), ('priority', 1000), ('valet', 1000)) as v(code, cents)
+on conflict (ring, code) do update set offset_cents = excluded.offset_cents, updated_at = now();
+update block set ring_override = 5 where name = 'Gribblehurst (test)';
 
 -- The night the gate is working (plan B2). Arrivals shows this one, and a
 -- warden cannot name another. Moves the live flag off any other night.

@@ -1,19 +1,21 @@
 -- =====================================================================
---  One price per block (plan B1, 20261115100000_talli_block_pricing).
+--  One price per block (plan B1, 20261115100000_talli_block_pricing),
+--  the adjustment now set per ring (20261124100000_talli_price_rings;
+--  the rings themselves are 14_price_rings).
 --
 --  Done when: two sites in one block always show and charge the same
 --  figure, and one surge change re-prices every block.
 --
 --  Uses the fixture night in seed-test-nights.sql: Paice Ave (86, the
 --  reference, and the 84 berm) at $30 Standard; Gribblehurst (test)
---  anchor and neighbour at $40 Standard / $50 Priority, which is the
---  reference plus the block's +$10 adjustment.
+--  anchor and neighbour at $40 Standard / $50 Priority — the fixture puts
+--  that area in ring 5, which is the reference plus $10.
 -- =====================================================================
 begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(22);
+select plan(23);
 
 create temp table fx (k text primary key, id uuid);
 insert into fx values
@@ -39,12 +41,12 @@ language sql as $$
 $$;
 
 -- ------------------------------------------------------------ the shape
-select has_table('block_tier_offset', 'blocks carry a price adjustment per type');
+select has_table('ring_tier_offset', 'rings carry a price adjustment per type');
 select is(reference_property(), (select id from fx where k = 'paice'),
   '86 Paice Ave is the reference site');
-select ok(not has_table_privilege('anon', 'block_tier_offset', 'select'),
+select ok(not has_table_privilege('anon', 'ring_tier_offset', 'select'),
   'the public cannot read the adjustments');
-select ok(not has_function_privilege('anon', 'public.set_block_offsets(uuid, jsonb)', 'execute'),
+select ok(not has_function_privilege('anon', 'public.set_ring_offsets(smallint, jsonb)', 'execute'),
   'nor set them');
 
 -- ----------------------------------------- one surge moves every block
@@ -66,21 +68,22 @@ select throws_like($$ select set_tier_price((select id from fx where k = 'night'
   'REFERENCE_PRICE_ONLY%', 'a price on any other site is refused by name');
 select is(pg_temp.price('neigh', 'standard'), 4500, 'and changes nothing');
 
--- ------------------------------------------- a block's adjustment moves
-select ok(set_block_offsets((select block_id from property where id = (select id from fx where k = 'anchor')),
-                            '[{"code":"standard","offset_cents":-500},{"code":"priority","offset_cents":0}]') >= 1,
-  'saving a block''s adjustments re-prices its upcoming nights');
+-- -------------------------------------------- a ring's adjustment moves
+select ok(set_ring_offsets(5::smallint,
+                           '[{"code":"standard","offset_cents":-500},{"code":"priority","offset_cents":0}]') >= 1,
+  'saving a ring''s adjustments re-prices the upcoming nights');
 select is(pg_temp.price('anchor', 'standard'), 3000, 'the anchor at reference − $5');
 select is(pg_temp.price('neigh', 'standard'), 3000, 'the neighbour at the same');
 select is(pg_temp.price('neigh', 'priority'), 4000, 'priority at the reference price');
 select is(pg_temp.price('paice', 'standard'), 3500, 'the reference site is untouched');
 
-select throws_like($$ select set_block_offsets((select block_id from property where id = (select id from fx where k = 'paice')),
-                                              '[{"code":"standard","offset_cents":500}]') $$,
-  'REFERENCE_BLOCK%', 'the reference block cannot be given an adjustment');
-select throws_like($$ select set_block_offsets((select block_id from property where id = (select id from fx where k = 'anchor')),
-                                              '[{"code":"standard","offset_cents":20000}]') $$,
+select throws_like($$ select set_ring_offsets(reference_ring(), '[{"code":"standard","offset_cents":500}]') $$,
+  'REFERENCE_RING%', 'the reference site''s ring cannot be given an adjustment');
+select throws_like($$ select set_ring_offsets(5::smallint, '[{"code":"standard","offset_cents":20000}]') $$,
   'BAD_OFFSET%', 'an adjustment over $100 is refused');
+select throws_like($$ select set_block_offsets((select block_id from property where id = (select id from fx where k = 'anchor')),
+                                              '[{"code":"standard","offset_cents":500}]') $$,
+  'PRICED_BY_RING%', 'the retired per-area adjustment is refused by name');
 
 -- -------------------------- a template keeps the blocks at their prices
 insert into event_template (id, name, tiers)
@@ -90,7 +93,7 @@ select lives_ok($$ select apply_price_template((select id from fx where k = 'nig
                                               'b1b1b1b1-0000-4000-8000-000000000001') $$,
   'a template applied to the whole night');
 select is(pg_temp.price('neigh', 'standard'), 5500,
-  'leaves another block at its adjustment, not flattened to the template');
+  'leaves another block at its ring''s adjustment, not flattened to the template');
 
 -- ------------------------------- shown is charged, whichever site is picked
 select is(pg_temp.shown('Gribblehurst (test)', 'standard'), pg_temp.price('neigh', 'standard'),

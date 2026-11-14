@@ -163,7 +163,7 @@ export const OPERATOR_ONLY = new Set([
   'event_form', 'create_event', 'save_template', 'set_event_status',
   'set_capacity', 'set_price', 'apply_price_template', 'set_reserve',
   'set_offer_status', 'site_options', 'add_offer',
-  'sites_setup', 'save_site', 'create_site', 'save_block_pricing',
+  'sites_setup', 'save_site', 'create_site', 'save_ring_pricing', 'set_block_ring',
   'save_site_details', 'add_site', 'set_block_anchor', 'set_site_nights', 'save_site_night',
   'series_list', 'save_series', 'set_event_series', 'upload_picture',
   'set_live_event',
