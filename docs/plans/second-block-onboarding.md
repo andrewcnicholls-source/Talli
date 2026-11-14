@@ -764,6 +764,42 @@ and B6. Andrew's answers to what the brief left open, and what differs:
 - `scripts/check.sh`: assert every operator-only action is refused to a
   `blocks`-scoped caller.
 
+**Status, 14 Nov 2026: built** (`feature/warden-access`), on top of B7.
+What differs from the brief above, and why:
+
+- **People sits on the Sites page, above Settlement** (`assets/admin/people.js`),
+  hooked in from `tabs.js` like Settlement; `sites.js` is untouched. It
+  is **not narrowed by the selector** (B6): it is who may open the gate
+  screen at all, and a list that hid people would read as "nobody else
+  has access".
+- **The database does the guarding** (`20261122100000_talli_warden_access`):
+  `staff_list`, `invite_warden`, `set_warden_block`, `set_warden_active`,
+  service-role only, refusing by name — `BAD_EMAIL`, `NO_BLOCKS_CHOSEN`,
+  `UNKNOWN_BLOCK`, `ALREADY_ON_BOOKS`, `NOT_A_WARDEN`, `NO_PERSON`.
+- **Only a warden's row is ever made or changed.** An invitation is always
+  `scope = 'blocks'`, `role = 'staff'`, under the operator host; an
+  operator (`scope = 'all'`) is listed read-only and cannot be switched
+  off or given areas from the screen, so Andrew cannot lock himself out.
+  Someone already on the books is changed from their own card, never
+  re-invited.
+- **Nothing is deleted.** Switching an area off keeps the grant as
+  `active = false`; deactivating keeps the row, so who checked cars in and
+  who held cash stay on record. A warden switched off is refused on their
+  next request (`host_access_for` returns active rows only), still signed
+  in or not. Every area off still means `NO_BLOCKS`.
+- **Who invited is kept** (`host_user.invited_by`).
+- **The claim is unchanged:** the first Google sign-in with that address.
+  The functions suite proves it with a brand-new local account.
+- **"Every operator-only action is refused to a warden"** is
+  `tests/functions/warden-access.test.js`, which reads `OPERATOR_ONLY`
+  from `auth.ts` and tries every entry as two wardens, so an action added
+  later is covered without editing the test; `check.sh` asserts the test
+  still reads the real list, that the four staff actions are in it, and
+  that the migration never writes a scope or an operator row.
+- **At release:** migration `20261122100000`, then `gate-ops`. Nothing to
+  set by hand. § 5a step 4's two rows of SQL become: Sites → People →
+  the warden's Google address, tick their area, Invite.
+
 ### T0 — `test-foundation`
 
 The tests, how they sign in, and where they run. Later workstreams add

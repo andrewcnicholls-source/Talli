@@ -137,7 +137,9 @@ same as allowed; the table is what decides.
 
 A `host_user` row with no `user_id` is an unclaimed invitation, claimed by
 the first sign-in with that email. That is how a new host is added: one
-`insert`, no console step. Both projects carry a seeded invitation for
+`insert`, no console step. A warden is invited from the gate screen itself
+(Sites → People, plan B8), which makes that row and its block grants;
+nothing there makes or changes an operator. Both projects carry a seeded invitation for
 Andrew, and they are separate projects so they are separate sign-ins.
 
 Two things follow that are easy to get wrong:

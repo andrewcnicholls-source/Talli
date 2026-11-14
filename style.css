@@ -2624,6 +2624,17 @@ body.ad-guide-open { overflow: hidden; }
 .ad-settle-percent { margin-top: 22px; }
 .ad-settle .ad-site-save { margin-top: 12px; width: 100%; }
 
+/* People (plan B8): on the Sites page, above Settlement. */
+.ad-people-invite .ad-input { width: 100%; }
+.ad-people-areas { margin-top: 14px; }
+.ad-people-email { overflow-wrap: anywhere; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.ad-people-card.is-off { opacity: 0.75; }
+.ad-people-card .ad-check { margin-top: 10px; }
+.ad-people-warn { color: var(--orange-flag); }
+.ad-people-toggle { margin-top: 14px; }
+.ad-people-op { margin: 8px 0 0; overflow-wrap: anywhere; }
+.ad-people-op .ad-chip { margin-left: 8px; }
+
 /* ---------------------------------------------- series & picture (plan A1) */
 .ad-status-series {
   display: flex;
