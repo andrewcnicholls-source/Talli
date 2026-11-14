@@ -42,6 +42,33 @@ test('what\'s on → a series → its night, booked on the series page', async (
   await expect(page.locator('#bk-tier-event')).toContainText('Fixture night');
 });
 
+// Where a jump lands: the heading just under the sticky top bar, with a
+// little white space — not under the bar, and not a screen further down.
+// A page too short to bring it that high may stop at its end instead.
+async function landsUnderBar(page, selector) {
+  await expect.poll(() => page.evaluate((sel) => {
+    const bar = document.querySelector('.topbar').getBoundingClientRect().bottom;
+    const gap = document.querySelector(sel).getBoundingClientRect().top - bar;
+    const atEnd = Math.ceil(window.scrollY + window.innerHeight) >=
+      document.documentElement.scrollHeight - 1;
+    return (gap >= 4 && gap <= 32) || (atEnd && gap > 32) ? 'ok' : 'gap ' + Math.round(gap) + 'px';
+  }, selector), { timeout: 5000 }).toBe('ok');
+}
+
+test('the What\'s on card lands on 01 Pick your night, and Book parking on 02', async ({ page }) => {
+  const [{ event_series: series }] =
+    await rest(`event?id=eq.${FIX.night}&select=event_series(slug,name)`);
+  await page.goto('/events');
+  await page.locator('.ev-card', { hasText: series.name }).locator('a').click();
+  await expect(page).toHaveURL(new RegExp(`/events/${series.slug}#ev-nights$`));
+  await page.waitForLoadState('load');
+  await landsUnderBar(page, '#ev-nights');
+
+  await page.locator(`#night-${FIX.night}`).getByRole('link', { name: 'Book parking' }).click();
+  await expect(page.locator('#bk-tiers-step')).toBeVisible();
+  await landsUnderBar(page, '#bk-tiers-step');
+});
+
 test('an old /book?event= link lands on the series page with that night chosen', async ({ page }) => {
   const [{ event_series: series }] =
     await rest(`event?id=eq.${FIX.night}&select=event_series(slug)`);

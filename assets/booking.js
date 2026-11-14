@@ -130,12 +130,39 @@
 
   function show(node) { node.hidden = false; }
 
+  // Bring a heading to just under the top bar (style.css keeps the bar's
+  // height and a little white space clear) — and keep it there while the
+  // page fills in underneath: the areas, the map and the pictures arrive
+  // after the jump, and until they do the page may be too short to bring
+  // the heading up. Stops the moment they scroll themselves, or after a few
+  // seconds; a newer jump replaces it.
+  var landing = null;
+
+  function land(node) {
+    if (landing) landing.stop();
+    var done = false;
+    var ro = null;
+    function stop() {
+      done = true;
+      if (ro) ro.disconnect();
+    }
+    function go() { if (!done) node.scrollIntoView({ block: 'start' }); }
+    ['wheel', 'touchstart', 'keydown'].forEach(function (type) {
+      window.addEventListener(type, stop, { once: true, passive: true });
+    });
+    go();
+    if (window.ResizeObserver) {
+      ro = new ResizeObserver(go);
+      ro.observe(document.body);
+    }
+    setTimeout(stop, 3000);
+    landing = { stop: stop };
+  }
+
   function reveal(node) {
     show(node);
     // Let the browser paint the newly shown step before scrolling to it.
-    requestAnimationFrame(function () {
-      node.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
+    requestAnimationFrame(function () { land(node); });
   }
 
   function fail(message) {
@@ -297,10 +324,11 @@
     if (li) { pickNight(items, li, false); return; }
 
     // One night on sale (Robbie Williams has one): that is the one they
-    // want, so the flow opens on it without a tap and scrolls down to the
-    // parking (section 02), skipping the night they came to read.
+    // want, so the flow opens on it without a tap — quietly. The page stays
+    // where the link put it, at 01 Pick your night, and the parking is
+    // straight underneath.
     var onSale = items.filter(function (x) { return x.getAttribute('data-night-state') === 'on_sale'; });
-    if (!wanted && onSale.length === 1) pickNight(items, onSale[0], false);
+    if (!wanted && onSale.length === 1) pickNight(items, onSale[0], false, true);
   }
 
   function pickNight(items, li, tapped, quiet) {
@@ -1043,7 +1071,7 @@
     renderBlocks();
     if (!scroll || !blockId) return;
     var card = el('bk-blocks').querySelector('.bk-area[data-block-id="' + blockId + '"]');
-    if (card && card.scrollIntoView) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (card && card.scrollIntoView) land(card);
   }
 
   function blockCard(r) {
@@ -1390,7 +1418,29 @@
 
   /* ------------------------------------------------------------------ init */
 
+  // The sticky top bar is 73px on a desktop and twice that on a phone,
+  // where its links wrap. Every jump on this page — the #ev-nights link
+  // from What's on, a step opening, an area picked on the map — keeps that
+  // height clear plus a little white space (style.css, scroll-padding-top).
+  // Measured rather than guessed, and again when the phone turns.
+  function measureTopbar() {
+    var bar = document.querySelector('.topbar');
+    if (bar) document.documentElement.style.setProperty('--topbar-h', bar.offsetHeight + 'px');
+  }
+
+  // The browser jumps to #ev-nights before the bar is measured, and before
+  // the pictures above it and the booking flow below it have loaded, so it
+  // can land short or long. Land it again as each arrives.
+  function settleAnchor() {
+    var id = window.location.hash.slice(1);
+    var target = id && document.getElementById(id);
+    if (target) land(target);
+  }
+
   function init() {
+    measureTopbar();
+    window.addEventListener('resize', measureTopbar);
+    settleAnchor();
     if (!CFG.supabaseUrl || !CFG.anonKey) return;
 
     el('bk-form').addEventListener('submit', submit);

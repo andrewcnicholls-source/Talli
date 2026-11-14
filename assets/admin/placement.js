@@ -86,11 +86,18 @@ function placeOptions(r) {
   return out;
 }
 
+// Before the car is ticked in, the same list is a choice of where to check
+// it in: only its own type of space, since check-in takes the site and the
+// database finds the space there. Once it is in, it is a move.
 export function renderPlace(r) {
   var row = el('ad-edit-place-row');
   var select = el('ad-edit-place');
-  var opts = r.arrived ? placeOptions(r) : [];
+  var opts = placeOptions(r);
+  if (!r.arrived) opts = opts.filter(function (o) { return o.code === r.tier_code; });
   if (opts.length < 2) { hide(row); return; }
+  text(el('ad-edit-place-what'), r.arrived ? 'Parked at' : 'Check in at');
+  text(el('ad-edit-place-where'), r.arrived ? 'where the car actually is' : 'which site it is standing at');
+  text(el('ad-edit-place-go'), r.arrived ? 'Move' : 'Check in');
   select.innerHTML = '';
   opts.forEach(function (o) {
     var opt = new Option(o.label, o.property_id + '|' + o.code);
@@ -105,12 +112,29 @@ export function submitPlace() {
   var r = state.edit;
   var pick = String(el('ad-edit-place').value || '').split('|');
   if (!r || pick.length !== 2) return;
-  if (pick[0] === r.property_id && pick[1] === (r.space_code || r.tier_code)) return;
+  // Already parked there: nothing to move. Not yet in: that is the check-in.
+  if (r.arrived && pick[0] === r.property_id && pick[1] === (r.space_code || r.tier_code)) return;
   var btn = el('ad-edit-place-go');
+  var who = r.vehicle_rego || 'Booking';
   btn.disabled = true;
+  if (!r.arrived) {
+    call('check_in', { booking_id: r.booking_id, property_id: pick[0] })
+      .then(function (data) {
+        r.arrived = true;
+        var placed = data && data.placed;
+        if (!sayPlaced(who, placed, pick[0])) {
+          toast(who + ' in at ' + siteName(placed ? placed.property_id : pick[0]), 'good');
+        }
+        hide(el('ad-edit'));
+        return loadList(true);
+      })
+      .catch(function (err) { toast(err.message, 'bad'); })
+      .finally(function () { btn.disabled = false; });
+    return;
+  }
   call('place', { booking_id: r.booking_id, property_id: pick[0], space_code: pick[1] })
     .then(function () {
-      toast((r.vehicle_rego || 'Booking') + ' moved to ' + siteName(pick[0]) +
+      toast(who + ' moved to ' + siteName(pick[0]) +
         ' — ' + spaceName(pick[1]) + ' space', 'good');
       hide(el('ad-edit'));
       return loadList(true);

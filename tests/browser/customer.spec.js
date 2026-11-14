@@ -250,7 +250,14 @@ test('a series with one night on sale opens the booking on it without a tap', as
   const one = Object.values(bySeries).find((list) => list.length === 1);
   test.skip(!one, 'no series with a single night on sale in the fixtures');
   const night = one[0];
-  await page.goto(`/events/${night.event_series.slug}`);
+  await page.goto(`/events/${night.event_series.slug}#ev-nights`);
   await expect(page.locator(`#night-${night.id}`)).toHaveClass(/is-chosen/);
   await expect(page.locator('#bk-tiers-step')).toBeVisible();
+  // Opened quietly: the page stays at 01 Pick your night, just under the
+  // top bar, rather than running on past it to the parking.
+  await page.waitForLoadState('load');
+  await expect.poll(() => page.evaluate(() => {
+    const bar = document.querySelector('.topbar').getBoundingClientRect().bottom;
+    return Math.round(document.getElementById('ev-nights').getBoundingClientRect().top - bar);
+  }), { timeout: 5000 }).toBeLessThanOrEqual(32);
 });
