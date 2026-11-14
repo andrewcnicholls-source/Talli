@@ -471,7 +471,7 @@ export function renderCatalogue(project, list, opts) {
     const picture = pictureUrl(project, s.picture_path || s.nights[0].picture_path);
     const ids = s.nights.map((n) => n.id).join(',');
     return `    <li class="ev-card">
-      <a class="ev-card-link" href="/events/${esc(s.slug)}">
+      <a class="ev-card-link" href="/events/${esc(s.slug)}#ev-nights">
         ${picture
           ? `<img class="ev-card-pic" src="${esc(picture)}" alt="" loading="lazy">`
           : '<span class="ev-card-pic ev-card-pic-none" aria-hidden="true"></span>'}
@@ -517,26 +517,6 @@ ${list.length
 
 // --- /events/<slug> ------------------------------------------------------------
 
-// Eden Park's own conditions of entry: what can come through the gates,
-// which differs between concerts and sport. Talli does not restate them;
-// it points at Eden Park's page, which is the one that is kept current.
-// A concert has its own page; sport goes to the index, which lists rugby,
-// football, cricket and league separately (a series knows only "sport").
-const EDEN_PARK_CONDITIONS = {
-  concert: 'https://edenpark.co.nz/conditions-of-entry/conditions-of-entry-concerts/',
-  any: 'https://edenpark.co.nz/conditions-of-entry/',
-};
-
-export function conditionsOfEntry(series) {
-  const venue = String(series.venue || 'Eden Park');
-  if (!/eden park/i.test(venue)) return '';
-  const concert = series.kind === 'concert';
-  const href = concert ? EDEN_PARK_CONDITIONS.concert : EDEN_PARK_CONDITIONS.any;
-  return `<p class="ev-note ev-conditions">Before you go: Eden Park's
-  <a href="${esc(href)}" target="_blank" rel="noopener">conditions of entry${concert ? ' for concerts' : ''}</a> —
-  what you can bring through the gates, and what you can't.</p>`;
-}
-
 export function renderSeries(project, series, opts) {
   const now = opts.now;
   const url = SITE + '/events/' + series.slug;
@@ -573,25 +553,20 @@ export function renderSeries(project, series, opts) {
   <h1>${esc(series.name)}</h1>
   <p class="ev-where">${esc(KIND_LABEL[series.kind] || 'Event')} · ${esc(series.venue || 'Eden Park')}</p>
   ${series.summary ? `<p>${esc(series.summary)}</p>` : ''}
+  ${picture ? `<img class="ev-hero-pic" src="${esc(picture)}" alt="${esc(series.name)}">` : ''}
 </header>
 
-<main class="wrap tight${picture ? ' ev-with-pic' : ''}">
-${picture ? `  <div class="ev-pic-col"><img class="ev-hero-pic" src="${esc(picture)}" alt="${esc(series.name)}"></div>
-` : ''}  <div class="ev-main-col">
-  <div class="bk-step-head ev-step-head">
+<main class="wrap tight">
+  <div class="bk-step-head ev-step-head" id="ev-nights">
     <span class="bk-step-num">01</span>
     <h2>${series.nights.length === 1 ? 'The night' : 'Pick your night'}</h2>
   </div>
 ${series.nights.length
     ? `  <ul class="ev-nights" id="bk-nights">\n${nights}\n  </ul>
-  <p class="ev-note">Parking is in driveways a few minutes' walk from the gates. Prices are set per area
-  and type of space, and the price you see when you book is the price you pay.</p>
-  ${conditionsOfEntry(series)}
 
   ${BOOKING_FLOW}`
     : `  <p class="ev-empty">No nights on sale for ${esc(series.name)} just now.
   <a href="/events">See what else is on</a>.</p>`}
-  </div>
 </main>`;
 
   return page({

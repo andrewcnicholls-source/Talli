@@ -225,39 +225,38 @@ test('each route file reads the project its hostname names, and no other', async
   }
 });
 
-test('a series page points at Eden Park\'s conditions of entry for that kind of event', async () => {
-  const { conditionsOfEntry } = await load();
-  const concert = conditionsOfEntry({ kind: 'concert', venue: 'Eden Park' });
-  assert.match(concert, /href="https:\/\/edenpark\.co\.nz\/conditions-of-entry\/conditions-of-entry-concerts\/"/);
-  assert.match(concert, /for concerts/);
-  assert.match(concert, /rel="noopener"/);
-  // Sport: the index, which lists each code; a series knows only "sport".
-  const sport = conditionsOfEntry({ kind: 'sport', venue: 'Eden Park' });
-  assert.match(sport, /href="https:\/\/edenpark\.co\.nz\/conditions-of-entry\/"/);
-  assert.doesNotMatch(sport, /for concerts/);
-  assert.match(conditionsOfEntry({ kind: 'sport', venue: null }), /conditions-of-entry\//);
-  // Somewhere else, Eden Park's rules are not the ones that apply.
-  assert.equal(conditionsOfEntry({ kind: 'concert', venue: 'Western Springs' }), '');
-});
-
-test('the confirmation page links the same conditions of entry as the series page', () => {
+test('a series page does not carry the conditions of entry; the confirmation page does', () => {
+  // The series page is for choosing a night and a place to park. The
+  // conditions are on the night's checklist, once the booking is paid.
   const site = fs.readFileSync(path.join(ROOT, 'functions', '_lib', 'site.js'), 'utf8');
-  const confirmed = fs.readFileSync(path.join(ROOT, 'assets', 'confirmed.js'), 'utf8');
-  const urls = (src) => [...src.matchAll(/https:\/\/edenpark\.co\.nz\/conditions-of-entry\/[a-z-/]*/g)]
-    .map((m) => m[0]).sort();
-  assert.ok(urls(site).length >= 2, 'the series page names both addresses');
-  assert.deepEqual([...new Set(urls(confirmed))], [...new Set(urls(site))]);
+  assert.doesNotMatch(site, /conditionsOfEntry/);
+  assert.doesNotMatch(site, /Before you go/);
 });
 
-test('a series page with a picture puts it in a column of its own, beside the nights', async () => {
+test('the confirmation page carries both of Eden Park\'s conditions-of-entry addresses', () => {
+  const confirmed = fs.readFileSync(path.join(ROOT, 'assets', 'confirmed.js'), 'utf8');
+  assert.match(confirmed, /https:\/\/edenpark\.co\.nz\/conditions-of-entry\/conditions-of-entry-concerts\//);
+  assert.match(confirmed, /https:\/\/edenpark\.co\.nz\/conditions-of-entry\/'/);
+});
+
+test('a series page is one column: the picture above the nights, which open at the top', async () => {
   const { renderSeries } = await load();
   const project = { supabaseUrl: 'https://example.supabase.co' };
   const night = { id: 'n1', name: 'X', starts_at: '2030-01-01T07:00:00Z', status: 'on_sale', venue: null };
   const series = { slug: 'x', name: 'X', kind: 'concert', venue: 'Eden Park', picture_path: 'x.jpg', nights: [night] };
   const html = renderSeries(project, series, { now: new Date('2029-12-01') });
-  assert.match(html, /class="wrap tight ev-with-pic"/);
-  assert.match(html, /<div class="ev-pic-col"><img class="ev-hero-pic"/);
+  assert.match(html, /<main class="wrap tight">/);
+  assert.doesNotMatch(html, /ev-with-pic|ev-pic-col|ev-main-col/);
+  assert.match(html, /<img class="ev-hero-pic"/);
+  assert.match(html, /<div class="bk-step-head ev-step-head" id="ev-nights">/);
   assert.match(html, /<span class="ev-night-venue">Eden Park<\/span>\s*<span class="ev-night-status">/);
-  const bare = renderSeries(project, { ...series, picture_path: null }, { now: new Date('2029-12-01') });
-  assert.doesNotMatch(bare, /ev-with-pic|ev-pic-col/);
+});
+
+test('the What\'s on cards open their series at the nights', async () => {
+  const { renderCatalogue } = await load();
+  const project = { supabaseUrl: 'https://example.supabase.co' };
+  const night = { id: 'n1', name: 'X', starts_at: '2030-01-01T07:00:00Z', status: 'on_sale', venue: null };
+  const series = { slug: 'x', name: 'X', kind: 'concert', venue: 'Eden Park', picture_path: null, nights: [night] };
+  const html = renderCatalogue(project, [series], { now: new Date('2029-12-01') });
+  assert.match(html, /href="\/events\/x#ev-nights"/);
 });

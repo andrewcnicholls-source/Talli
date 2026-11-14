@@ -38,14 +38,18 @@ test('a customer books a block from the series page, and is sent to that block',
   // "All" is the chip that is on; areas are picked on the map, not from a
   // list, which only shows the one picked.
   await expect(page.locator('input[name="bk-type"][value="all"]')).toBeChecked();
-  await expect(page.locator('#bk-blocks .bk-map-prompt')).toBeVisible();
-  await expect(page.locator('#bk-blocks .bk-area')).toHaveCount(0);
-  // Before an area is picked: every type's cheapest price on its chip,
-  // and nothing yet about "this address or within 100m".
+  // 86 Paice Ave is selected to begin with: its area is open below the
+  // map, so there is no prompt, and tapping another pin moves it.
+  await expect(page.locator('#bk-blocks .bk-map-prompt')).toHaveCount(0);
+  await expect(page.locator('#bk-blocks .bk-area')).toHaveCount(1);
+  await expect(page.locator('#bk-blocks .bk-area .bk-card-area')).toContainText('Paice');
+  // Every type's cheapest price on its chip, before any area is picked.
   await expect(page.locator('label.bk-chip', { hasText: 'Standard' }).locator('.bk-chip-price')).toHaveText('$30+');
   await expect(page.locator('label.bk-chip', { hasText: 'Priority' }).locator('.bk-chip-price')).toHaveText('$40+');
-  await expect(page.locator('label.bk-chip', { hasText: 'Valet' }).locator('.bk-chip-price')).toHaveText('$45+');
-  await expect(page.locator('#bk-blocks')).not.toContainText('within 100m');
+  await expect(page.locator('label.bk-chip', { hasText: 'Valet' }).locator('.bk-chip-price')).toHaveText('$45');
+  // The area at 86 Paice Ave is open by default, so the note about it is
+  // said under that area, the same as any other open area.
+  await expect(page.locator('#bk-blocks .bk-area-note')).toContainText('within 100m');
 
   await tap(pin(page, '$40+'));
   const grib = page.locator('#bk-blocks .bk-area', { hasText: 'Gribblehurst (test)' });
@@ -142,7 +146,8 @@ test('"All" is on, each area shows from its cheapest price, and a pin opens its 
   await expect(page.locator('input[name="bk-type"][value="all"]')).toBeChecked();
   await expect(pin(page, '$30+')).toBeVisible();
   await expect(pin(page, '$40+')).toBeVisible();
-  await expect(blocks.locator('.bk-area')).toHaveCount(0);
+  await expect(blocks.locator('.bk-area')).toHaveCount(1);
+  await expect(blocks.locator('.bk-area .bk-card-area')).toContainText('Paice');
 
   // A pin on the map opens that area at its types.
   await pin(page, '$40+').click();

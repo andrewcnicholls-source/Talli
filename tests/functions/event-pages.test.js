@@ -114,7 +114,8 @@ test('a switched-off series has no page and is listed nowhere', async () => {
 test('the catalogue lists the series with its nights, and the sitemap its page', async () => {
   const cat = await get('/events');
   assert.equal(cat.status, 200);
-  assert.ok(cat.text.includes(`href="/events/${series.slug}"`));
+  // Each card opens its series at the nights, not the picture above them.
+  assert.ok(cat.text.includes(`href="/events/${series.slug}#ev-nights"`));
   assert.ok(cat.text.includes(`data-event-ids="${FIX.night},${FIX.soldOutNight}"`));
 
   const map = await get('/sitemap.xml');
