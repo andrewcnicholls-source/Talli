@@ -11,6 +11,8 @@
   --blue: #2B4C7E;
   --blue-deep: #1C3255;
   --blue-tint: #EEF2F7;
+  /* The area you have chosen on the booking map, and its card's edge. */
+  --chosen: #C2571F;
   --line: #E4E2DC;
   --grey: #7A7A74;
   --orange-flag: #B5502E; /* used once, only for the return-promptly notice */
@@ -458,6 +460,33 @@ footer a { color: var(--blue); }
   margin-top: 16px;
 }
 .bk-cards:empty { display: none; border: 0; margin-top: 0; }
+
+/* Under the "All" chip: one card per area at "from $X", opening in place
+   to the types that area sells. */
+.bk-area { display: grid; gap: 1px; background: var(--line); }
+.bk-card-area {
+  width: 100%;
+  border: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  padding: 20px 48px 20px 22px;
+}
+.bk-area-caret {
+  position: absolute;
+  right: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 1.6rem;
+  line-height: 1;
+  color: var(--blue);
+  transition: transform 0.15s ease;
+}
+.bk-area.is-open .bk-card-area { background: var(--blue-tint); box-shadow: inset 4px 0 0 var(--chosen); }
+.bk-area.is-open .bk-area-caret { transform: translateY(-50%) rotate(90deg); }
+.bk-area-types { display: grid; gap: 1px; background: var(--line); }
+.bk-area-types .bk-card { padding-left: 64px; }
+.bk-area-types .bk-radio { left: 32px; }
 
 .bk-card {
   position: relative;
@@ -1530,14 +1559,16 @@ footer a { color: var(--blue); }
   display: grid;
   gap: 10px;
 }
+/* Picture down the left, as tall as the card; name and blurb beside it;
+   down the right, the price at the top and the stepper at the bottom. */
 .bk-extra {
   display: flex;
-  align-items: center;
-  gap: 14px;
+  align-items: stretch;
+  gap: 16px;
   background: var(--white);
   border: 1px solid var(--line);
   border-radius: 3px;
-  padding: 12px 14px;
+  padding: 10px;
   transition: border-color 0.15s, background 0.15s;
 }
 .bk-extra.is-picked {
@@ -1546,15 +1577,25 @@ footer a { color: var(--blue); }
 }
 .bk-extra-shot {
   flex: none;
-  width: 62px;
-  height: 62px;
+  width: 96px;
+  min-height: 96px;
+  align-self: stretch;
   border-radius: 3px;
   overflow: hidden;
   background: var(--offwhite);
 }
 .bk-extra-shot img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
-.bk-extra-body { flex: 1; min-width: 0; }
+.bk-extra-body { flex: 1; min-width: 0; padding: 4px 0 4px 2px; align-self: center; }
+.bk-extra-side {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+}
+.bk-extra-side .bk-extra-price { margin-top: 2px; font-weight: 500; white-space: nowrap; }
 .bk-extra-name {
   display: block;
   font-weight: 500;
@@ -2533,9 +2574,18 @@ body.ad-guide-open { overflow: hidden; }
   white-space: nowrap; box-shadow: 0 2px 6px rgba(0,0,0,.25); cursor: pointer; }
 .bk-map-pill::after { content: ''; position: absolute; left: 50%; bottom: -5px; margin-left: -5px;
   border: 5px solid transparent; border-bottom: 0; border-top-color: var(--blue); }
-.bk-map-pin.is-chosen .bk-map-pill { background: var(--blue-deep); outline: 2px solid #fff;
-  transform: translate(-50%, calc(-100% - 6px)) scale(1.12); transform-origin: 50% 100%; }
-.bk-map-pin.is-chosen .bk-map-pill::after { border-top-color: var(--blue-deep); }
+/* The area that is chosen is a different colour, with a tick, so it is
+   plain which one you have — not just a darker shade of the others. The
+   card it belongs to carries the same colour on its edge. */
+.bk-map-pin.is-chosen .bk-map-pill { background: var(--chosen); outline: 2px solid #fff;
+  transform: translate(-50%, calc(-100% - 6px)) scale(1.15); transform-origin: 50% 100%;
+  z-index: 2; box-shadow: 0 3px 10px rgba(0,0,0,.35); }
+.bk-map-pin.is-chosen .bk-map-pill::before { content: '\2713\00a0'; }
+.bk-map-pin.is-chosen .bk-map-pill::after { border-top-color: var(--chosen); }
+.bk-card-block:has(.bk-radio:checked),
+.bk-area-type:has(.bk-radio:checked) { box-shadow: inset 4px 0 0 var(--chosen); }
+.bk-card-block:has(.bk-radio:checked) .bk-radio:checked,
+.bk-area-type:has(.bk-radio:checked) .bk-radio:checked { border-color: var(--chosen); }
 .bk-map-pin.is-full .bk-map-pill { background: #9a9a9a; cursor: default; }
 .bk-map-pin.is-full .bk-map-pill::after { border-top-color: #9a9a9a; }
 .bk-map-venue { display: flex; align-items: center; gap: 6px; white-space: nowrap; pointer-events: none; }

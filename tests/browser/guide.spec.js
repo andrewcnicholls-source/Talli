@@ -67,6 +67,12 @@ test('Getting Here lists every area, and an old ?block= link goes to its /go/ pa
   await expect(page.locator('#gh-areas .gh-area')).not.toHaveCount(0);
   await expect(page.locator(`#gh-areas a[href="/go/${block.slug}"]`)).toHaveCount(1);
 
+  // The map: Eden Park and a pill per area; tapping one opens its /go/ page.
+  await expect(page.locator('#gh-map')).toBeVisible();
+  await expect(page.locator('#gh-map .bk-map-venue')).toContainText('Eden Park');
+  await page.locator('#gh-map .bk-map-pill', { hasText: 'Gribblehurst' }).first().click();
+  await expect(page).toHaveURL(new RegExp('/go/' + block.slug + '$'));
+
   await page.goto('/getting-here?block=' + block.id);
   await expect(page).toHaveURL(new RegExp('/go/' + block.slug + '$'));
   await expect(page.locator('main')).not.toContainText('Paice');

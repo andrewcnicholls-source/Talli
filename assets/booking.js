@@ -38,7 +38,8 @@
     event: null,
     rows: [],        // v_block_tier_availability for the chosen night
     pins: [],        // v_event_site_map for the chosen night
-    type: null,      // the type chip that is on: 'standard', 'priority', …
+    type: null,      // the type chip that is on: 'standard', 'priority', …, or 'all'
+    open: null,      // under 'all': the block_id whose card is open at its types
     block: null,     // the block row chosen, for the type that is on
     tier: null,      // that same row, once chosen: what is being bought
     extras: [],      // the catalogue, as the database has it
@@ -414,6 +415,7 @@
     state.event = ev;
     state.tier = null;
     state.block = null;
+    state.open = null;
     if (!sameNight) state.rows = [];
     el('bk-details').hidden = true;
     el('bk-extras-step').hidden = true;
@@ -453,6 +455,7 @@
         // Keep the chip they had on, if this night sells it; else Standard,
         // else the first type there is.
         var codes = types.map(function (t) { return t.code; });
+        if (types.length > 1) codes.push(ALL);
         if (codes.indexOf(state.type) === -1) {
           state.type = codes.indexOf('standard') !== -1 ? 'standard' : codes[0];
         }
@@ -483,15 +486,48 @@
     return out.sort(function (a, b) { return rank(a) - rank(b); });
   }
 
+  // The "All" chip: every type at once. Each area is shown once, at the
+  // cheapest type it still sells online ("from $X"), and opens to show
+  // its types. Only offered when the night sells more than one type.
+  var ALL = 'all';
+
+  // The rows for the chip that is on. With "All", one row per area: the
+  // cheapest type still for sale online there, or — when it has nothing
+  // left online — its first type, so the card can say sold out.
   function rowsOfType() {
-    return state.rows.filter(function (r) { return r.code === state.type; });
+    if (state.type !== ALL) {
+      return state.rows.filter(function (r) { return r.code === state.type; });
+    }
+    var byBlock = {};
+    var order = [];
+    state.rows.forEach(function (r) {
+      var best = byBlock[r.block_id];
+      if (!best) { byBlock[r.block_id] = r; order.push(r.block_id); return; }
+      var open = r.spots_left > 0;
+      var bestOpen = best.spots_left > 0;
+      if ((open && !bestOpen) || (open === bestOpen && r.price_cents < best.price_cents)) {
+        byBlock[r.block_id] = r;
+      }
+    });
+    return order.map(function (id) { return byBlock[id]; });
   }
 
-  // The chips: one per type, Standard first. They filter; they do not
-  // choose anything. Picking a block is what moves the booking on.
+  // Every type one area sells tonight, in the chips' order.
+  function rowsOfArea(blockId) {
+    var rank = {};
+    typesIn(state.rows).forEach(function (t, i) { rank[t.code] = i; });
+    return state.rows
+      .filter(function (r) { return r.block_id === blockId; })
+      .sort(function (a, b) { return rank[a.code] - rank[b.code]; });
+  }
+
+  // The chips: "All" when there is a choice, then one per type, Standard
+  // first. They filter; they do not choose anything. Picking a block (and,
+  // under "All", a type within it) is what moves the booking on.
   function renderTypes(types) {
     var box = el('bk-types');
     box.innerHTML = '';
+    if (types.length > 1) types = [{ code: ALL, label: 'All' }].concat(types);
     types.forEach(function (t) {
       var chip = make('label', 'bk-chip');
       var input = document.createElement('input');
@@ -511,6 +547,7 @@
   function chooseType(code) {
     if (code === state.type) return;
     state.type = code;
+    state.open = null;
     // A block chosen for another type is no longer the thing being bought.
     if (state.tier) {
       state.tier = null;
@@ -528,7 +565,7 @@
   function paintTypeNote() {
     var note = el('bk-type-note');
     var row = rowsOfType()[0];
-    if (!row) { note.hidden = true; return; }
+    if (!row || state.type === ALL) { note.hidden = true; return; }
     var parts = splitLabel(row.label);
     var bits = [];
     if (parts.detail) bits.push(parts.detail.charAt(0).toUpperCase() + parts.detail.slice(1) + '.');
@@ -711,7 +748,8 @@
       var r = offer[a.block_id];
       a.full = !r || r.spots_left <= 0;
       a.chosen = !!(state.block && state.block.block_id === a.block_id);
-      a.label = a.full ? (r && r.walk_ups_on_the_night ? 'Walk-up' : 'Full') : money(r.price_cents);
+      a.label = a.full ? (r && r.walk_ups_on_the_night ? 'Walk-up' : 'Full')
+                       : (state.type === ALL ? 'from ' : '') + money(r.price_cents);
       a.title = a.block_name + (a.full
         ? (r && r.walk_ups_on_the_night ? ' — sold out online, walk-up spaces on the night'
                                         : ' — sold out online')
@@ -723,6 +761,9 @@
   function pickArea(blockId) {
     var r = rowsOfType().filter(function (x) { return x.block_id === blockId; })[0];
     if (!r || r.spots_left <= 0) return;
+    // Under "All" a tap on the map opens that area's card at its types,
+    // and scrolls to it: which type is still the customer's to choose.
+    if (state.type === ALL) { openArea(blockId, true); return; }
     var radio = document.querySelector('input[name="bk-block"][value="' + blockId + '"]');
     if (radio) radio.checked = true;
     chooseBlock(r);
@@ -827,10 +868,96 @@
           'a Talli warden will show you in.'));
 
     rows.forEach(function (r) {
+      if (state.type === ALL) { box.appendChild(areaCard(r)); return; }
       box.appendChild(blockCard(r));
       if (r.spots_left <= 0) box.appendChild(soldOutNote(r));
     });
     if (state.pins.length) drawMap(el('bk-map'), state.pins);
+  }
+
+  // Under "All": one card per area at "from $X", which opens in place to
+  // the types that area sells, each with its own price. Choosing one of
+  // those is choosing the block, exactly as a card under a type chip is.
+  function areaCard(summary) {
+    var blockId = summary.block_id;
+    var open = state.open === blockId;
+    var wrap = make('div', 'bk-area' + (open ? ' is-open' : ''));
+    wrap.setAttribute('data-block-id', blockId);
+
+    var soldOut = summary.spots_left <= 0;
+    var head = make('button', 'bk-card bk-card-area' + (soldOut ? ' is-soldout' : ''));
+    head.type = 'button';
+    head.setAttribute('aria-expanded', open ? 'true' : 'false');
+    var body = make('span', 'bk-card-body');
+    var top = make('span', 'bk-tier-head');
+    top.appendChild(make('span', 'bk-card-title', summary.block_name));
+    top.appendChild(make('span', 'bk-tier-price',
+      soldOut ? 'Sold out online' : 'from ' + money(summary.price_cents)));
+    body.appendChild(top);
+    if (summary.anchor_address) {
+      body.appendChild(make('span', 'bk-card-meta', shortAddress(summary.anchor_address) + ' or within 100m'));
+    }
+    head.appendChild(body);
+    head.appendChild(make('span', 'bk-area-caret', '›'));
+    head.addEventListener('click', function () { openArea(open ? null : blockId, false); });
+    wrap.appendChild(head);
+
+    if (open) {
+      var list = make('div', 'bk-area-types');
+      rowsOfArea(blockId).forEach(function (r) {
+        list.appendChild(areaTypeOption(r));
+        if (r.spots_left <= 0) list.appendChild(soldOutNote(r));
+      });
+      wrap.appendChild(list);
+    }
+    return wrap;
+  }
+
+  function areaTypeOption(r) {
+    var soldOut = r.spots_left <= 0;
+    var label = make('label', 'bk-card bk-card-tier bk-area-type' + (soldOut ? ' is-soldout' : ''));
+    label.setAttribute('data-code', r.code);
+    var input = document.createElement('input');
+    input.type = 'radio';
+    input.name = 'bk-block';
+    input.value = r.block_id + '|' + r.code;
+    input.className = 'bk-radio';
+    input.disabled = soldOut;
+    input.checked = !!(state.tier && state.tier.block_id === r.block_id &&
+                       state.tier.code === r.code && !soldOut);
+    input.addEventListener('change', function () { chooseBlock(r); });
+
+    var parts = splitLabel(r.label);
+    var body = make('span', 'bk-card-body');
+    var head = make('span', 'bk-tier-head');
+    head.appendChild(make('span', 'bk-card-title', parts.name));
+    head.appendChild(make('span', 'bk-tier-price', money(r.price_cents)));
+    body.appendChild(head);
+    if (parts.detail) body.appendChild(make('span', 'bk-card-meta', parts.detail));
+    if (!soldOut && r.spots_left <= 3) {
+      var facts = make('span', 'bk-tier-facts');
+      facts.appendChild(make('span', 'bk-fact bk-fact-low', r.spots_left + ' left'));
+      body.appendChild(facts);
+    }
+    label.appendChild(input);
+    label.appendChild(body);
+    return label;
+  }
+
+  // Open one area under "All" (or close them all), and — when it came
+  // from the map — bring its card into view.
+  function openArea(blockId, scroll) {
+    state.open = blockId;
+    if (state.tier && state.tier.block_id !== blockId) {
+      state.tier = null;
+      state.block = null;
+      el('bk-details').hidden = true;
+      el('bk-extras-step').hidden = true;
+    }
+    renderBlocks();
+    if (!scroll || !blockId) return;
+    var card = el('bk-blocks').querySelector('.bk-area[data-block-id="' + blockId + '"]');
+    if (card && card.scrollIntoView) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 
   function blockCard(r) {
@@ -918,6 +1045,16 @@
     paintExtras();
   }
 
+  // The catalogue stores pictures as site paths ("assets/poncho.jpg"). This
+  // flow also runs on /events/<slug>, where a relative path would be looked
+  // for under /events/ and not found, so it is taken from the site's root.
+  function fromRoot(path) {
+    var p = String(path || '');
+    return /^(https?:)?\/\//.test(p) || p.charAt(0) === '/' ? p : '/' + p;
+  }
+
+  // Picture on the left, as tall as the card; name and blurb beside it;
+  // on the right, the price at the top and the stepper at the bottom.
   function extraCard(item) {
     var card = make('div', 'bk-extra');
     card.dataset.code = item.code;
@@ -925,7 +1062,7 @@
     if (item.image_path) {
       var shot = make('div', 'bk-extra-shot');
       var img = document.createElement('img');
-      img.src = item.image_path;
+      img.src = fromRoot(item.image_path);
       img.alt = '';
       img.loading = 'lazy';
       shot.appendChild(img);
@@ -935,8 +1072,11 @@
     var body = make('div', 'bk-extra-body');
     body.appendChild(make('span', 'bk-extra-name', item.name));
     if (item.blurb) body.appendChild(make('span', 'bk-extra-blurb', item.blurb));
-    body.appendChild(make('span', 'bk-extra-price', extraPriceLine(item)));
     card.appendChild(body);
+
+    var side = make('div', 'bk-extra-side');
+    side.appendChild(make('span', 'bk-extra-price', extraPriceLine(item)));
+    card.appendChild(side);
 
     var step = make('div', 'bk-step-count');
 
@@ -955,7 +1095,7 @@
     step.appendChild(less);
     step.appendChild(count);
     step.appendChild(more);
-    card.appendChild(step);
+    side.appendChild(step);
 
     return card;
   }
@@ -991,7 +1131,7 @@
       if (item.image_path) {
         var photo = make('div', 'merch-photo');
         var img = document.createElement('img');
-        img.src = item.image_path;
+        img.src = fromRoot(item.image_path);
         img.alt = item.name;
         img.loading = 'lazy';
         photo.appendChild(img);
