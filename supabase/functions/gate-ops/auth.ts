@@ -171,6 +171,9 @@ export const OPERATOR_ONLY = new Set([
   // Settlement (plan B7): money owed to hosts and wardens is Andrew's.
   'settlement', 'save_warden_allocation', 'settle_night', 'reopen_settlement',
   'save_settlement_setting', 'save_host_details',
+  // Who may work the gate (plan B8). A warden changing wardens, their own
+  // areas included, would undo the whole scope check.
+  'staff_list', 'invite_warden', 'set_warden_block', 'set_warden_active',
 ])
 
 export const denied = (c: Caller | Denied): c is Denied =>

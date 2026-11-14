@@ -463,6 +463,41 @@ if [ -z "$missing" ]; then
 else
   fail "gate-ops: a warden may call settlement actions:$missing"
 fi
+# Warden access (plan B8): who may work the gate is Andrew's alone. A
+# warden who could invite, or switch their own areas on, would undo every
+# scope check gate-ops makes.
+missing=""
+for a in staff_list invite_warden set_warden_block set_warden_active; do
+  printf '%s' "$series_ops" | grep -q "'$a'" || missing="$missing $a"
+done
+if [ -z "$missing" ]; then
+  pass "gate-ops: inviting and switching wardens is Andrew's alone"
+else
+  fail "gate-ops: a warden may call staff actions:$missing"
+fi
+# And every operator-only action, whatever is added later, is refused to a
+# blocks-scoped caller: tests/functions/warden-access.test.js reads the
+# list from auth.ts and tries each one as two different wardens. Keep that
+# test reading the real list, not a copy of it.
+if grep -q "readFileSync(AUTH_TS" tests/functions/warden-access.test.js 2>/dev/null    && grep -q "OPERATOR_ONLY = new Set" tests/functions/warden-access.test.js; then
+  pass "tests: every OPERATOR_ONLY action is tried as a warden, from the list in auth.ts"
+else
+  fail "tests: warden-access.test.js no longer tries every OPERATOR_ONLY action as a warden"
+fi
+# The staff functions only ever touch a warden's row (scope 'blocks').
+B8_SQL=supabase/migrations/20261122100000_talli_warden_access.sql
+# Every update is guarded by private.warden_row(); no statement sets a
+# scope; and the one insert into host_user writes a warden.
+b8_code=$(grep -vE '^\s*--' "$B8_SQL" 2>/dev/null || true)
+if [ -f "$B8_SQL" ] \
+   && [ "$(printf '%s\n' "$b8_code" | grep -c "perform private.warden_row(")" = "2" ] \
+   && ! printf '%s\n' "$b8_code" | grep -qiE "set[[:space:]]+scope|scope[[:space:]]*=[[:space:]]*excluded" \
+   && [ "$(printf '%s\n' "$b8_code" | grep -ciE "insert into host_user")" = "1" ] \
+   && printf '%s\n' "$b8_code" | grep -q "values (v_operator, v_email, 'staff', 'blocks', true, p_by)"; then
+  pass "warden access: invitations are wardens, and an operator is never changed from the screen"
+else
+  fail "warden access: the staff functions could make or change an operator"
+fi
 # The per-booking host earnings are wrong by design under § 3.11: the
 # settlement migration may name them in its comments, never in its code.
 B7_SQL=supabase/migrations/20261121100000_talli_host_settlement.sql
