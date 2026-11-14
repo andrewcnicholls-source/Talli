@@ -116,6 +116,65 @@ test('the type chips filter the blocks and their prices', async ({ page }) => {
   await expect(page.locator('input[name="bk-block"]:checked')).toHaveCount(0);
 });
 
+test('"All" shows each area from its cheapest price, and a map pin opens its types', async ({ page }) => {
+  await page.goto(`/events/${await seriesOf(FIX.night)}?night=${FIX.night}`);
+  const blocks = page.locator('#bk-blocks');
+  // Standard is still the chip that is on; "All" comes first.
+  await expect(page.locator('input[name="bk-type"][value="standard"]')).toBeChecked();
+  await expect(page.locator('label.bk-chip').first()).toHaveText('All');
+
+  await page.locator('label.bk-chip', { hasText: 'All' }).click();
+  const grib = blocks.locator('.bk-area', { hasText: 'Gribblehurst (test)' });
+  const paice = blocks.locator('.bk-area', { hasText: 'Paice' });
+  await expect(paice.locator('.bk-card-area .bk-tier-price')).toHaveText('from $30');
+  await expect(grib.locator('.bk-card-area .bk-tier-price')).toHaveText('from $40');
+  await expect(blocks.locator('.bk-area-types')).toHaveCount(0);
+  // (The pin itself is a 0×0 anchor; the pill drawn on it is what shows.)
+  await expect(page.locator('.bk-map-pin .bk-map-pill', { hasText: 'from $40' })).toBeVisible();
+
+  // A pin on the map opens that area at its types.
+  await page.locator('.bk-map-pin .bk-map-pill', { hasText: 'from $40' }).click();
+  await expect(grib).toHaveClass(/is-open/);
+  await expect(grib.locator('.bk-area-type')).toHaveCount(2);
+  await expect(grib.locator('.bk-area-type', { hasText: 'Priority' }).locator('.bk-tier-price'))
+    .toHaveText('$50');
+  await expect(paice).not.toHaveClass(/is-open/);
+
+  await grib.locator('.bk-area-type', { hasText: 'Priority' }).click();
+  await expect(page.locator('#bk-summary-tier')).toContainText('Priority');
+  await expect(page.locator('#bk-summary-price')).toHaveText('$50');
+  // The chosen area is picked out on the map.
+  await expect(page.locator('.bk-map-pin.is-chosen')).toHaveCount(1);
+
+  // Opening the other area lets go of the choice in this one.
+  await paice.locator('.bk-card-area').click();
+  await expect(paice).toHaveClass(/is-open/);
+  await expect(grib).not.toHaveClass(/is-open/);
+  await expect(page.locator('#bk-details')).toBeHidden();
+});
+
+test('an extra shows its price top right and its stepper bottom right', async ({ page }) => {
+  await page.goto(`/events/${await seriesOf(FIX.night)}?night=${FIX.night}`);
+  await page.locator('label.bk-card-block', { hasText: 'Gribblehurst (test)' }).click();
+  const card = page.locator('#bk-extras .bk-extra').first();
+  await expect(card).toBeVisible();
+  // The picture loads from the site root, on the series page too.
+  await expect.poll(() => card.locator('img').evaluate((i) => i.complete && i.naturalWidth)).toBeGreaterThan(0);
+  // Measured in one go: the page is still scrolling to this step, so
+  // separate measurements would each see it somewhere else.
+  const m = await card.evaluate((c) => {
+    const r = (sel) => c.querySelector(sel).getBoundingClientRect();
+    return { box: c.getBoundingClientRect(), price: r('.bk-extra-price'),
+      step: r('.bk-step-count'), name: r('.bk-extra-name') };
+  });
+  // Right-hand column, price above the stepper, both right of the name.
+  expect(m.price.x).toBeGreaterThan(m.name.x + m.name.width);
+  expect(m.step.x).toBeGreaterThan(m.name.x);
+  expect(m.price.bottom).toBeLessThanOrEqual(m.step.top + 1);
+  expect(m.price.top - m.box.top).toBeLessThan(m.box.height / 2);
+  expect(m.step.bottom).toBeGreaterThan(m.box.top + m.box.height / 2);
+});
+
 test('a night sold out online says walk-ups are still possible, never how many', async ({ page }) => {
   await page.goto(`/events/${await seriesOf(FIX.soldOutNight)}?night=${FIX.soldOutNight}`);
   const blocks = page.locator('#bk-blocks');

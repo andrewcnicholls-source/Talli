@@ -13,6 +13,10 @@
    one. Wrong directions are worse than none: the customer still has
    the address in their email.
 
+   Above the list, a map: Eden Park in the middle and one pill per area at
+   its anchor house, as on the booking page. Tapping a pill opens that
+   area's /go/ page. The map is a nicety — the list below it is the page.
+
    Read with the anon key from `block` and `property`, which the booking
    page already reads: an address and a position, nothing private.
    ===================================================================== */
@@ -70,14 +74,84 @@
       list.appendChild(li);
     });
     el('gh-areas-wrap').hidden = !blocks.length;
+    drawMap(blocks);
     if (!blocks.length) {
       say('We could not find any parking areas just now. Email bookings@talli.co.nz and we will tell you where to come.');
     }
   }
 
+  // Eden Park's main entrance area, as on the booking page.
+  var EDEN_PARK = [-36.8749, 174.7448];
+
+  function escapeHtml(v) {
+    return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  // One pill per area at its anchor, framed around Eden Park (every point
+  // mirrored through the stadium, so it sits in the middle). Areas with no
+  // position are only in the list. No Leaflet, no positions: no map.
+  function drawMap(blocks) {
+    var box = el('gh-map');
+    if (!box || !window.L) return;
+    var placed = blocks.filter(function (b) {
+      return b.anchor && b.anchor.lat != null && b.anchor.lng != null;
+    });
+    if (!placed.length) { box.hidden = true; return; }
+    box.hidden = false;
+
+    var map = window.L.map(box, { scrollWheelZoom: false, tap: true, zoomControl: false });
+    window.L.control.zoom({ position: 'bottomright' }).addTo(map);
+    window.L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+      maxZoom: 19,
+      subdomains: 'abcd',
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> ' +
+        'contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    }).addTo(map);
+
+    window.L.marker(EDEN_PARK, {
+      icon: window.L.divIcon({
+        className: 'bk-map-venue',
+        html: '<span class="bk-map-venue-dot" aria-hidden="true"></span>' +
+              '<span class="bk-map-venue-name">Eden Park</span>',
+        iconSize: null,
+        iconAnchor: [14, 14],
+      }),
+      keyboard: false,
+      interactive: false,
+    }).addTo(map);
+
+    var framed = [EDEN_PARK];
+    placed.forEach(function (b) {
+      var at = [Number(b.anchor.lat), Number(b.anchor.lng)];
+      framed.push(at, [2 * EDEN_PARK[0] - at[0], 2 * EDEN_PARK[1] - at[1]]);
+      var name = street(b.anchor.address) || b.name;
+      var marker = window.L.marker(at, {
+        icon: window.L.divIcon({
+          className: 'bk-map-pin',
+          html: '<span class="bk-map-pill">' + escapeHtml(name) + '</span>',
+          iconSize: [0, 0],
+          iconAnchor: [0, 0],
+        }),
+        title: name + ' — directions',
+        riseOnHover: true,
+      }).addTo(map);
+      marker.on('click', function () {
+        window.location.href = '/go/' + encodeURIComponent(b.slug);
+      });
+    });
+
+    map.invalidateSize();
+    map.fitBounds(window.L.latLngBounds(framed), {
+      paddingTopLeft: [40, 52], paddingBottomRight: [40, 24], maxZoom: 16,
+    });
+    if (map.getZoom() < 14) map.setView(EDEN_PARK, 14);
+  }
+
   function loadAreas() {
     return read('block?active=is.true&order=sort_order.asc,name.asc' +
-                '&select=id,name,slug,anchor:anchor_property_id(address,walk_minutes)')
+                '&select=id,name,slug,anchor:anchor_property_id(address,walk_minutes,lat,lng)')
       .then(function (rows) {
         showAreas((rows || []).filter(function (b) { return b.slug; }));
       })
