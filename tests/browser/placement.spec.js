@@ -7,7 +7,7 @@
    ===================================================================== */
 'use strict';
 const { test, expect, signedIn } = require('./fixtures');
-const { FIX, gate, rest, plate, forget } = require('../lib/stack');
+const { FIX, gate, rest, rpc, plate, forget } = require('../lib/stack');
 
 const made = [];
 const clearLost = () => rest(`lost_space?event_id=eq.${FIX.night}`, { method: 'DELETE' });
@@ -56,6 +56,34 @@ test('a warden records a lost space, sees it, and undoes it', async ({ page }) =
   await expect(page.locator('#ad-lost-list .ad-lost-item')).toHaveCount(0);
   const [undone] = await rest(`lost_space?event_id=eq.${FIX.night}&select=undone_at`);
   expect(undone.undone_at).not.toBeNull();
+});
+
+test('a car\'s sheet says which site it is booked into, and where it was moved to', async ({ page }) => {
+  const rego = plate('GB');
+  made.push(rego);
+  const id = await rpc('hold_booking', {
+    p_event_id: FIX.night, p_property_id: FIX.gribAnchor, p_tier_code: 'standard',
+    p_email: 'where.browser@example.com', p_rego: rego,
+  });
+  await rpc('confirm_booking', { p_booking_id: id, p_payment_intent_id: null });
+
+  await signedIn(page, 'wardenGrib');
+  await openNight(page);
+  await page.getByRole('button', { name: 'Edit ' + rego }).click();
+  const where = page.locator('#ad-edit-where');
+  await expect(where).toBeVisible();
+  await expect(where).toContainText('Booked into TEST Gribblehurst anchor · Gribblehurst (test)');
+  await expect(where).not.toContainText('parked at');
+  await page.click('#ad-edit-close');
+
+  // Placed at the neighbour: the sheet says both.
+  await rpc('place_booking', { p_booking_id: id, p_property_id: FIX.gribNeighbour,
+    p_space_code: null, p_by: null });
+  await page.reload();
+  await openNight(page);
+  await page.getByRole('button', { name: 'Edit ' + rego }).click();
+  await expect(where).toContainText('Booked into TEST Gribblehurst anchor');
+  await expect(where).toContainText('parked at TEST Gribblehurst neighbour');
 });
 
 test('a full Standard still sells, and says where the car goes', async ({ page }) => {

@@ -33,6 +33,7 @@ export function openEdit(r) {
   if (r.arrived) sub.push('ticked in');
   if (r.in_checkout) sub.push('still paying online');
   text(el('ad-edit-sub'), sub.join(' · '));
+  renderWhere(r);
 
   form.rego.value = r.vehicle_rego || '';
   form.editname.value = r.customer_name || '';
@@ -90,6 +91,30 @@ export function openEdit(r) {
   renderEditCharge();
   renderPlace(r);
   show(el('ad-edit'));
+}
+
+// At the top of the sheet: the site this car is booked into, and its
+// area — and, when it has been placed somewhere else, where it is now.
+// Moving it is Parked at, further down.
+function renderWhere(r) {
+  var box = el('ad-edit-where');
+  var bookedId = r.booked_property_id || r.property_id;
+  var booked = siteRow(bookedId);
+  if (!booked) { box.hidden = true; return; }
+  box.innerHTML = '';
+  box.appendChild(document.createTextNode('Booked into '));
+  box.appendChild(make('strong', null, booked.name || 'a site'));
+  if (booked.block_name) box.appendChild(document.createTextNode(' · ' + booked.block_name));
+  if (r.property_id && r.property_id !== bookedId) {
+    var now = siteRow(r.property_id);
+    box.appendChild(document.createTextNode(' — ' + (r.arrived ? 'parked at ' : 'going to ')));
+    box.appendChild(make('strong', null, (now && now.name) || 'another site'));
+  }
+  box.hidden = false;
+}
+
+function siteRow(id) {
+  return (state.sites || []).filter(function (s) { return s.property_id === id; })[0] || null;
 }
 
 function renderEditTiers() {
