@@ -22,7 +22,8 @@ test('what\'s on → a series → its night, booked on the series page', async (
   const card = page.locator('.ev-card', { hasText: series.name });
   await expect(card.locator('.ev-from')).toHaveText(/^Parking from \$\d+/);
   await card.locator('a').click();
-  await expect(page).toHaveURL(new RegExp(`/events/${series.slug}$`));
+  // The card opens the series at its nights: the #ev-nights anchor.
+  await expect(page).toHaveURL(new RegExp(`/events/${series.slug}(#ev-nights)?$`));
   await expect(page.locator('h1')).toHaveText(series.name);
 
   const night = page.locator(`#night-${FIX.night}`);

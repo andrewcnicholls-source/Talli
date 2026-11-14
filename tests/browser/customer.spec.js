@@ -47,7 +47,7 @@ test('a customer books a block from the series page, and is sent to that block',
   // and nothing yet about "this address or within 100m".
   await expect(page.locator('label.bk-chip', { hasText: 'Standard' }).locator('.bk-chip-price')).toHaveText('$30+');
   await expect(page.locator('label.bk-chip', { hasText: 'Priority' }).locator('.bk-chip-price')).toHaveText('$40+');
-  await expect(page.locator('label.bk-chip', { hasText: 'Valet' }).locator('.bk-chip-price')).toHaveText('$45+');
+  await expect(page.locator('label.bk-chip', { hasText: 'Valet' }).locator('.bk-chip-price')).toHaveText('$45');
   await expect(page.locator('#bk-blocks')).not.toContainText('within 100m');
 
   await tap(pin(page, '$40+'));
@@ -145,7 +145,8 @@ test('"All" is on, each area shows from its cheapest price, and a pin opens its 
   await expect(page.locator('input[name="bk-type"][value="all"]')).toBeChecked();
   await expect(pin(page, '$30+')).toBeVisible();
   await expect(pin(page, '$40+')).toBeVisible();
-  await expect(blocks.locator('.bk-area')).toHaveCount(0);
+  await expect(blocks.locator('.bk-area')).toHaveCount(1);
+  await expect(blocks.locator('.bk-area .bk-card-area')).toContainText('Paice');
 
   // A pin on the map opens that area at its types.
   await pin(page, '$40+').click();
