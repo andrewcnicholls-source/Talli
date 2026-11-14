@@ -543,9 +543,27 @@
       input.addEventListener('change', function () { chooseType(t.code); });
       chip.appendChild(input);
       chip.appendChild(make('span', 'bk-chip-name', splitLabel(t.label).name));
+      // The cheapest of this type still for sale online, so Standard,
+      // Priority and Valet can be compared with the map on one screen
+      // before an area is picked.
+      var from = t.code === ALL ? null : cheapest(t.code);
+      if (from != null) chip.appendChild(make('span', 'bk-chip-price', plus(from)));
       box.appendChild(chip);
     });
     paintTypeNote();
+  }
+
+  // "$30+": the cheapest, and there may be dearer. Shorter than "from $30"
+  // on a map with several areas on it.
+  function plus(cents) { return money(cents) + '+'; }
+
+  function cheapest(code) {
+    var best = null;
+    state.rows.forEach(function (r) {
+      if (r.code !== code || r.spots_left <= 0) return;
+      if (best === null || r.price_cents < best) best = r.price_cents;
+    });
+    return best;
   }
 
   function chooseType(code) {
@@ -769,7 +787,7 @@
       a.full = !r || r.spots_left <= 0;
       a.chosen = !!(state.block && state.block.block_id === a.block_id);
       a.label = a.full ? (r && r.walk_ups_on_the_night ? 'Walk-up' : 'Full')
-                       : (state.type === ALL ? 'from ' : '') + money(r.price_cents);
+                       : (state.type === ALL ? plus(r.price_cents) : money(r.price_cents));
       a.title = a.block_name + (a.full
         ? (r && r.walk_ups_on_the_night ? ' — sold out online, walk-up spaces on the night'
                                         : ' — sold out online')
@@ -887,32 +905,38 @@
       var picked = rows.filter(function (r) { return r.block_id === state.open; });
       if (!picked.length) {
         box.appendChild(make('p', 'bk-card-meta bk-blocks-lead bk-map-prompt',
-          'Tap a price on the map to choose where to park. You\u2019re booked for that ' +
-          'address or a driveway within 100m \u2014 a Talli warden will show you in.'));
+          'Tap a price on the map to choose where to park.'));
         if (state.pins.length) drawMap(el('bk-map'), state.pins);
         return;
       }
       rows = picked;
     }
 
-    box.appendChild(make('p', 'bk-card-meta bk-blocks-lead',
-      rows.length > 1
-        ? 'Pick where you’d like to park. You’re booked for that address or a ' +
-          'driveway within 100m — a Talli warden will show you in.'
-        : 'You’re booked for this address or a driveway within 100m — ' +
-          'a Talli warden will show you in.'));
+    if (rows.length > 1) {
+      box.appendChild(make('p', 'bk-card-meta bk-blocks-lead', 'Pick where you\u2019d like to park.'));
+    }
 
     rows.forEach(function (r) {
       if (state.type === ALL) { box.appendChild(areaCard(r)); return; }
       box.appendChild(blockCard(r));
       if (r.spots_left <= 0) box.appendChild(soldOutNote(r));
     });
+    // What booking an area means, said once an area is on show, under it.
+    if (state.type !== ALL || rows.some(function (r) { return r.block_id === state.open; })) {
+      box.appendChild(areaNote());
+    }
     if (state.pins.length) drawMap(el('bk-map'), state.pins);
   }
 
   // Under "All": one card per area at "from $X", which opens in place to
   // the types that area sells, each with its own price. Choosing one of
   // those is choosing the block, exactly as a card under a type chip is.
+  function areaNote() {
+    return make('p', 'bk-card-meta bk-area-note',
+      'You\u2019re booked for this address or a driveway within 100m \u2014 ' +
+      'a Talli warden will show you in.');
+  }
+
   function areaCard(summary) {
     var blockId = summary.block_id;
     var open = state.open === blockId;
@@ -924,16 +948,17 @@
     head.type = 'button';
     head.setAttribute('aria-expanded', open ? 'true' : 'false');
     var body = make('span', 'bk-card-body');
-    var top = make('span', 'bk-tier-head');
-    top.appendChild(make('span', 'bk-card-title', summary.block_name));
-    top.appendChild(make('span', 'bk-tier-price',
-      soldOut ? 'Sold out online' : 'from ' + money(summary.price_cents)));
-    body.appendChild(top);
+    body.appendChild(make('span', 'bk-card-title', summary.block_name));
     if (summary.anchor_address) {
-      body.appendChild(make('span', 'bk-card-meta', shortAddress(summary.anchor_address) + ' or within 100m'));
+      body.appendChild(make('span', 'bk-card-meta', shortAddress(summary.anchor_address)));
     }
     head.appendChild(body);
-    head.appendChild(make('span', 'bk-area-caret', '›'));
+    // The price and the arrow side by side, centred on the card.
+    var side = make('span', 'bk-area-side');
+    side.appendChild(make('span', 'bk-tier-price',
+      soldOut ? 'Sold out online' : plus(summary.price_cents)));
+    side.appendChild(make('span', 'bk-area-caret', '\u203A'));
+    head.appendChild(side);
     head.addEventListener('click', function () { openArea(open ? null : blockId, false); });
     wrap.appendChild(head);
 
@@ -1015,7 +1040,7 @@
     head.appendChild(make('span', 'bk-tier-price', money(r.price_cents)));
     body.appendChild(head);
     if (r.anchor_address) {
-      body.appendChild(make('span', 'bk-card-meta', shortAddress(r.anchor_address) + ' or within 100m'));
+      body.appendChild(make('span', 'bk-card-meta', shortAddress(r.anchor_address)));
     }
 
     var facts = make('span', 'bk-tier-facts');

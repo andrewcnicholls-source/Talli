@@ -27,6 +27,10 @@ test('what\'s on → a series → its night, booked on the series page', async (
 
   const night = page.locator(`#night-${FIX.night}`);
   await expect(night.locator('.ev-night-status')).toHaveText('On sale');
+  // Where it is: a tag of its own, before the status, not on the date line.
+  await expect(night.locator('.ev-night-tags > span').first()).toHaveClass('ev-night-venue');
+  await expect(night.locator('.ev-night-venue')).not.toBeEmpty();
+  await expect(night.locator('.ev-night-meta')).not.toContainText('·');
   await expect(night.locator('.ev-from')).toHaveText(/^Parking from \$\d+/);
   await night.getByRole('link', { name: 'Book parking' }).click();
 

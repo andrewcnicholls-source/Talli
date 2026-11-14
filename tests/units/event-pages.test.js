@@ -239,3 +239,25 @@ test('a series page points at Eden Park\'s conditions of entry for that kind of 
   // Somewhere else, Eden Park's rules are not the ones that apply.
   assert.equal(conditionsOfEntry({ kind: 'concert', venue: 'Western Springs' }), '');
 });
+
+test('the confirmation page links the same conditions of entry as the series page', () => {
+  const site = fs.readFileSync(path.join(ROOT, 'functions', '_lib', 'site.js'), 'utf8');
+  const confirmed = fs.readFileSync(path.join(ROOT, 'assets', 'confirmed.js'), 'utf8');
+  const urls = (src) => [...src.matchAll(/https:\/\/edenpark\.co\.nz\/conditions-of-entry\/[a-z-/]*/g)]
+    .map((m) => m[0]).sort();
+  assert.ok(urls(site).length >= 2, 'the series page names both addresses');
+  assert.deepEqual([...new Set(urls(confirmed))], [...new Set(urls(site))]);
+});
+
+test('a series page with a picture puts it in a column of its own, beside the nights', async () => {
+  const { renderSeries } = await load();
+  const project = { supabaseUrl: 'https://example.supabase.co' };
+  const night = { id: 'n1', name: 'X', starts_at: '2030-01-01T07:00:00Z', status: 'on_sale', venue: null };
+  const series = { slug: 'x', name: 'X', kind: 'concert', venue: 'Eden Park', picture_path: 'x.jpg', nights: [night] };
+  const html = renderSeries(project, series, { now: new Date('2029-12-01') });
+  assert.match(html, /class="wrap tight ev-with-pic"/);
+  assert.match(html, /<div class="ev-pic-col"><img class="ev-hero-pic"/);
+  assert.match(html, /<span class="ev-night-venue">Eden Park<\/span>\s*<span class="ev-night-status">/);
+  const bare = renderSeries(project, { ...series, picture_path: null }, { now: new Date('2029-12-01') });
+  assert.doesNotMatch(bare, /ev-with-pic|ev-pic-col/);
+});

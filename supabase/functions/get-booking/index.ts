@@ -91,7 +91,10 @@ Deno.serve(async (req) => {
 
   const [{ data: ev }, { data: property }, { data: tier }, { data: addons }] =
     await Promise.all([
-      db.from('event').select('name, venue, starts_at').eq('id', booking.event_id).maybeSingle(),
+      // The series' kind and venue: the page links the venue's conditions of
+      // entry, which differ for a concert and for sport.
+      db.from('event').select('name, venue, starts_at, series:series_id(kind, venue)')
+        .eq('id', booking.event_id).maybeSingle(),
       db.from('property')
         .select('name, address, walk_minutes, slug, block_id, ' +
                 'block:block_id(name, slug, anchor:anchor_property_id(address))')
