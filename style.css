@@ -38,9 +38,12 @@
 html {
   scroll-behavior: smooth;
   /* The top bar is sticky, so anything scrolled to the top of the viewport
-     lands underneath it. Keep a header's height clear so revealed booking
-     steps arrive with their heading actually visible. */
-  scroll-padding-top: 96px;
+     lands underneath it. Keep its height clear, plus a little white space,
+     so every jump — #ev-nights, a booking step, an area — arrives with its
+     heading just under the bar. booking.js measures the bar (it wraps to
+     twice the height on a phone); 96px stands in until it has. This is
+     the only offset: a scroll-margin on a target would add to it. */
+  scroll-padding-top: calc(var(--topbar-h, 80px) + 16px);
 }
 
 body {
@@ -2816,7 +2819,6 @@ body.ad-guide-open { overflow: hidden; }
   gap: 14px 18px;
   background: var(--white);
   padding: 18px 20px;
-  scroll-margin-top: 96px;
 }
 .ev-night:target { background: var(--blue-tint); }
 .ev-night-body { flex: 1 1 220px; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
@@ -2847,9 +2849,6 @@ body.ad-guide-open { overflow: hidden; }
   padding: 4px 9px;
 }
 
-/* A link to /events/<slug>#ev-nights opens with the nights at the top of
-   the screen, below the sticky top bar rather than under it. */
-#ev-nights, .bk-step, .bk-area { scroll-margin-top: 80px; }
 .ev-night-pic { width: 96px; aspect-ratio: 1; object-fit: cover; border-radius: 3px; }
 .ev-night-go { flex: none; }
 @media (max-width: 519px) {
