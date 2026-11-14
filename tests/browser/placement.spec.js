@@ -86,6 +86,30 @@ test('a car\'s sheet says which site it is booked into, and where it was moved t
   await expect(where).toContainText('parked at TEST Gribblehurst neighbour');
 });
 
+test('a car not yet in is checked in at the site the warden stands at, from its sheet', async ({ page }) => {
+  const rego = plate('GC');
+  made.push(rego);
+  const id = await rpc('hold_booking', {
+    p_event_id: FIX.night, p_property_id: FIX.gribAnchor, p_tier_code: 'standard',
+    p_email: 'checkin.browser@example.com', p_rego: rego,
+  });
+  await rpc('confirm_booking', { p_booking_id: id, p_payment_intent_id: null });
+
+  await signedIn(page, 'wardenGrib');
+  await openNight(page);
+  await page.getByRole('button', { name: 'Edit ' + rego }).click();
+  // Not in yet: the sheet offers the sites to check it in at, not a move.
+  await expect(page.locator('#ad-edit-place-what')).toHaveText('Check in at');
+  await expect(page.locator('#ad-edit-place-go')).toHaveText('Check in');
+  await page.selectOption('#ad-edit-place', FIX.gribNeighbour + '|standard');
+  await page.click('#ad-edit-place-go');
+  await expect(page.locator('#ad-edit')).toBeHidden();
+
+  const [row] = await rest(`booking?id=eq.${id}&select=property_id,checked_in_at`);
+  expect(row.property_id).toBe(FIX.gribNeighbour);
+  expect(row.checked_in_at).not.toBeNull();
+});
+
 test('a full Standard still sells, and says where the car goes', async ({ page }) => {
   // Every free Standard space at the anchor is lost, so the next walk-up
   // there goes to the neighbour's Standard.
