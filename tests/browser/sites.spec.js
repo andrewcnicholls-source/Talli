@@ -123,3 +123,31 @@ test('the Event tab keeps the reference price and sends spaces to the Sites page
   await expect(page.locator('#ad-pane-sites')).toBeVisible();
   await expect(page.locator('#ad-site-night')).toHaveValue(FIX.night);
 });
+
+// Prices by ring (20261124100000). The fixture puts Gribblehurst (test) in
+// ring 5 by hand; by its anchor's distance it shares 86 Paice Ave's ring.
+test('an area on a boundary is put in a ring by hand, and taken back', async ({ page }) => {
+  const priceAt = async (site) => (await rest(
+    `v_tier_availability?event_id=eq.${FIX.night}&property_id=eq.${site}&code=eq.standard&select=price_cents`))[0].price_cents;
+  const [{ block_id: grib }] = await rest(`property?id=eq.${FIX.gribAnchor}&select=block_id`);
+  try {
+    await signedIn(page, 'operator');
+    await openSites(page);
+    await page.selectOption('#ad-site-pick', FIX.gribAnchor);
+    const form = page.locator('#ad-site-form');
+    await expect(form.locator('.ad-site-ring-now'))
+      .toContainText('Ring 5 (beyond 800m from Eden Park), put there by hand — by its anchor’s distance it would be ring 4');
+    await expect(form).toContainText('Prices in ring 5');
+    expect(await priceAt(FIX.gribAnchor)).toBe((await priceAt(FIX.paice)) + 1000);
+
+    // Back to its ring by distance: the reference's ring, so the reference price.
+    await form.getByLabel('Ring', { exact: true }).selectOption('');
+    await form.getByRole('button', { name: /Save ring for/ }).click();
+    await expect(page.locator('#ad-toast')).toContainText('ring saved');
+    await expect(form.locator('.ad-site-ring-now')).toContainText('by its anchor’s distance.');
+    await expect(form).toContainText('reference site’s ring');
+    expect(await priceAt(FIX.gribAnchor)).toBe(await priceAt(FIX.paice));
+  } finally {
+    await gate('operator', { action: 'set_block_ring', block_id: grib, ring: 5 });
+  }
+});

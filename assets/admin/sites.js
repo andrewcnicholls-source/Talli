@@ -30,7 +30,7 @@ var SITE_TYPES = [
   { code: 'valet', label: 'Valet' },
 ];
 
-var data = { sites: [], blocks: [], hosts: [], nights: [] };
+var data = { sites: [], blocks: [], rings: [], hosts: [], nights: [] };
 // The night the Spaces section is showing, or '' for the usual numbers.
 var nightFilter = '';
 
@@ -45,6 +45,7 @@ export function openSites(selectId, nightId) {
       data = {
         sites: res.sites || [],
         blocks: res.blocks || [],
+        rings: res.rings || [],
         hosts: res.hosts || [],
         nights: res.nights || [],
       };
@@ -762,15 +763,75 @@ function nightsSection(box, site) {
 
 /* ------------------------------------------------------------- prices */
 
-// One price per area (plan B1): each type of park is the reference site's
-// price plus this area's adjustment, the same at every driveway in it.
-// The reference price itself moves on the Event tab.
+// Prices by distance from Eden Park, like a bullseye: ring 1 within 200m,
+// ring 2 the next 200m, and so on. Every area in a ring charges the same
+// for each type of park — the reference site's price plus the ring's
+// adjustment. An area takes its ring from its anchor's distance unless it
+// has been put in another by hand (one on a boundary). The reference
+// price itself moves on the Event tab.
+function ringById(n) {
+  return data.rings.filter(function (r) { return r.ring === n; })[0] || null;
+}
+
+function ringName(r) {
+  if (!r) return 'no ring';
+  var inner = 0;
+  data.rings.forEach(function (x) {
+    if (x.outer_metres != null && x.ring < r.ring) inner = Math.max(inner, x.outer_metres);
+  });
+  return 'Ring ' + r.ring + ' (' + (r.outer_metres == null
+    ? 'beyond ' + inner + 'm'
+    : inner + '–' + r.outer_metres + 'm') + ' from Eden Park)';
+}
+
 function pricingSection(box, block, keepSite) {
-  section(box, 'Prices in ' + block.name);
+  section(box, 'Price ring for ' + block.name);
+  var ring = ringById(block.ring);
+  var byDistance = ringById(block.ring_by_distance);
+  var overridden = block.ring_override != null;
+
+  box.appendChild(make('p', 'ad-site-help ad-site-ring-now',
+    block.name + ' is in ' + ringName(ring) + (overridden
+      ? ', put there by hand' + (byDistance ? ' — by its anchor’s distance it would be ring ' + byDistance.ring : '') + '.'
+      : byDistance ? ', by its anchor’s distance.' : ', priced as the reference: its anchor has no map position.')));
+
   if (block.is_reference) {
     box.appendChild(make('p', 'ad-site-help',
-      'This is the reference area: every other area is priced from it. ' +
-      'Change prices on the Event tab and every area follows.'));
+      'This is the reference area: every price is measured from it, so it stays in the ring its ' +
+      'distance puts it in, and that ring’s adjustment is always zero.'));
+  } else {
+    var pick = document.createElement('select');
+    pick.className = 'ad-select';
+    pick.appendChild(new Option('By distance' + (byDistance ? ' (ring ' + byDistance.ring + ')' : ''), ''));
+    data.rings.forEach(function (r) { pick.appendChild(new Option(ringName(r), String(r.ring))); });
+    pick.value = overridden ? String(block.ring_override) : '';
+    field(box, 'Ring', pick, 'For an area on a boundary: put it in the ring you think is right.');
+    var sayRing = errorBox(box);
+    box.appendChild(button('btn ad-site-save', 'Save ring for ' + block.name, function () {
+      sayRing(null);
+      call('set_block_ring', { block_id: block.id, ring: pick.value === '' ? null : Number(pick.value) })
+        .then(function (res) {
+          reload(keepSite, block.name + ' ring saved — ' + (res.events_updated || 0) + ' upcoming night' +
+            (res.events_updated === 1 ? '' : 's') + ' re-priced');
+          if (state.eventId) loadList(true);
+        })
+        .catch(function (e) { sayRing(explain(e)); });
+    }));
+  }
+
+  if (!ring) return;
+  ringPricesSection(box, ring, keepSite);
+}
+
+function ringPricesSection(box, ring, keepSite) {
+  var sharing = data.blocks.filter(function (b) { return b.ring === ring.ring; })
+    .map(function (b) { return b.name; });
+  section(box, 'Prices in ring ' + ring.ring,
+    sharing.length ? 'Every area in this ring: ' + sharing.join(', ') + '.' : null);
+  if (ring.is_reference) {
+    box.appendChild(make('p', 'ad-site-help',
+      'This is the reference site’s ring: it sells at the reference price. ' +
+      'Change prices on the Event tab and every ring follows.'));
     return;
   }
 
@@ -779,20 +840,20 @@ function pricingSection(box, block, keepSite) {
   table.appendChild(make('span', 'ad-site-h', '± $ vs reference'));
   var inputs = {};
   SITE_TYPES.forEach(function (t) {
-    var cents = (block.offsets && block.offsets[t.code]) || 0;
+    var cents = (ring.offsets && ring.offsets[t.code]) || 0;
     var i = numberInput(cents / 100, -100);
-    i.setAttribute('aria-label', t.label + ' price difference in dollars');
+    i.setAttribute('aria-label', t.label + ' price difference in dollars for ring ' + ring.ring);
     inputs[t.code] = i;
     table.appendChild(make('span', 'ad-site-type', t.label));
     table.appendChild(i);
   });
   box.appendChild(table);
   box.appendChild(make('p', 'ad-site-help',
-    'e.g. -5 sells that type $5 under the reference site, at every driveway in ' +
-    block.name + '. Saving re-prices its upcoming nights.'));
+    'e.g. -5 sells that type $5 under the reference site, at every driveway in every area in ring ' +
+    ring.ring + '. Saving re-prices the upcoming nights.'));
 
   var say = errorBox(box);
-  box.appendChild(primary('Save prices for ' + block.name, function () {
+  box.appendChild(primary('Save prices for ring ' + ring.ring, function () {
     var offsets = [];
     var bad = null;
     SITE_TYPES.forEach(function (t) {
@@ -804,9 +865,9 @@ function pricingSection(box, block, keepSite) {
     });
     if (bad) { say(bad); return; }
     say(null);
-    call('save_block_pricing', { block_id: block.id, offsets: offsets })
+    call('save_ring_pricing', { ring: ring.ring, offsets: offsets })
       .then(function (res) {
-        reload(keepSite, block.name + ' prices saved — ' + (res.events_updated || 0) + ' upcoming night' +
+        reload(keepSite, 'Ring ' + ring.ring + ' prices saved — ' + (res.events_updated || 0) + ' upcoming night' +
           (res.events_updated === 1 ? '' : 's') + ' re-priced');
         if (state.eventId) loadList(true);
       })

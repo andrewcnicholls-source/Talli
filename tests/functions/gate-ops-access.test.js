@@ -81,7 +81,7 @@ test('a warden gets in, as a warden, with their one block', async () => {
 test('a warden is refused every operator-only action', async () => {
   for (const action of ['set_price', 'set_capacity', 'set_reserve', 'set_event_status',
     'create_event', 'sites_setup', 'save_site', 'create_site', 'apply_price_template',
-    'save_block_pricing', 'set_live_event']) {
+    'save_ring_pricing', 'set_block_ring', 'set_live_event']) {
     const r = await gate('wardenGrib', { action, event_id: FIX.night });
     assert.equal(r.status, 403, `${action} should be refused`);
     assert.equal(r.body.code, 'OPERATOR_ONLY', `${action} should be refused by name`);

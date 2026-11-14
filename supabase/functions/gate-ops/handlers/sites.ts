@@ -97,17 +97,18 @@ export const sites: Record<string, Handler> = {
   async sites_setup(_: Ctx) {
     // A night still in progress is still upcoming: its numbers can move.
     const since = new Date(Date.now() - 24 * 3600 * 1000).toISOString()
-    const [propRes, defRes, blockRes, refRes, offRes, hostRes, nightRes, picRes] = await Promise.all([
+    const [propRes, defRes, blockRes, refRes, offRes, hostRes, nightRes, picRes, ringRes, refRingRes] = await Promise.all([
       db.from('property')
         .select('id, name, address, lat, lng, active, block_id, host_id, walk_minutes, ' +
                 'site_guide_url, fill_notes, slug, ' +
                 'host:host_id(name), block:block_id(name, sort_order, anchor_property_id)')
         .order('name', { ascending: true }),
       db.from('property_tier_default').select('property_id, code, capacity, online'),
-      db.from('block').select('id, name, slug, sort_order, anchor_property_id').eq('active', true)
+      db.from('block').select('id, name, slug, sort_order, anchor_property_id, ring_override')
+        .eq('active', true)
         .order('sort_order', { ascending: true }),
       db.rpc('reference_property'),
-      db.from('block_tier_offset').select('block_id, code, offset_cents'),
+      db.from('ring_tier_offset').select('ring, code, offset_cents'),
       db.from('host').select('id, name').order('name', { ascending: true }),
       db.from('event').select('id, name, starts_at, expected_end_at, status, is_live')
         .not('status', 'in', '(closed,cancelled)')
@@ -115,8 +116,10 @@ export const sites: Record<string, Handler> = {
         .order('starts_at', { ascending: true }),
       db.from('site_picture').select('id, property_id, path, caption, sort_order')
         .order('sort_order', { ascending: true }).order('created_at', { ascending: true }),
+      db.from('price_ring').select('ring, outer_metres').order('ring', { ascending: true }),
+      db.rpc('reference_ring'),
     ])
-    for (const r of [propRes, defRes, blockRes, offRes, hostRes, nightRes, picRes]) {
+    for (const r of [propRes, defRes, blockRes, offRes, hostRes, nightRes, picRes, ringRes, refRingRes]) {
       if (r.error) throw r.error
     }
     const now = Date.now()
@@ -164,19 +167,38 @@ export const sites: Record<string, Handler> = {
     const refBlock = ref
       ? ((propRes.data ?? []) as Row[]).find((p) => String(p.id) === ref)?.block_id ?? null
       : null
-    // A block's price per type, as a difference from the reference site.
+    // A ring's price per type, as a difference from the reference site.
     // A type with no row is zero.
     const offsets = new Map<string, Record<string, number>>()
     for (const o of (offRes.data ?? []) as Row[]) {
-      const m = offsets.get(String(o.block_id)) ?? {}
+      const m = offsets.get(String(o.ring)) ?? {}
       m[String(o.code)] = Number(o.offset_cents ?? 0)
-      offsets.set(String(o.block_id), m)
+      offsets.set(String(o.ring), m)
     }
-    const blocks = ((blockRes.data ?? []) as Row[]).map((b) => ({
-      ...b,
-      is_reference: refBlock !== null && String(b.id) === String(refBlock),
-      offsets: offsets.get(String(b.id)) ?? {},
+    const refRing = refRingRes.data === null || refRingRes.data === undefined ? null : Number(refRingRes.data)
+    const rings = ((ringRes.data ?? []) as Row[]).map((r) => ({
+      ring: Number(r.ring),
+      outer_metres: r.outer_metres ?? null,
+      is_reference: refRing !== null && Number(r.ring) === refRing,
+      offsets: offsets.get(String(r.ring)) ?? {},
     }))
+    // Each area's ring: by its anchor's distance from Eden Park, unless
+    // Andrew has put it in another (ring_override).
+    const byDistance = await Promise.all(((blockRes.data ?? []) as Row[]).map(async (b) => {
+      const { data, error } = await db.rpc('block_ring_by_distance', { p_block_id: b.id })
+      if (error) throw error
+      return data === null || data === undefined ? null : Number(data)
+    }))
+    const blocks = ((blockRes.data ?? []) as Row[]).map((b, i) => {
+      const distance = byDistance[i]
+      const ring = b.ring_override ?? distance ?? refRing
+      return {
+        ...b,
+        is_reference: refBlock !== null && String(b.id) === String(refBlock),
+        ring_by_distance: distance,
+        ring: ring === null || ring === undefined ? null : Number(ring),
+      }
+    })
     const defaults = new Map<string, Row[]>()
     for (const d of (defRes.data ?? []) as Row[]) {
       const list = defaults.get(String(d.property_id)) ?? []
@@ -212,7 +234,7 @@ export const sites: Record<string, Handler> = {
       nights: offersBySite.get(String(p.id)) ?? [],
     })).sort((a: Row, b: Row) => (a.block_sort - b.block_sort) ||
       String(a.name).localeCompare(String(b.name)))
-    return json({ sites, blocks, hosts: hostRes.data ?? [], nights })
+    return json({ sites, blocks, rings, hosts: hostRes.data ?? [], nights })
   },
 
   // A site's details (plan B3). Each field sent is written; one left out
@@ -291,7 +313,7 @@ export const sites: Record<string, Handler> = {
   },
 
   // A site's usual counts per type; optionally pushed to the upcoming
-  // events it is already in. Its price is its block's (save_block_pricing).
+  // events it is already in. Its price is its area's ring's (save_ring_pricing).
   async save_site({ body }: Ctx) {
     const { data, error } = await db.rpc('save_site_setup', {
       p_property_id: String(body.property_id ?? ''),
@@ -304,19 +326,32 @@ export const sites: Record<string, Handler> = {
     return json({ ok: true, ...(data as Row) })
   },
 
-  // A block's price per type of park, as a difference from the reference
-  // site. Every site in the block charges the same, and every upcoming
-  // night the block sells is re-priced before this returns.
-  async save_block_pricing({ body }: Ctx) {
+  // A ring's price per type of park, as a difference from the reference
+  // site. Every area in the ring charges the same, and every upcoming
+  // night is re-priced before this returns.
+  async save_ring_pricing({ body }: Ctx) {
     const raw = Array.isArray(body.offsets) ? body.offsets as Row[] : []
     const offsets = raw.map((o) => ({ code: String(o?.code ?? ''), offset_cents: Number(o?.offset_cents) }))
     if (!offsets.length) return json({ error: 'offsets is required' }, 400)
     if (offsets.some((o) => !Number.isInteger(o.offset_cents))) {
       return json({ error: 'An adjustment must be whole cents.' }, 400)
     }
-    const { data, error } = await db.rpc('set_block_offsets', {
+    const ring = Number(body.ring)
+    if (!Number.isInteger(ring)) return json({ error: 'ring is required' }, 400)
+    const { data, error } = await db.rpc('set_ring_offsets', { p_ring: ring, p_offsets: offsets })
+    if (error) return json(named(error), 409)
+    return json({ ok: true, events_updated: data })
+  },
+
+  // Put an area in a ring by hand (one on a boundary), or with ring null,
+  // back to the ring its anchor's distance puts it in.
+  async set_block_ring({ body }: Ctx) {
+    const raw = body.ring
+    const ring = raw === null || raw === undefined || raw === '' ? null : Number(raw)
+    if (ring !== null && !Number.isInteger(ring)) return json({ error: 'That is not a ring.' }, 400)
+    const { data, error } = await db.rpc('set_block_ring', {
       p_block_id: String(body.block_id ?? ''),
-      p_offsets: offsets,
+      p_ring: ring,
     })
     if (error) return json(named(error), 409)
     return json({ ok: true, events_updated: data })
