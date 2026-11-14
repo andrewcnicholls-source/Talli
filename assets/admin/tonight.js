@@ -551,7 +551,11 @@ function setStatus(ev, status) {
       }
       return loadList(true);
     })
-    .catch(function (err) { toast(err.message, 'bad'); })
+    .catch(function (err) {
+      toast(err.code === 'NOTHING_TO_SELL'
+        ? ev.name + ' has no site on sale with spaces yet. Put one on sale for this night on the Sites page first.'
+        : err.message, 'bad');
+    })
     .finally(function () {
       delete state.busy['status'];
       renderStatus();
