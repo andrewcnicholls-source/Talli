@@ -7,7 +7,7 @@
 <meta name="theme-color" content="#1C3255">
 <title>Gate — Talli Parking</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Jost:wght@300;400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Jost:wght@300;400;500&family=Poiret+One&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 <!-- Decides production vs test and marks the page. Must load in <head>,
      before anything paints, so the test styling is never a flash. -->
@@ -614,7 +614,7 @@
          its block, and a Standard car can take a Priority space. Moves on
          its own button, straight away — not with the rest of the sheet. -->
     <div id="ad-edit-place-row" hidden>
-      <label class="ad-label" for="ad-edit-place">Parked at <span>where the car actually is</span></label>
+      <label class="ad-label" for="ad-edit-place"><span id="ad-edit-place-what">Parked at</span> <span id="ad-edit-place-where">where the car actually is</span></label>
       <div class="ad-place-row">
         <select id="ad-edit-place" class="ad-select"></select>
         <button type="button" class="btn btn-outline" id="ad-edit-place-go">Move</button>
