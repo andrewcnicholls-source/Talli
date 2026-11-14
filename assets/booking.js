@@ -166,12 +166,9 @@
     read('/payment_setting?select=card_surcharge_bps&limit=1')
       .then(function (rows) {
         state.surchargeBps = (rows && rows[0] && rows[0].card_surcharge_bps) || 0;
-        var note = el('bk-tier-surcharge');
-        if (state.surchargeBps) {
-          text(note, 'Prices are as shown on the sign in the driveway. Paying by ' +
-            'card adds a surcharge, shown as its own line before you pay.');
-          note.hidden = false;
-        }
+        // Not announced in step 2 (Andrew, 14 Nov): the surcharge is its own
+        // line in the summary before payment, which is where it means
+        // something, and the sign in the driveway is not to be relied on.
         if (state.tier) paintSummary();
       })
       .catch(function () {
@@ -297,10 +294,16 @@
     var li = wanted && items.filter(function (x) {
       return x.getAttribute('data-night-id') === wanted;
     })[0];
-    if (li) pickNight(items, li, false);
+    if (li) { pickNight(items, li, false); return; }
+
+    // One night on sale (Robbie Williams has one): that is the one they
+    // want, so the flow opens on it without a tap, and without pulling
+    // the page down past the picture and the night they came to read.
+    var onSale = items.filter(function (x) { return x.getAttribute('data-night-state') === 'on_sale'; });
+    if (!wanted && onSale.length === 1) pickNight(items, onSale[0], false, true);
   }
 
-  function pickNight(items, li, tapped) {
+  function pickNight(items, li, tapped, quiet) {
     var ev = nightFrom(li);
     if (!ev.sellable) { openInterest(ev); return; }
     items.forEach(function (x) { x.classList.toggle('is-chosen', x === li); });
@@ -308,7 +311,7 @@
     if (tapped && window.history && history.replaceState) {
       try { history.replaceState(null, '', '?night=' + encodeURIComponent(ev.id)); } catch (e) { /* cosmetic */ }
     }
-    chooseEvent(ev);
+    chooseEvent(ev, quiet);
   }
 
   // People pick a night, not an opponent — you go to support your team, and the
@@ -410,7 +413,7 @@
       .finally(function () { button.disabled = false; });
   }
 
-  function chooseEvent(ev) {
+  function chooseEvent(ev, quiet) {
     var sameNight = state.event && state.event.id === ev.id;
     state.event = ev;
     state.tier = null;
@@ -422,7 +425,8 @@
     clearError();
 
     text(el('bk-tier-event'), ev.name + ' · ' + asDate(ev.starts_at));
-    reveal(el('bk-tiers-step'));
+    if (quiet) show(el('bk-tiers-step'));
+    else reveal(el('bk-tiers-step'));
     loadNight(ev.id);
   }
 
@@ -452,12 +456,12 @@
             'as well — come to one of our parking addresses and ask the warden.'));
           return;
         }
-        // Keep the chip they had on, if this night sells it; else Standard,
-        // else the first type there is.
+        // Keep the chip they had on, if this night sells it; else "All"
+        // (Andrew, 14 Nov: start from every type), else the only type.
         var codes = types.map(function (t) { return t.code; });
         if (types.length > 1) codes.push(ALL);
         if (codes.indexOf(state.type) === -1) {
-          state.type = codes.indexOf('standard') !== -1 ? 'standard' : codes[0];
+          state.type = types.length > 1 ? ALL : codes[0];
         }
         renderTypes(types);
         renderBlocks();
@@ -589,6 +593,7 @@
   function loadMap(eventId) {
     var box = el('bk-map');
     state.pins = [];
+    mapShown(false);
     if (!box || (!window.L && !CFG.googleMapsKey)) return;
     read('/v_event_site_map?event_id=eq.' + encodeURIComponent(eventId) +
          '&select=block_id,block_name,lat,lng,is_anchor')
@@ -597,7 +602,17 @@
         state.pins = (pins || []).filter(function (p) { return p.lat != null && p.lng != null; });
         drawMap(box, state.pins);
       })
-      .catch(function () { box.hidden = true; });
+      .catch(function () { box.hidden = true; mapShown(false); });
+  }
+
+  // Whether the map is on the page. With it, areas are picked on the map
+  // and only the one picked is shown below it; without it (no positions,
+  // or no map would load) every area is listed, as before. A list of 20
+  // or 30 areas is not something to scroll through to get to the next step.
+  function mapShown(on) {
+    if (!!state.mapReady === on) return;
+    state.mapReady = on;
+    if (state.rows.length) renderBlocks();
   }
 
   // Google Maps when there is a key and it loads; otherwise OpenStreetMap.
@@ -605,16 +620,21 @@
   var mapKind = null;
 
   function drawMap(box, pins) {
-    if (!pins.length) { box.hidden = true; return; }
+    if (!pins.length) { box.hidden = true; mapShown(false); return; }
     box.hidden = false;
     if (mapKind === null) mapKind = CFG.googleMapsKey ? 'google' : 'osm';
     if (mapKind === 'google') {
       loadGoogleMaps()
-        .then(function () { drawGoogleMap(box, pins); })
-        .catch(function () { mapKind = 'osm'; drawOsmMap(box, pins); });
+        .then(function () { drawGoogleMap(box, pins); mapShown(true); })
+        .catch(function () {
+          mapKind = 'osm';
+          drawOsmMap(box, pins);
+          mapShown(!box.hidden);
+        });
       return;
     }
     drawOsmMap(box, pins);
+    mapShown(!box.hidden);
   }
 
   /* ---- Google Maps ---- */
@@ -707,7 +727,7 @@
       add(htmlOverlay(a.at,
         'bk-map-pin' + (a.full ? ' is-full' : '') + (a.chosen ? ' is-chosen' : ''),
         '<span class="bk-map-pill" title="' + escapeHtml(a.title) + '">' + escapeHtml(a.label) + '</span>',
-        a.full ? null : function () { pickArea(a.block_id); }));
+        function () { pickArea(a.block_id); }));
     });
 
     var bounds = new g.LatLngBounds();
@@ -758,15 +778,17 @@
     return { areas: order, framed: framed };
   }
 
+  // A tap on an area on the map. Under "All" it opens that area's card at
+  // its types: which type is still the customer's to choose. Under one
+  // type it chooses the area, if it has that type left; a sold-out area
+  // just shows its card, which says whether there are walk-ups.
   function pickArea(blockId) {
     var r = rowsOfType().filter(function (x) { return x.block_id === blockId; })[0];
-    if (!r || r.spots_left <= 0) return;
-    // Under "All" a tap on the map opens that area's card at its types,
-    // and scrolls to it: which type is still the customer's to choose.
+    if (!r) return;
     if (state.type === ALL) { openArea(blockId, true); return; }
-    var radio = document.querySelector('input[name="bk-block"][value="' + blockId + '"]');
-    if (radio) radio.checked = true;
-    chooseBlock(r);
+    state.open = blockId;
+    if (r.spots_left > 0) chooseBlock(r);
+    renderBlocks();
   }
 
   /* ---- OpenStreetMap (Leaflet) ---- */
@@ -820,7 +842,7 @@
         title: a.title,
         riseOnHover: true,
       }).addTo(mapLayer);
-      if (!a.full) marker.on('click', function () { pickArea(a.block_id); });
+      marker.on('click', function () { pickArea(a.block_id); });
     });
 
     // Leaflet measures the box when it is drawn; the step may have only just
@@ -858,6 +880,19 @@
     if (!rows.length) {
       box.appendChild(make('p', 'bk-empty', 'Nothing of this type for this night.'));
       return;
+    }
+
+    // With the map on the page, only the area picked on it is shown here.
+    if (state.mapReady && rows.length > 1) {
+      var picked = rows.filter(function (r) { return r.block_id === state.open; });
+      if (!picked.length) {
+        box.appendChild(make('p', 'bk-card-meta bk-blocks-lead bk-map-prompt',
+          'Tap a price on the map to choose where to park. You\u2019re booked for that ' +
+          'address or a driveway within 100m \u2014 a Talli warden will show you in.'));
+        if (state.pins.length) drawMap(el('bk-map'), state.pins);
+        return;
+      }
+      rows = picked;
     }
 
     box.appendChild(make('p', 'bk-card-meta bk-blocks-lead',
@@ -1188,6 +1223,7 @@
   // A block chosen for the type that is on: that row is what is bought.
   function chooseBlock(tier) {
     if (tier.spots_left <= 0) return;
+    state.open = tier.block_id;
     state.block = tier;
     state.tier = tier;
     clearError();

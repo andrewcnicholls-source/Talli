@@ -302,7 +302,7 @@ select eo.id, v.code, v.label, v.price_cents, v.zone_codes, v.bay_kind,
  cross join lateral (values
    ('valet',    'Valet — hand us your keys and we''ll park it for you',
       l.valet,    array['valet'],             'any',      interval '0 minutes',   1,  6,  3),
-   ('priority', 'Priority exit — near the road, nobody parked in behind you',
+   ('priority', 'Priority exit — you won''t be blocked in, so you can leave when you''re ready',
       l.priority, array['front_lawn','berm'], 'free_exit', interval '0 minutes',  2, 16, 13),
    ('standard', 'Standard — best value, expect to wait for the drive to clear',
       l.standard, array['back_yard'],         'any',      interval '-30 minutes', 4, 10,  4)

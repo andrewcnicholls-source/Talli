@@ -274,7 +274,6 @@ export const BOOKING_FLOW = `<div class="bk-flow ev-flow">
       <p class="bk-step-context" id="bk-tier-event"></p>
       <div class="bk-chips" id="bk-types" role="radiogroup" aria-label="Type of space"></div>
       <p class="bk-step-note" id="bk-type-note" hidden></p>
-      <p class="bk-step-note bk-surcharge-note" id="bk-tier-surcharge" hidden></p>
       <div class="bk-map" id="bk-map" role="region" aria-label="Map of parking near Eden Park" hidden></div>
       <div class="bk-cards" id="bk-blocks"></div>
     </section>
@@ -518,6 +517,26 @@ ${list.length
 
 // --- /events/<slug> ------------------------------------------------------------
 
+// Eden Park's own conditions of entry: what can come through the gates,
+// which differs between concerts and sport. Talli does not restate them;
+// it points at Eden Park's page, which is the one that is kept current.
+// A concert has its own page; sport goes to the index, which lists rugby,
+// football, cricket and league separately (a series knows only "sport").
+const EDEN_PARK_CONDITIONS = {
+  concert: 'https://edenpark.co.nz/conditions-of-entry/conditions-of-entry-concerts/',
+  any: 'https://edenpark.co.nz/conditions-of-entry/',
+};
+
+export function conditionsOfEntry(series) {
+  const venue = String(series.venue || 'Eden Park');
+  if (!/eden park/i.test(venue)) return '';
+  const concert = series.kind === 'concert';
+  const href = concert ? EDEN_PARK_CONDITIONS.concert : EDEN_PARK_CONDITIONS.any;
+  return `<p class="ev-note ev-conditions">Before you go: Eden Park's
+  <a href="${esc(href)}" target="_blank" rel="noopener">conditions of entry${concert ? ' for concerts' : ''}</a> —
+  what you can bring through the gates, and what you can't.</p>`;
+}
+
 export function renderSeries(project, series, opts) {
   const now = opts.now;
   const url = SITE + '/events/' + series.slug;
@@ -563,6 +582,7 @@ ${series.nights.length
     ? `  <ul class="ev-nights" id="bk-nights">\n${nights}\n  </ul>
   <p class="ev-note">Parking is in driveways a few minutes' walk from the gates. Prices are set per area
   and type of space, and the price you see when you book is the price you pay.</p>
+  ${conditionsOfEntry(series)}
 
   ${BOOKING_FLOW}`
     : `  <p class="ev-empty">No nights on sale for ${esc(series.name)} just now.

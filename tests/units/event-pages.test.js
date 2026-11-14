@@ -224,3 +224,18 @@ test('each route file reads the project its hostname names, and no other', async
     globalThis.fetch = realFetch;
   }
 });
+
+test('a series page points at Eden Park\'s conditions of entry for that kind of event', async () => {
+  const { conditionsOfEntry } = await load();
+  const concert = conditionsOfEntry({ kind: 'concert', venue: 'Eden Park' });
+  assert.match(concert, /href="https:\/\/edenpark\.co\.nz\/conditions-of-entry\/conditions-of-entry-concerts\/"/);
+  assert.match(concert, /for concerts/);
+  assert.match(concert, /rel="noopener"/);
+  // Sport: the index, which lists each code; a series knows only "sport".
+  const sport = conditionsOfEntry({ kind: 'sport', venue: 'Eden Park' });
+  assert.match(sport, /href="https:\/\/edenpark\.co\.nz\/conditions-of-entry\/"/);
+  assert.doesNotMatch(sport, /for concerts/);
+  assert.match(conditionsOfEntry({ kind: 'sport', venue: null }), /conditions-of-entry\//);
+  // Somewhere else, Eden Park's rules are not the ones that apply.
+  assert.equal(conditionsOfEntry({ kind: 'concert', venue: 'Western Springs' }), '');
+});
