@@ -91,15 +91,114 @@
 
   // One pill per area at its anchor, framed around Eden Park (every point
   // mirrored through the stadium, so it sits in the middle). Areas with no
-  // position are only in the list. No Leaflet, no positions: no map.
+  // position are only in the list. Google Maps, as on the booking page,
+  // when there is a key and it loads; OpenStreetMap only if it will not.
   function drawMap(blocks) {
     var box = el('gh-map');
-    if (!box || !window.L) return;
+    if (!box) return;
     var placed = blocks.filter(function (b) {
       return b.anchor && b.anchor.lat != null && b.anchor.lng != null;
     });
     if (!placed.length) { box.hidden = true; return; }
+    var areas = placed.map(function (b) {
+      return {
+        at: [Number(b.anchor.lat), Number(b.anchor.lng)],
+        name: street(b.anchor.address) || b.name,
+        href: '/go/' + encodeURIComponent(b.slug),
+      };
+    });
+    var framed = [EDEN_PARK];
+    areas.forEach(function (a) {
+      framed.push(a.at, [2 * EDEN_PARK[0] - a.at[0], 2 * EDEN_PARK[1] - a.at[1]]);
+    });
     box.hidden = false;
+    if (CFG.googleMapsKey) {
+      loadGoogleMaps()
+        .then(function () { drawGoogle(box, areas, framed); })
+        .catch(function () { drawOsm(box, areas, framed); });
+    } else {
+      drawOsm(box, areas, framed);
+    }
+  }
+
+  function loadGoogleMaps() {
+    return new Promise(function (resolve, reject) {
+      if (window.google && window.google.maps) { resolve(); return; }
+      var cb = '__talliGhMapsReady';
+      window[cb] = function () { resolve(); };
+      window.gm_authFailure = function () { reject(new Error('maps auth')); };
+      var s = document.createElement('script');
+      s.src = 'https://maps.googleapis.com/maps/api/js?key=' +
+        encodeURIComponent(CFG.googleMapsKey) + '&callback=' + cb + '&loading=async';
+      s.async = true;
+      s.onerror = function () { reject(new Error('maps script')); };
+      document.head.appendChild(s);
+      setTimeout(function () { reject(new Error('maps timeout')); }, 8000);
+    });
+  }
+
+  // A piece of HTML pinned to a point, styled by the booking page's CSS.
+  function htmlOverlay(g, at, className, html, onClick) {
+    var ov = new g.OverlayView();
+    var div = null;
+    ov.onAdd = function () {
+      div = document.createElement('div');
+      div.className = className;
+      div.innerHTML = html;
+      div.style.position = 'absolute';
+      if (onClick) {
+        div.style.cursor = 'pointer';
+        div.addEventListener('click', onClick);
+        this.getPanes().overlayMouseTarget.appendChild(div);
+      } else {
+        this.getPanes().overlayLayer.appendChild(div);
+      }
+    };
+    ov.draw = function () {
+      var px = this.getProjection().fromLatLngToDivPixel(new g.LatLng(at[0], at[1]));
+      if (px && div) { div.style.left = px.x + 'px'; div.style.top = px.y + 'px'; }
+    };
+    ov.onRemove = function () { if (div && div.parentNode) div.parentNode.removeChild(div); div = null; };
+    return ov;
+  }
+
+  function drawGoogle(box, areas, framed) {
+    var g = window.google.maps;
+    var gmap = new g.Map(box, {
+      center: { lat: EDEN_PARK[0], lng: EDEN_PARK[1] },
+      zoom: 15,
+      disableDefaultUI: true,
+      zoomControl: true,
+      clickableIcons: false,
+      gestureHandling: 'cooperative',
+      styles: [
+        { featureType: 'poi', stylers: [{ visibility: 'off' }] },
+        { featureType: 'poi.park', stylers: [{ visibility: 'on' }] },
+        { featureType: 'poi.sports_complex', stylers: [{ visibility: 'on' }] },
+        { featureType: 'transit.station', stylers: [{ visibility: 'simplified' }] },
+      ],
+    });
+    htmlOverlay(g, EDEN_PARK, 'bk-map-venue bk-map-venue-g',
+      '<span class="bk-map-venue-dot" aria-hidden="true"></span>' +
+      '<span class="bk-map-venue-name">Eden Park</span>').setMap(gmap);
+    areas.forEach(function (a) {
+      htmlOverlay(g, a.at, 'bk-map-pin',
+        '<span class="bk-map-pill" title="' + escapeHtml(a.name) + ' — directions">' +
+          escapeHtml(a.name) + '</span>',
+        function () { window.location.href = a.href; }).setMap(gmap);
+    });
+    var bounds = new g.LatLngBounds();
+    framed.forEach(function (pt) { bounds.extend({ lat: pt[0], lng: pt[1] }); });
+    gmap.fitBounds(bounds, { top: 52, left: 40, right: 40, bottom: 24 });
+    g.event.addListenerOnce(gmap, 'idle', function () {
+      if (gmap.getZoom() > 16) gmap.setZoom(16);
+      if (gmap.getZoom() < 14) { gmap.setCenter({ lat: EDEN_PARK[0], lng: EDEN_PARK[1] }); gmap.setZoom(14); }
+    });
+  }
+
+  // The fallback: OpenStreetMap through the vendored Leaflet.
+  function drawOsm(box, areas, framed) {
+    if (!window.L) { box.hidden = true; return; }
 
     var map = window.L.map(box, { scrollWheelZoom: false, tap: true, zoomControl: false });
     window.L.control.zoom({ position: 'bottomright' }).addTo(map);
@@ -122,24 +221,18 @@
       interactive: false,
     }).addTo(map);
 
-    var framed = [EDEN_PARK];
-    placed.forEach(function (b) {
-      var at = [Number(b.anchor.lat), Number(b.anchor.lng)];
-      framed.push(at, [2 * EDEN_PARK[0] - at[0], 2 * EDEN_PARK[1] - at[1]]);
-      var name = street(b.anchor.address) || b.name;
-      var marker = window.L.marker(at, {
+    areas.forEach(function (a) {
+      var marker = window.L.marker(a.at, {
         icon: window.L.divIcon({
           className: 'bk-map-pin',
-          html: '<span class="bk-map-pill">' + escapeHtml(name) + '</span>',
+          html: '<span class="bk-map-pill">' + escapeHtml(a.name) + '</span>',
           iconSize: [0, 0],
           iconAnchor: [0, 0],
         }),
-        title: name + ' — directions',
+        title: a.name + ' — directions',
         riseOnHover: true,
       }).addTo(map);
-      marker.on('click', function () {
-        window.location.href = '/go/' + encodeURIComponent(b.slug);
-      });
+      marker.on('click', function () { window.location.href = a.href; });
     });
 
     map.invalidateSize();

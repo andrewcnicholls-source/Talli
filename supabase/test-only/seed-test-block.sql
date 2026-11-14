@@ -43,7 +43,7 @@ select o.id, v.code, v.label, v.price, '{}'::text[], v.kind, false, v.sort, true
   from event_offer o
   cross join (values
     ('standard', 'Standard — best value, expect to wait for the drive to clear', 4000, 'no_clear_exit', 4, 3, 0),
-    ('priority', 'Priority exit — near the road, nobody parked in behind you',   5000, 'free_exit',     2, 2, 1)
+    ('priority', 'Priority exit — you won''t be blocked in, so you can leave when you''re ready',   5000, 'free_exit',     2, 2, 1)
   ) as v(code, label, price, kind, sort, cap, reserve)
   join lateral (
     select t.arrival_from, t.arrival_until, t.departure_by

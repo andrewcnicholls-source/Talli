@@ -44,7 +44,7 @@ test('an old /book?event= link lands on the series page with that night chosen',
   await expect(page).toHaveURL(new RegExp(`/events/${series.slug}\\?night=${FIX.night}$`));
   await expect(page.locator(`#night-${FIX.night}`)).toHaveClass(/is-chosen/);
   await expect(page.locator('#bk-tiers-step')).toBeVisible();
-  await expect(page.locator('label.bk-card-block').first()).toBeVisible();
+  await expect(page.locator('#bk-map .bk-map-pin .bk-map-pill').first()).toBeVisible();
 });
 
 test('a booking link to a night that is not listed leaves the page as it was', async ({ page }) => {

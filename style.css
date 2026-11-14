@@ -12,7 +12,7 @@
   --blue-deep: #1C3255;
   --blue-tint: #EEF2F7;
   /* The area you have chosen on the booking map, and its card's edge. */
-  --chosen: #C2571F;
+  --chosen: #17703F; /* a rich green, kin to the Eden Park dot (#2e7d4f) */
   --line: #E4E2DC;
   --grey: #7A7A74;
   --orange-flag: #B5502E; /* used once, only for the return-promptly notice */
