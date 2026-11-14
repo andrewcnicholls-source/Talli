@@ -40,10 +40,17 @@ test('a customer books a block from the series page, and is sent to that block',
   await expect(page.locator('input[name="bk-type"][value="all"]')).toBeChecked();
   await expect(page.locator('#bk-blocks .bk-map-prompt')).toBeVisible();
   await expect(page.locator('#bk-blocks .bk-area')).toHaveCount(0);
+  // Before an area is picked: every type's cheapest price on its chip,
+  // and nothing yet about "this address or within 100m".
+  await expect(page.locator('label.bk-chip', { hasText: 'Standard' }).locator('.bk-chip-price')).toHaveText('$30+');
+  await expect(page.locator('label.bk-chip', { hasText: 'Priority' }).locator('.bk-chip-price')).toHaveText('$40+');
+  await expect(page.locator('label.bk-chip', { hasText: 'Valet' }).locator('.bk-chip-price')).toHaveText('$45+');
+  await expect(page.locator('#bk-blocks')).not.toContainText('within 100m');
 
-  await tap(pin(page, 'from $40'));
+  await tap(pin(page, '$40+'));
   const grib = page.locator('#bk-blocks .bk-area', { hasText: 'Gribblehurst (test)' });
-  await expect(grib).toContainText('or within 100m');
+  // Said once the area is open, under its types.
+  await expect(page.locator('#bk-blocks .bk-area-note')).toContainText('or a driveway within 100m');
   await expect(page.locator('#bk-blocks .bk-area')).toHaveCount(1);
   await tap(grib.locator('.bk-area-type', { hasText: 'Standard' }));
   await expect(page.locator('#bk-summary-price')).toHaveText('$40');
@@ -95,6 +102,11 @@ test('a customer books a block from the series page, and is sent to that block',
   // Directions are the booked block's /go/ page (plan A4), never Paice Ave's.
   const [booked] = await rest(`property?id=eq.${FIX.gribAnchor}&select=block:block_id(slug)`);
   await expect(page.locator('#cf-directions')).toHaveAttribute('href', '/go/' + booked.block.slug);
+  // Eden Park's conditions of entry, for this kind of event, on the night's checklist.
+  const [{ event_series: kindOf }] = await rest(`event?id=eq.${FIX.night}&select=event_series(kind)`);
+  await expect(page.locator('#cf-conditions a')).toHaveAttribute('href', kindOf && kindOf.kind === 'concert'
+    ? 'https://edenpark.co.nz/conditions-of-entry/conditions-of-entry-concerts/'
+    : 'https://edenpark.co.nz/conditions-of-entry/');
 
   const [row] = await rest(`booking?vehicle_rego=eq.${rego}&select=status,amount_cents`);
   expect(row).toEqual({ status: 'paid', amount_cents: 4000 });
@@ -128,14 +140,14 @@ test('"All" is on, each area shows from its cheapest price, and a pin opens its 
   const blocks = page.locator('#bk-blocks');
   await expect(page.locator('label.bk-chip').first()).toHaveText('All');
   await expect(page.locator('input[name="bk-type"][value="all"]')).toBeChecked();
-  await expect(pin(page, 'from $30')).toBeVisible();
-  await expect(pin(page, 'from $40')).toBeVisible();
+  await expect(pin(page, '$30+')).toBeVisible();
+  await expect(pin(page, '$40+')).toBeVisible();
   await expect(blocks.locator('.bk-area')).toHaveCount(0);
 
   // A pin on the map opens that area at its types.
-  await pin(page, 'from $40').click();
+  await pin(page, '$40+').click();
   const grib = blocks.locator('.bk-area', { hasText: 'Gribblehurst (test)' });
-  await expect(grib.locator('.bk-card-area .bk-tier-price')).toHaveText('from $40');
+  await expect(grib.locator('.bk-card-area .bk-tier-price')).toHaveText('$40+');
   await expect(grib).toHaveClass(/is-open/);
   await expect(grib.locator('.bk-area-type')).toHaveCount(2);
   await expect(grib.locator('.bk-area-type', { hasText: 'Priority' }).locator('.bk-tier-price'))
@@ -156,7 +168,7 @@ test('"All" is on, each area shows from its cheapest price, and a pin opens its 
   // On a phone the two fixture areas (about 180m apart) overlap at this
   // zoom and the chosen pill sits on top, so the tap is sent to the pill
   // itself rather than to whatever is uppermost at that point.
-  await pin(page, 'from $30').dispatchEvent('click');
+  await pin(page, '$30+').dispatchEvent('click');
   const paice = blocks.locator('.bk-area', { hasText: 'Paice' });
   await expect(paice).toHaveClass(/is-open/);
   await expect(grib).toHaveCount(0);
@@ -165,7 +177,7 @@ test('"All" is on, each area shows from its cheapest price, and a pin opens its 
 
 test('an extra shows its price top right and its stepper bottom right', async ({ page }) => {
   await page.goto(`/events/${await seriesOf(FIX.night)}?night=${FIX.night}`);
-  await pin(page, 'from $40').click();
+  await pin(page, '$40+').click();
   await page.locator('#bk-blocks .bk-area-type', { hasText: 'Standard' }).click();
   const card = page.locator('#bk-extras .bk-extra').first();
   await expect(card).toBeVisible();
@@ -209,7 +221,7 @@ test('/book still sells a night chosen from its own list', async ({ page }) => {
   await page.goto('/book.html');
   await page.locator('label.bk-fixture', { hasText: 'TEST — Fixture night' }).first().click();
   await expect(page.locator('#bk-tiers-step')).toBeVisible();
-  await pin(page, 'from $40').click();
+  await pin(page, '$40+').click();
   await page.locator('#bk-blocks .bk-area-type', { hasText: 'Standard' }).click();
   await expect(page.locator('#bk-summary-price')).toHaveText('$40');
   await expect(page.locator('#bk-details')).toBeVisible();
@@ -219,7 +231,7 @@ test('step 2 does not lean on the sign in the driveway, or announce the surcharg
   await page.goto(`/events/${await seriesOf(FIX.night)}?night=${FIX.night}`);
   const step = page.locator('#bk-tiers-step');
   await expect(step).toBeVisible();
-  await expect(pin(page, 'from $40')).toBeVisible();
+  await expect(pin(page, '$40+')).toBeVisible();
   await expect(step).not.toContainText(/sign in the driveway/i);
   await expect(step).not.toContainText(/surcharge/i);
 });

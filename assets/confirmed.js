@@ -62,6 +62,34 @@
     return w && w.nearby ? shortAddr + ', or a driveway within 100m' : shortAddr;
   }
 
+  // Eden Park's own conditions of entry: what can come through the gates,
+  // which differs for a concert and for sport. The same two addresses as
+  // the series page (functions/_lib/site.js, EDEN_PARK_CONDITIONS); a unit
+  // test holds the two to each other.
+  var EDEN_PARK_CONDITIONS = {
+    concert: 'https://edenpark.co.nz/conditions-of-entry/conditions-of-entry-concerts/',
+    any: 'https://edenpark.co.nz/conditions-of-entry/',
+  };
+
+  function renderConditions(ev) {
+    var li = el('cf-conditions');
+    if (!li) return;
+    var series = (ev && ev.series) || {};
+    var venue = String((ev && ev.venue) || series.venue || 'Eden Park');
+    if (!ev || !/eden park/i.test(venue)) { hide(li); return; }
+    var concert = series.kind === 'concert';
+    li.innerHTML = '';
+    li.appendChild(document.createTextNode('Check Eden Park’s '));
+    var a = document.createElement('a');
+    a.href = concert ? EDEN_PARK_CONDITIONS.concert : EDEN_PARK_CONDITIONS.any;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.textContent = 'conditions of entry' + (concert ? ' for concerts' : '');
+    li.appendChild(a);
+    li.appendChild(document.createTextNode(' — what you can bring through the gates, and what you can’t.'));
+    show(li);
+  }
+
   function row(label, value) {
     if (!value) return null;
     var wrap = document.createElement('div');
@@ -120,6 +148,8 @@
     if (come && whereText(b)) {
       come.textContent = 'Come to ' + whereText(b) + ' — a Talli warden will meet you and show you where to park.';
     }
+
+    renderConditions(b.event);
 
     var details = el('cf-details');
     details.innerHTML = '';

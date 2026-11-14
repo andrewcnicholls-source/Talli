@@ -554,8 +554,11 @@ export function renderSeries(project, series, opts) {
       ${dateBlock(n.starts_at)}
       <span class="ev-night-body">
         <span class="ev-night-name">${esc(nightTitle(n))}</span>
-        <span class="ev-night-meta"><time datetime="${esc(n.starts_at)}">${esc(longDate(n.starts_at))}, ${esc(time(n.starts_at))}</time> · ${esc(n.venue || series.venue || 'Eden Park')}</span>
-        <span class="ev-night-status">${esc(state.label)}</span>
+        <span class="ev-night-meta"><time datetime="${esc(n.starts_at)}">${esc(longDate(n.starts_at))}, ${esc(time(n.starts_at))}</time></span>
+        <span class="ev-night-tags">
+          <span class="ev-night-venue">${esc(n.venue || series.venue || 'Eden Park')}</span>
+          <span class="ev-night-status">${esc(state.label)}</span>
+        </span>
         <span class="ev-from" data-event-ids="${esc(n.id)}"></span>
       </span>
       ${nightPicture ? `<img class="ev-night-pic" src="${esc(nightPicture)}" alt="" loading="lazy">` : ''}
@@ -570,10 +573,11 @@ export function renderSeries(project, series, opts) {
   <h1>${esc(series.name)}</h1>
   <p class="ev-where">${esc(KIND_LABEL[series.kind] || 'Event')} · ${esc(series.venue || 'Eden Park')}</p>
   ${series.summary ? `<p>${esc(series.summary)}</p>` : ''}
-  ${picture ? `<img class="ev-hero-pic" src="${esc(picture)}" alt="${esc(series.name)}">` : ''}
 </header>
 
-<main class="wrap tight">
+<main class="wrap tight${picture ? ' ev-with-pic' : ''}">
+${picture ? `  <div class="ev-pic-col"><img class="ev-hero-pic" src="${esc(picture)}" alt="${esc(series.name)}"></div>
+` : ''}  <div class="ev-main-col">
   <div class="bk-step-head ev-step-head">
     <span class="bk-step-num">01</span>
     <h2>${series.nights.length === 1 ? 'The night' : 'Pick your night'}</h2>
@@ -587,6 +591,7 @@ ${series.nights.length
   ${BOOKING_FLOW}`
     : `  <p class="ev-empty">No nights on sale for ${esc(series.name)} just now.
   <a href="/events">See what else is on</a>.</p>`}
+  </div>
 </main>`;
 
   return page({
