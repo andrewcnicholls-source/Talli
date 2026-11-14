@@ -51,7 +51,6 @@
   var CAR_SRC = 'assets/locate-car.png';
   var CROP = { x: 100, y: 130, w: 260, h: 200 };
   var CAR = { x: 24, y: 130, w: 552 };
-  var CAR_H = CAR.w * CROP.h / CROP.w;
   // The QR tile in drawing coordinates: between the headlights, under the
   // hood line, down to the base of the car.
   var TILE = { x: 194, y: 209, s: 82 };
@@ -153,13 +152,18 @@
     var pinX = left + PIN_W / 2;
     var textX = left + PIN_W + PIN_GAP;
 
-    var car = '<svg x="' + CAR.x + '" y="' + CAR.y + '" width="' + CAR.w + '" height="' + CAR_H +
-      '" viewBox="' + CROP.x + ' ' + CROP.y + ' ' + CROP.w + ' ' + CROP.h + '" overflow="hidden">' +
-      '<defs>' + whiten(id + '-w') + '</defs>' +
+    // The crop of the drawing, scaled onto the card. A group and a clip path
+    // rather than a nested <svg>, so the card stays a single svg element.
+    var s = CAR.w / CROP.w;
+    var car = '<defs>' + whiten(id + '-w') +
+      '<clipPath id="' + id + '-c"><rect x="' + CROP.x + '" y="' + CROP.y + '" width="' + CROP.w +
+        '" height="' + CROP.h + '"/></clipPath></defs>' +
+      '<g transform="translate(' + CAR.x + ' ' + CAR.y + ') scale(' + s + ') translate(' + (-CROP.x) + ' ' + (-CROP.y) + ')">' +
+      '<g clip-path="url(#' + id + '-c)">' +
       '<image href="' + esc(new URL(CAR_SRC, window.location.href).href) + '" x="0" y="0" width="460" height="1024" ' +
       'preserveAspectRatio="none" filter="url(#' + id + '-w)"/>' +
       (qr ? code(qr) : '') +
-      '</svg>';
+      '</g></g>';
 
     var noCode = qr ? '' : '<text x="' + TILE.x + '" y="' + (TILE.y + TILE.s / 2) +
       '" font-family="' + esc(FONT) + '" font-size="18" fill="' + INK + '">The QR code could not be drawn.</text>';
