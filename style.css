@@ -2847,20 +2847,9 @@ body.ad-guide-open { overflow: hidden; }
   padding: 4px 9px;
 }
 
-/* On a wide screen the picture sits on the left at half the width, and the
-   night and the booking run down the right beside it, so the booking is
-   on screen with the picture rather than a scroll below it. */
-.ev-with-pic .ev-hero-pic { margin-top: 0; margin-bottom: 18px; }
-@media (min-width: 900px) {
-  .wrap.tight.ev-with-pic {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: 36px;
-    align-items: start;
-  }
-  .ev-pic-col { position: sticky; top: 96px; }
-  .ev-with-pic .ev-hero-pic { max-width: none; margin-bottom: 0; }
-}
+/* A link to /events/<slug>#ev-nights opens with the nights at the top of
+   the screen, below the sticky top bar rather than under it. */
+#ev-nights, .bk-step, .bk-area { scroll-margin-top: 80px; }
 .ev-night-pic { width: 96px; aspect-ratio: 1; object-fit: cover; border-radius: 3px; }
 .ev-night-go { flex: none; }
 @media (max-width: 519px) {

@@ -297,10 +297,10 @@
     if (li) { pickNight(items, li, false); return; }
 
     // One night on sale (Robbie Williams has one): that is the one they
-    // want, so the flow opens on it without a tap, and without pulling
-    // the page down past the picture and the night they came to read.
+    // want, so the flow opens on it without a tap and scrolls down to the
+    // parking (section 02), skipping the night they came to read.
     var onSale = items.filter(function (x) { return x.getAttribute('data-night-state') === 'on_sale'; });
-    if (!wanted && onSale.length === 1) pickNight(items, onSale[0], false, true);
+    if (!wanted && onSale.length === 1) pickNight(items, onSale[0], false);
   }
 
   function pickNight(items, li, tapped, quiet) {
@@ -464,6 +464,9 @@
           state.type = types.length > 1 ? ALL : codes[0];
         }
         renderTypes(types);
+        // 86 Pace is selected to begin with, so the map is never a blank
+        // prompt; tapping another area on the map moves the selection.
+        if (state.open == null) state.open = defaultBlockId(rowsOfType());
         renderBlocks();
       })
       .catch(function (err) {
@@ -516,6 +519,18 @@
     return order.map(function (id) { return byBlock[id]; });
   }
 
+  function blockRows(blockId) {
+    return state.rows.filter(function (r) { return r.block_id === blockId; });
+  }
+
+  // The area a visitor starts on: 86 Paice Ave, Talli's own driveway. Matched
+  // on the address, so it follows the data. Anywhere else they tap on the
+  // map, and that is the one that is open instead.
+  function defaultBlockId(rows) {
+    var home = rows.filter(function (r) { return /^\s*86\s+pai?ce\b/i.test(r.anchor_address || ''); })[0];
+    return home ? home.block_id : null;
+  }
+
   // Every type one area sells tonight, in the chips' order.
   function rowsOfArea(blockId) {
     var rank = {};
@@ -547,15 +562,23 @@
       // Priority and Valet can be compared with the map on one screen
       // before an area is picked.
       var from = t.code === ALL ? null : cheapest(t.code);
-      if (from != null) chip.appendChild(make('span', 'bk-chip-price', plus(from)));
+      if (from != null) {
+        var ofType = state.rows.filter(function (r) { return r.code === t.code; });
+        chip.appendChild(make('span', 'bk-chip-price', plus(from, dearerOnSale(ofType, from))));
+      }
       box.appendChild(chip);
     });
     paintTypeNote();
   }
 
-  // "$30+": the cheapest, and there may be dearer. Shorter than "from $30"
-  // on a map with several areas on it.
-  function plus(cents) { return money(cents) + '+'; }
+  // "$30+" only when something dearer is still for sale online among
+  // these rows: the price is the cheapest, and there is more to pay. A
+  // type or area with one price to it is just "$40".
+  function plus(cents, dearer) { return money(cents) + (dearer ? '+' : ''); }
+
+  function dearerOnSale(rows, cents) {
+    return rows.some(function (r) { return r.spots_left > 0 && r.price_cents > cents; });
+  }
 
   function cheapest(code) {
     var best = null;
@@ -569,7 +592,7 @@
   function chooseType(code) {
     if (code === state.type) return;
     state.type = code;
-    state.open = null;
+    state.open = defaultBlockId(rowsOfType());
     // A block chosen for another type is no longer the thing being bought.
     if (state.tier) {
       state.tier = null;
@@ -787,7 +810,9 @@
       a.full = !r || r.spots_left <= 0;
       a.chosen = !!(state.block && state.block.block_id === a.block_id);
       a.label = a.full ? (r && r.walk_ups_on_the_night ? 'Walk-up' : 'Full')
-                       : (state.type === ALL ? plus(r.price_cents) : money(r.price_cents));
+                       : (state.type === ALL
+                          ? plus(r.price_cents, dearerOnSale(blockRows(a.block_id), r.price_cents))
+                          : money(r.price_cents));
       a.title = a.block_name + (a.full
         ? (r && r.walk_ups_on_the_night ? ' — sold out online, walk-up spaces on the night'
                                         : ' — sold out online')
@@ -905,7 +930,7 @@
       var picked = rows.filter(function (r) { return r.block_id === state.open; });
       if (!picked.length) {
         box.appendChild(make('p', 'bk-card-meta bk-blocks-lead bk-map-prompt',
-          'Tap a price on the map to choose where to park.'));
+          'Tap an area on the map to choose where to park.'));
         if (state.pins.length) drawMap(el('bk-map'), state.pins);
         return;
       }
@@ -956,7 +981,8 @@
     // The price and the arrow side by side, centred on the card.
     var side = make('span', 'bk-area-side');
     side.appendChild(make('span', 'bk-tier-price',
-      soldOut ? 'Sold out online' : plus(summary.price_cents)));
+      soldOut ? 'Sold out online'
+              : plus(summary.price_cents, dearerOnSale(blockRows(blockId), summary.price_cents))));
     side.appendChild(make('span', 'bk-area-caret', '\u203A'));
     head.appendChild(side);
     head.addEventListener('click', function () { openArea(open ? null : blockId, false); });
@@ -1017,7 +1043,7 @@
     renderBlocks();
     if (!scroll || !blockId) return;
     var card = el('bk-blocks').querySelector('.bk-area[data-block-id="' + blockId + '"]');
-    if (card && card.scrollIntoView) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (card && card.scrollIntoView) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   function blockCard(r) {

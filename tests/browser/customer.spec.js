@@ -38,8 +38,11 @@ test('a customer books a block from the series page, and is sent to that block',
   // "All" is the chip that is on; areas are picked on the map, not from a
   // list, which only shows the one picked.
   await expect(page.locator('input[name="bk-type"][value="all"]')).toBeChecked();
-  await expect(page.locator('#bk-blocks .bk-map-prompt')).toBeVisible();
-  await expect(page.locator('#bk-blocks .bk-area')).toHaveCount(0);
+  // 86 Paice Ave is selected to begin with: its area is open below the
+  // map, so there is no prompt, and tapping another pin moves it.
+  await expect(page.locator('#bk-blocks .bk-map-prompt')).toHaveCount(0);
+  await expect(page.locator('#bk-blocks .bk-area')).toHaveCount(1);
+  await expect(page.locator('#bk-blocks .bk-area .bk-card-area')).toContainText('Paice');
   // Before an area is picked: every type's cheapest price on its chip,
   // and nothing yet about "this address or within 100m".
   await expect(page.locator('label.bk-chip', { hasText: 'Standard' }).locator('.bk-chip-price')).toHaveText('$30+');
