@@ -2610,6 +2610,20 @@ body.ad-guide-open { overflow: hidden; }
 .ad-site-apply { display: flex; gap: 8px; align-items: flex-start; margin-top: 16px; font-size: 0.92rem; }
 .ad-site-apply input { margin-top: 3px; }
 
+/* Settlement (plan B7): at the foot of the Sites page, one card per area. */
+.ad-settle { padding: 0 16px 24px; border-top: 1px solid #e6e6e1; margin-top: 12px; }
+.ad-settle-block { margin-top: 18px; padding: 4px 14px 14px; border: 1px solid #e6e6e1; border-radius: 10px; }
+.ad-settle-name { font-family: var(--display); font-size: 1.1rem; color: var(--blue-deep); margin: 10px 0 0; }
+.ad-settle-h { font-size: 0.8rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; margin: 14px 0 2px; }
+.ad-settle .ad-money { padding: 0; }
+.ad-settle-hostinfo { padding: 0 0 8px; border-bottom: 1px solid var(--line); }
+.ad-settle-hostinfo .ad-site-help { margin-top: 0; overflow-wrap: anywhere; }
+.ad-settle-hostform { display: grid; gap: 8px; margin-top: 8px; }
+.ad-settle-wardens .ad-site-type { font-weight: 400; overflow-wrap: anywhere; min-width: 0; }
+.ad-settle-left { font-weight: 500; }
+.ad-settle-percent { margin-top: 22px; }
+.ad-settle .ad-site-save { margin-top: 12px; width: 100%; }
+
 /* ---------------------------------------------- series & picture (plan A1) */
 .ad-status-series {
   display: flex;

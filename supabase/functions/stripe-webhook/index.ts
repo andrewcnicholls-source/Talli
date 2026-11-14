@@ -524,6 +524,13 @@ Deno.serve(async (req) => {
       case 'charge.refunded': {
         const bookingId = await bookingIdFrom(obj)
         if (!bookingId) return ok('no booking found for that charge')
+        // The running total given back, for settlement (plan B7): it comes
+        // out of the pool for the night this booking was for. Stripe sends
+        // the total so far, so a replay sets the same figure again.
+        const { error: refundErr } = await db.rpc('record_refund', {
+          p_booking_id: bookingId, p_refunded_cents: Number(obj.amount_refunded ?? 0),
+        })
+        if (refundErr) throw refundErr
         const fully = obj.amount_refunded >= obj.amount
         if (fully) {
           await db.rpc('release_booking', {
