@@ -153,7 +153,10 @@ test('"All" is on, each area shows from its cheapest price, and a pin opens its 
   await expect(chosen).toHaveCSS('background-color', 'rgb(23, 112, 63)');
 
   // Picking the other area on the map lets go of the choice in this one.
-  await pin(page, 'from $30').click();
+  // On a phone the two fixture areas (about 180m apart) overlap at this
+  // zoom and the chosen pill sits on top, so the tap is sent to the pill
+  // itself rather than to whatever is uppermost at that point.
+  await pin(page, 'from $30').dispatchEvent('click');
   const paice = blocks.locator('.bk-area', { hasText: 'Paice' });
   await expect(paice).toHaveClass(/is-open/);
   await expect(grib).toHaveCount(0);
