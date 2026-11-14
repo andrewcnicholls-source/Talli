@@ -2444,6 +2444,15 @@ footer a { color: var(--blue); }
   color: var(--grey);
   margin: -6px 0 4px;
 }
+.ad-edit-where {
+  font-size: 0.95rem;
+  color: var(--blue-deep);
+  background: var(--blue-tint);
+  border-left: 3px solid var(--blue);
+  padding: 8px 10px;
+  margin: 4px 0 8px;
+}
+.ad-edit-where strong { font-weight: 500; }
 .ad-pick-opt.is-current { border-style: dashed; }
 textarea.ad-input { resize: vertical; min-height: 56px; font-family: inherit; }
 .ad-pay {
