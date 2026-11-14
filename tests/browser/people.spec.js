@@ -60,7 +60,7 @@ test('an invitation with no area says so and makes nothing', async ({ page }) =>
   await page.click('#ad-tab-sites');
   await page.fill('#ad-people-email', email);
   await page.locator('#ad-people').getByRole('button', { name: 'Invite' }).click();
-  await expect(page.locator('#ad-people .ad-sheet-error')).toContainText('at least one area');
+  await expect(page.locator('#ad-people .ad-people-invite .ad-sheet-error')).toContainText('at least one area');
   expect(await rest(`host_user?email=eq.${encodeURIComponent(email)}&select=id`)).toEqual([]);
 });
 
