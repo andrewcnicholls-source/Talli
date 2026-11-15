@@ -11,7 +11,8 @@
 
 import { asTime, button, call, el, hide, make, show, state, text,
   toast } from './core.js';
-import { loadList, multiSite, siteName, tierClass, view } from './night.js';
+import { chosenHere, loadList, multiSite, siteName, tierClass,
+  view } from './night.js';
 import { pickTile } from './walk-up.js';
 
 var SPACE_NAMES = { standard: 'Standard', priority: 'Priority', valet: 'Valet' };
@@ -86,18 +87,86 @@ function placeOptions(r) {
   return out;
 }
 
-// Before the car is ticked in, the same list is a choice of where to check
-// it in: only its own type of space, since check-in takes the site and the
-// database finds the space there. Once it is in, it is a move.
+/* ------------------------------------------- in, or not, on either screen */
+
+// Tick a car in, or take the tick back when the wrong one was tapped. The
+// list's button and the sheet's both come here. One tap puts the car at
+// the site chosen at the top; with a block or all chosen there is no one
+// site this phone is at, so it is placed from where it is going, and the
+// database proposes from there.
+export function toggleCheckIn(r) {
+  var action = r.arrived ? 'undo_check_in' : 'check_in';
+  var params = { booking_id: r.booking_id };
+  var here = chosenHere();
+  if (!r.arrived && multiSite()) {
+    var at = here ? here.property_id : r.property_id;
+    if (at) params.property_id = at;
+  }
+  var who = r.vehicle_rego || 'Booking';
+  state.busy[r.booking_id] = true;
+  return call(action, params).then(function (data) {
+    // Done before the list redraws: a button drawn while this car is busy
+    // comes out disabled, and Here could not then take the tick back.
+    delete state.busy[r.booking_id];
+    r.arrived = !r.arrived;
+    if (r.arrived && params.property_id) {
+      // The database placed it (plan B5). Said loudly when the car has
+      // to go to another site, or into another type of space.
+      var placed = data && data.placed;
+      if (!sayPlaced(who, placed, params.property_id)) {
+        toast(who + ' checked in at ' + siteName(placed ? placed.property_id : params.property_id), 'good');
+      }
+    } else {
+      toast(who + (r.arrived ? ' checked in' : ' checked out — not here yet'), 'good');
+    }
+    return loadList(true);
+  }, function (err) {
+    delete state.busy[r.booking_id];
+    throw err;
+  });
+}
+
+// The top of the sheet: whether the car is in, and the one button that
+// changes it either way.
+export function renderCheckIn(r) {
+  text(el('ad-edit-status-text'), r.arrived ? 'Checked in' : 'Not checked in');
+  el('ad-edit-status').classList.toggle('is-on', !!r.arrived);
+  var btn = el('ad-edit-toggle');
+  text(btn, r.arrived ? 'Undo check-in' : 'Check in');
+  btn.classList.toggle('is-on', !!r.arrived);
+  btn.disabled = !!state.busy[r.booking_id];
+}
+
+export function submitToggle() {
+  var r = state.edit;
+  if (!r || state.busy[r.booking_id]) return;
+  el('ad-edit-toggle').disabled = true;
+  toggleCheckIn(r)
+    .then(function () {
+      if (state.edit !== r) return;
+      // The list has reloaded: where the car went is on the fresh row.
+      var fresh = (state.rows || []).filter(function (x) {
+        return x.booking_id === r.booking_id;
+      })[0];
+      if (fresh) Object.assign(r, fresh);
+      renderCheckIn(r);
+      renderPlace(r);
+    })
+    .catch(function (err) { toast(err.message, 'bad'); })
+    .finally(function () { if (state.edit === r) renderCheckIn(r); });
+}
+
+// Once the car is in, the list is where it is parked, and the button
+// moves it. Before then it is where the car is being sent: a transfer,
+// which leaves it not arrived until it turns up.
 export function renderPlace(r) {
   var row = el('ad-edit-place-row');
   var select = el('ad-edit-place');
   var opts = placeOptions(r);
-  if (!r.arrived) opts = opts.filter(function (o) { return o.code === r.tier_code; });
   if (opts.length < 2) { hide(row); return; }
-  text(el('ad-edit-place-what'), r.arrived ? 'Parked at' : 'Check in at');
-  text(el('ad-edit-place-where'), r.arrived ? 'where the car actually is' : 'which site it is standing at');
-  text(el('ad-edit-place-go'), r.arrived ? 'Move' : 'Check in');
+  text(el('ad-edit-place-what'), r.arrived ? 'Parked at' : 'Transfer to');
+  text(el('ad-edit-place-where'), r.arrived ? 'move it if it is somewhere else' : 'another site in the block');
+  text(el('ad-edit-place-go'), r.arrived ? 'Move' : 'Transfer');
   select.innerHTML = '';
   opts.forEach(function (o) {
     var opt = new Option(o.label, o.property_id + '|' + o.code);
@@ -112,29 +181,16 @@ export function submitPlace() {
   var r = state.edit;
   var pick = String(el('ad-edit-place').value || '').split('|');
   if (!r || pick.length !== 2) return;
-  // Already parked there: nothing to move. Not yet in: that is the check-in.
-  if (r.arrived && pick[0] === r.property_id && pick[1] === (r.space_code || r.tier_code)) return;
+  // Already there: nothing to move.
+  if (pick[0] === r.property_id && pick[1] === (r.space_code || r.tier_code)) return;
   var btn = el('ad-edit-place-go');
   var who = r.vehicle_rego || 'Booking';
+  var arrived = !!r.arrived;
   btn.disabled = true;
-  if (!r.arrived) {
-    call('check_in', { booking_id: r.booking_id, property_id: pick[0] })
-      .then(function (data) {
-        r.arrived = true;
-        var placed = data && data.placed;
-        if (!sayPlaced(who, placed, pick[0])) {
-          toast(who + ' in at ' + siteName(placed ? placed.property_id : pick[0]), 'good');
-        }
-        hide(el('ad-edit'));
-        return loadList(true);
-      })
-      .catch(function (err) { toast(err.message, 'bad'); })
-      .finally(function () { btn.disabled = false; });
-    return;
-  }
-  call('place', { booking_id: r.booking_id, property_id: pick[0], space_code: pick[1] })
+  call('place', { booking_id: r.booking_id, property_id: pick[0], space_code: pick[1],
+    check_in: arrived })
     .then(function () {
-      toast(who + ' moved to ' + siteName(pick[0]) +
+      toast(who + (arrived ? ' moved to ' : ' transferred to ') + siteName(pick[0]) +
         ' — ' + spaceName(pick[1]) + ' space', 'good');
       hide(el('ad-edit'));
       return loadList(true);

@@ -35,7 +35,8 @@ import { openCheck } from './check.js';
 import { measureHead, showTab } from './tabs.js';
 import { renderSiteForm, setNightFilter } from './sites.js';
 import { initSeries } from './series.js';
-import { openLost, pickLostSite, submitLost, submitPlace } from './placement.js';
+import { openLost, pickLostSite, submitLost, submitPlace,
+  submitToggle } from './placement.js';
 import { closeCard, openCard } from './site-info.js';
 
 /* ------------------------------------------------------------------ init */
@@ -113,6 +114,7 @@ function init() {
   el('ad-lost-site').addEventListener('change', pickLostSite);
   el('ad-lost-form').addEventListener('submit', submitLost);
   el('ad-edit-place-go').addEventListener('click', submitPlace);
+  el('ad-edit-toggle').addEventListener('click', submitToggle);
   el('ad-sell-form').addEventListener('submit', submitSell);
   // Cash and card are different numbers. Switching the method has to move
   // the figure being read out, not just what gets recorded.
