@@ -4,11 +4,11 @@
  */
 
 import { asTime, button, call, el, make, money, state, toast } from './core.js';
-import { byTier, chosenHere, loadList, multiSite, siteName,
+import { byTier, loadList, multiSite, siteName,
   tierClass, view } from './night.js';
 import { openEdit } from './booking-edit.js';
 import { isOperator } from './session.js';
-import { inOtherSpace, sayPlaced, spaceName } from './placement.js';
+import { inOtherSpace, spaceName, toggleCheckIn } from './placement.js';
 
 /* --------------------------------------------------------- the list */
 
@@ -151,6 +151,10 @@ function rowCard(r) {
   var tick = make('button', 'ad-tick' + (r.arrived ? ' is-on' : ''),
     r.arrived ? 'Here' : 'Tick in');
   tick.type = 'button';
+  // Tapping Here takes it back: the wrong car gets ticked when it is busy.
+  tick.setAttribute('aria-label', r.arrived
+    ? 'Undo check-in for ' + (r.vehicle_rego || 'booking')
+    : 'Check in ' + (r.vehicle_rego || 'booking'));
   tick.disabled = !!state.busy[r.booking_id];
   tick.addEventListener('click', function () { toggleArrived(r, tick); });
   actions.appendChild(tick);
@@ -175,36 +179,9 @@ function rowTotal(r) {
 }
 
 function toggleArrived(r, btn) {
-  var action = r.arrived ? 'undo_check_in' : 'check_in';
   state.busy[r.booking_id] = true;
   btn.disabled = true;
-
-  var params = { booking_id: r.booking_id };
-  // One tap puts the car at the site chosen at the top. With a block or
-  // all chosen there is no one site this phone is at, so the car is
-  // placed from its own site, and the database proposes from there.
-  var here = chosenHere();
-  if (!r.arrived && multiSite()) {
-    var at = here ? here.property_id : r.property_id;
-    if (at) params.property_id = at;
-  }
-
-  call(action, params)
-    .then(function (data) {
-      r.arrived = !r.arrived;
-      var who = r.vehicle_rego || 'Booking';
-      if (r.arrived && params.property_id) {
-        // The database placed it (plan B5). Said loudly when the car has
-        // to go to another site, or into another type of space.
-        var placed = data && data.placed;
-        if (!sayPlaced(who, placed, params.property_id)) {
-          toast(who + ' in at ' + siteName(placed ? placed.property_id : params.property_id), 'good');
-        }
-        return loadList(true);
-      }
-      toast(who + (r.arrived ? ' ticked in' : ' un-ticked'), 'good');
-      return loadList(true);
-    })
+  toggleCheckIn(r)
     .catch(function (err) { toast(err.message, 'bad'); })
     .finally(function () {
       delete state.busy[r.booking_id];

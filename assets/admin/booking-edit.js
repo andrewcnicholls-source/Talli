@@ -8,7 +8,7 @@ import { call, el, hide, make, money, shortName, show, state, surchargeOn,
 import { loadList, tierClass, tiersFor } from './night.js';
 import { inGateOrder } from './tonight.js';
 import { pickTile, priceSlot } from './walk-up.js';
-import { renderPlace } from './placement.js';
+import { renderCheckIn, renderPlace } from './placement.js';
 
 /* ----------------------------------------------------- one booking */
 
@@ -30,7 +30,6 @@ export function openEdit(r) {
 
   text(el('ad-edit-title'), r.vehicle_rego || 'Booking');
   var sub = [r.channel === 'gate' ? 'Sold at the gate' : 'Booked online'];
-  if (r.arrived) sub.push('ticked in');
   if (r.in_checkout) sub.push('still paying online');
   text(el('ad-edit-sub'), sub.join(' · '));
   renderWhere(r);
@@ -89,6 +88,7 @@ export function openEdit(r) {
 
   renderEditTiers();
   renderEditCharge();
+  renderCheckIn(r);
   renderPlace(r);
   show(el('ad-edit'));
 }

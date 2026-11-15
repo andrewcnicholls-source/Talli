@@ -119,6 +119,41 @@ test('a warden moves a car within their block, never out of it', async () => {
   assert.deepEqual(row, { property_id: FIX.gribNeighbour, space_code: null });
 });
 
+test('a warden transfers a car not yet here, and it stays not here', async () => {
+  const id = await onlineCar(FIX.gribAnchor);
+
+  const out = await gate('wardenGrib', {
+    action: 'place', booking_id: id, property_id: FIX.paice, space_code: 'standard',
+    check_in: false,
+  });
+  assert.equal(out.status, 403);
+  assert.equal(out.body.code, 'NOT_YOUR_SITE');
+
+  const sent = await gate('wardenGrib', {
+    action: 'place', booking_id: id, property_id: FIX.gribNeighbour, space_code: 'standard',
+    check_in: false,
+  });
+  assert.equal(sent.status, 200, JSON.stringify(sent.body));
+  const [row] = await rest(`booking?id=eq.${id}&select=property_id,checked_in_at`);
+  assert.deepEqual(row, { property_id: FIX.gribNeighbour, checked_in_at: null });
+});
+
+test('a check-in is taken back, and the car can be ticked in again', async () => {
+  const id = await onlineCar(FIX.gribAnchor);
+  const inn = await gate('wardenGrib', { action: 'check_in', booking_id: id, property_id: FIX.gribAnchor });
+  assert.equal(inn.status, 200, JSON.stringify(inn.body));
+
+  const undo = await gate('wardenGrib', { action: 'undo_check_in', booking_id: id });
+  assert.equal(undo.status, 200, JSON.stringify(undo.body));
+  const [out] = await rest(`booking?id=eq.${id}&select=checked_in_at`);
+  assert.equal(out.checked_in_at, null);
+
+  const again = await gate('wardenGrib', { action: 'check_in', booking_id: id, property_id: FIX.gribAnchor });
+  assert.equal(again.status, 200, JSON.stringify(again.body));
+  const [back] = await rest(`booking?id=eq.${id}&select=checked_in_at`);
+  assert.notEqual(back.checked_in_at, null);
+});
+
 test('a full Standard tells the walk-up form where the next sale goes', async () => {
   // Lose every free Standard space at the anchor, as the operator.
   const t = tierAt(await gate('operator', { action: 'list' }), FIX.gribAnchor, 'standard');

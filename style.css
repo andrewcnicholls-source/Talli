@@ -2919,6 +2919,16 @@ body.ad-guide-open { overflow: hidden; }
 }
 .ad-place-row { display: flex; gap: 8px; align-items: center; }
 .ad-place-row .ad-select { flex: 1; min-width: 0; }
+/* The button only has to say Move or Transfer: the list of sites gets the
+   width, so a site's name and its free spaces read in full. */
+.ad-place-row .btn {
+  flex: none;
+  width: auto;
+  padding: 10px 12px;
+  margin-top: 0;
+  font-size: 0.86rem;
+  letter-spacing: 0;
+}
 .ad-lost-list { display: flex; flex-direction: column; gap: 8px; }
 .ad-lost-item {
   display: flex; gap: 8px; align-items: center; justify-content: space-between;
@@ -2950,3 +2960,19 @@ body.ad-guide-open { overflow: hidden; }
 .go-night-name { font-weight: 500; font-size: 1.05rem; }
 .go-night-meta { font-size: 0.9rem; font-weight: 300; color: #3A3A36; }
 .go-night-go { font-size: 0.9rem; color: var(--blue); font-weight: 500; }
+
+/* The sheet's check-in toggle: in or not, and the button that changes it
+   either way. */
+.ad-edit-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid var(--blue-tint);
+  border-radius: 4px;
+  padding: 8px 10px;
+  margin: 0 0 12px;
+}
+.ad-edit-status.is-on { background: var(--blue-tint); }
+.ad-edit-status-text { font-weight: 500; color: var(--blue-deep); }
+.ad-edit-status .ad-tick { width: auto; min-width: 132px; padding: 0 14px; }

@@ -606,13 +606,21 @@
     <!-- Which site this car is booked into, and where it is if it was moved. -->
     <p class="ad-edit-where" id="ad-edit-where" hidden></p>
 
+    <!-- In or not, and the one button that changes it either way: the
+         wrong car gets ticked when it is busy, and this takes it back. -->
+    <div class="ad-edit-status" id="ad-edit-status">
+      <span class="ad-edit-status-text" id="ad-edit-status-text">Not checked in</span>
+      <button type="button" class="ad-tick" id="ad-edit-toggle">Check in</button>
+    </div>
+
     <label class="ad-label">Space <span>move them if they ended up somewhere else</span></label>
     <div class="ad-pick" id="ad-edit-tiers"></div>
     <p class="ad-hint" id="ad-edit-move-hint" hidden></p>
 
-    <!-- Where the car actually is, once it is in (plan B5): any site in
-         its block, and a Standard car can take a Priority space. Moves on
-         its own button, straight away — not with the rest of the sheet. -->
+    <!-- Where the car actually is, once it is in (plan B5), or where it
+         is being sent before it arrives: any site in its block, and a
+         Standard car can take a Priority space. Moves on its own button,
+         straight away — not with the rest of the sheet. -->
     <div id="ad-edit-place-row" hidden>
       <label class="ad-label" for="ad-edit-place"><span id="ad-edit-place-what">Parked at</span> <span id="ad-edit-place-where">where the car actually is</span></label>
       <div class="ad-place-row">

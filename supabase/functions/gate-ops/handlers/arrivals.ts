@@ -136,7 +136,9 @@ export const arrivals: Record<string, Handler> = {
 
   // The warden overriding where a car went: another site in the block, or
   // a Standard car into a Priority space. The database refuses a space
-  // that is not free, so Priority is never past its count.
+  // that is not free, so Priority is never past its count. A car that is
+  // here is ticked in as it is moved; `check_in: false` sends one that has
+  // not arrived yet, and leaves it not arrived.
   async place({ caller, body, allowed, bookingGuard }: Ctx) {
     const blocked = await bookingGuard()
     if (blocked) return blocked
@@ -145,7 +147,7 @@ export const arrivals: Record<string, Handler> = {
     if (allowed !== null && !allowed.has(site)) {
       return json({ error: 'That site is not one of yours.', code: 'NOT_YOUR_SITE' }, 403)
     }
-    const { data, error } = await db.rpc('place_booking', {
+    const { data, error } = await db.rpc(body.check_in === false ? 'transfer_booking' : 'place_booking', {
       p_booking_id: String(body.booking_id),
       p_property_id: site,
       p_space_code: body.space_code ? String(body.space_code) : null,

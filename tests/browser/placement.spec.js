@@ -86,28 +86,65 @@ test('a car\'s sheet says which site it is booked into, and where it was moved t
   await expect(where).toContainText('parked at TEST Gribblehurst neighbour');
 });
 
-test('a car not yet in is checked in at the site the warden stands at, from its sheet', async ({ page }) => {
+test('a car not yet in is transferred from its sheet, and stays not in', async ({ page }) => {
   const rego = plate('GC');
   made.push(rego);
   const id = await rpc('hold_booking', {
     p_event_id: FIX.night, p_property_id: FIX.gribAnchor, p_tier_code: 'standard',
-    p_email: 'checkin.browser@example.com', p_rego: rego,
+    p_email: 'transfer.browser@example.com', p_rego: rego,
   });
   await rpc('confirm_booking', { p_booking_id: id, p_payment_intent_id: null });
 
   await signedIn(page, 'wardenGrib');
   await openNight(page);
   await page.getByRole('button', { name: 'Edit ' + rego }).click();
-  // Not in yet: the sheet offers the sites to check it in at, not a move.
-  await expect(page.locator('#ad-edit-place-what')).toHaveText('Check in at');
-  await expect(page.locator('#ad-edit-place-go')).toHaveText('Check in');
+  // Not in yet: the sheet offers a transfer, not a move.
+  await expect(page.locator('#ad-edit-place-what')).toHaveText('Transfer to');
+  await expect(page.locator('#ad-edit-place-go')).toHaveText('Transfer');
   await page.selectOption('#ad-edit-place', FIX.gribNeighbour + '|standard');
   await page.click('#ad-edit-place-go');
   await expect(page.locator('#ad-edit')).toBeHidden();
 
   const [row] = await rest(`booking?id=eq.${id}&select=property_id,checked_in_at`);
-  expect(row.property_id).toBe(FIX.gribNeighbour);
-  expect(row.checked_in_at).not.toBeNull();
+  expect(row).toEqual({ property_id: FIX.gribNeighbour, checked_in_at: null });
+});
+
+test('a car is checked in from its sheet, and the check-in is taken back there and on the list', async ({ page }) => {
+  const rego = plate('GT');
+  made.push(rego);
+  const id = await rpc('hold_booking', {
+    p_event_id: FIX.night, p_property_id: FIX.gribAnchor, p_tier_code: 'standard',
+    p_email: 'toggle.browser@example.com', p_rego: rego,
+  });
+  await rpc('confirm_booking', { p_booking_id: id, p_payment_intent_id: null });
+  const arrived = async () =>
+    (await rest(`booking?id=eq.${id}&select=checked_in_at`))[0].checked_in_at !== null;
+
+  await signedIn(page, 'wardenGrib');
+  await openNight(page);
+  await page.getByRole('button', { name: 'Edit ' + rego }).click();
+
+  const status = page.locator('#ad-edit-status-text');
+  const toggle = page.locator('#ad-edit-toggle');
+  await expect(status).toHaveText('Not checked in');
+  await toggle.click();
+  await expect(status).toHaveText('Checked in');
+  await expect(toggle).toHaveText('Undo check-in');
+  expect(await arrived()).toBe(true);
+
+  // The wrong car: taken back from the sheet.
+  await toggle.click();
+  await expect(status).toHaveText('Not checked in');
+  expect(await arrived()).toBe(false);
+  await page.click('#ad-edit-close');
+
+  // And from the list: Here ticks it in, and tapping Here takes it back.
+  await page.getByRole('button', { name: 'Check in ' + rego }).click();
+  await expect(page.getByRole('button', { name: 'Undo check-in for ' + rego })).toHaveText('Here');
+  expect(await arrived()).toBe(true);
+  await page.getByRole('button', { name: 'Undo check-in for ' + rego }).click();
+  await expect(page.getByRole('button', { name: 'Check in ' + rego })).toHaveText('Tick in');
+  expect(await arrived()).toBe(false);
 });
 
 test('a full Standard still sells, and says where the car goes', async ({ page }) => {
