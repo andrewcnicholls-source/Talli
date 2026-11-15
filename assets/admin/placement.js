@@ -103,7 +103,11 @@ export function toggleCheckIn(r) {
     if (at) params.property_id = at;
   }
   var who = r.vehicle_rego || 'Booking';
+  state.busy[r.booking_id] = true;
   return call(action, params).then(function (data) {
+    // Done before the list redraws: a button drawn while this car is busy
+    // comes out disabled, and Here could not then take the tick back.
+    delete state.busy[r.booking_id];
     r.arrived = !r.arrived;
     if (r.arrived && params.property_id) {
       // The database placed it (plan B5). Said loudly when the car has
@@ -116,6 +120,9 @@ export function toggleCheckIn(r) {
       toast(who + (r.arrived ? ' checked in' : ' checked out — not here yet'), 'good');
     }
     return loadList(true);
+  }, function (err) {
+    delete state.busy[r.booking_id];
+    throw err;
   });
 }
 
@@ -133,7 +140,6 @@ export function renderCheckIn(r) {
 export function submitToggle() {
   var r = state.edit;
   if (!r || state.busy[r.booking_id]) return;
-  state.busy[r.booking_id] = true;
   el('ad-edit-toggle').disabled = true;
   toggleCheckIn(r)
     .then(function () {
@@ -147,10 +153,7 @@ export function submitToggle() {
       renderPlace(r);
     })
     .catch(function (err) { toast(err.message, 'bad'); })
-    .finally(function () {
-      delete state.busy[r.booking_id];
-      if (state.edit === r) renderCheckIn(r);
-    });
+    .finally(function () { if (state.edit === r) renderCheckIn(r); });
 }
 
 // Once the car is in, the list is where it is parked, and the button

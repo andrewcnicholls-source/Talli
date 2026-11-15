@@ -179,12 +179,11 @@ function rowTotal(r) {
 }
 
 function toggleArrived(r, btn) {
-  state.busy[r.booking_id] = true;
+  if (state.busy[r.booking_id]) return;
   btn.disabled = true;
   toggleCheckIn(r)
-    .catch(function (err) { toast(err.message, 'bad'); })
-    .finally(function () {
-      delete state.busy[r.booking_id];
+    .catch(function (err) {
+      toast(err.message, 'bad');
       btn.disabled = false;
     });
 }
