@@ -13,7 +13,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(10);
+select plan(12);
 
 create temp table fx (k text primary key, id uuid);
 insert into fx values
@@ -37,10 +37,10 @@ language sql as $$ select checked_in_at is not null from booking where id = pg_t
 
 -- ------------------------------------------------------------ who may
 select ok(not has_function_privilege('anon',
-  'public.transfer_booking(uuid, uuid, text, uuid)', 'execute'),
+  'public.transfer_booking(uuid, uuid, text, uuid, boolean)', 'execute'),
   'the public cannot transfer a car');
 select ok(not has_function_privilege('authenticated',
-  'public.transfer_booking(uuid, uuid, text, uuid)', 'execute'),
+  'public.transfer_booking(uuid, uuid, text, uuid, boolean)', 'execute'),
   'nor can a signed-in browser — only gate-ops');
 
 -- ------------------------------------------------- before it arrives
@@ -64,6 +64,13 @@ select is(pg_temp.arrived(), true, 'moving a car with place_booking ticks it in,
 -- A car already here stays here when it is transferred.
 select transfer_booking(pg_temp.fx('car'), pg_temp.fx('neigh'), null, null);
 select is(pg_temp.arrived(), true, 'transferring a car that is in leaves it in');
+
+-- ----------------------------------- the operator may send it anywhere
+-- The block rule above is the warden's. With p_any_block the operator
+-- sends the car to a site in another block.
+select lives_ok($$ select transfer_booking(pg_temp.fx('car'), pg_temp.fx('paice'), null, null, true) $$,
+  'the operator can send a car to a site in another block');
+select is(pg_temp.site(), pg_temp.fx('paice'), 'and it is now at that site');
 
 select * from finish();
 rollback;

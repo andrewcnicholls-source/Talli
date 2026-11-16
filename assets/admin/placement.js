@@ -5,8 +5,8 @@
    Where a car goes is decided when it arrives, by the database: a
    Standard car takes a Standard space at the warden's site, then at
    another site in the block, then a Priority space here, then at another
-   site. Never Valet. This module says where it went, lets the warden
-   move it, and records a space nobody can use tonight.
+   site. Never Valet. This module says where it went, lets the operator
+   move it to any site, and records a space nobody can use tonight.
  */
 
 import { asTime, button, call, el, hide, make, show, state, text,
@@ -14,6 +14,7 @@ import { asTime, button, call, el, hide, make, show, state, text,
 import { chosenHere, loadList, multiSite, siteName, tierClass,
   view } from './night.js';
 import { pickTile } from './walk-up.js';
+import { isOperator } from './session.js';
 
 var SPACE_NAMES = { standard: 'Standard', priority: 'Priority', valet: 'Valet' };
 
@@ -58,31 +59,24 @@ export function spillSays(t) {
 
 /* ------------------------------------------- moving a car, on its sheet */
 
-// The sites and spaces this car may be moved to: any site in the block it
-// was booked into, in its own type of space, and a Standard car in a
-// Priority one too. Free is the count less cars and lost spaces; the
-// space it is in is always offered.
+// The sites this car may be sent to, in the type of space it is in now:
+// the operator's choice of site only. The type is changed at the top of
+// the screen, not here. The operator may send it to any site in the event;
+// the database still refuses a space that is not free. Free is the count
+// less cars and lost spaces; the site it is at is always offered.
 function placeOptions(r) {
-  var home = state.sites.filter(function (s) {
-    return s.property_id === (r.booked_property_id || r.property_id);
-  })[0];
-  var block = home ? home.block_id : null;
-  var codes = r.tier_code === 'standard' ? ['standard', 'priority'] : [r.tier_code];
-  var now = r.space_code || r.tier_code;
+  var type = r.space_code || r.tier_code;
   var out = [];
   state.sites.forEach(function (s) {
-    if (s.property_id !== r.property_id && (!block || s.block_id !== block)) return;
-    codes.forEach(function (code) {
-      var t = state.tiers.filter(function (x) {
-        return x.property_id === s.property_id && x.code === code;
-      })[0];
-      if (!t) return;
-      var current = s.property_id === r.property_id && code === now;
-      var free = (t.capacity || 0) - (t.sold || 0) - (t.lost || 0);
-      out.push({ property_id: s.property_id, code: code, current: current,
-        free: free, label: s.name + ' — ' + spaceName(code) +
-          (current ? ' (now)' : free > 0 ? ' · ' + free + ' free' : ' · full') });
-    });
+    var t = state.tiers.filter(function (x) {
+      return x.property_id === s.property_id && x.code === type;
+    })[0];
+    if (!t) return;
+    var current = s.property_id === r.property_id;
+    var free = (t.capacity || 0) - (t.sold || 0) - (t.lost || 0);
+    out.push({ property_id: s.property_id, code: type, current: current,
+      free: free, label: s.name + ' — ' + spaceName(type) +
+        (current ? ' (now)' : free > 0 ? ' · ' + free + ' free' : ' · full') });
   });
   return out;
 }
@@ -162,10 +156,12 @@ export function submitToggle() {
 export function renderPlace(r) {
   var row = el('ad-edit-place-row');
   var select = el('ad-edit-place');
-  var opts = placeOptions(r);
+  // Moving a car between sites is the operator's alone. Everyone else
+  // does not see the field at all.
+  var opts = isOperator() ? placeOptions(r) : [];
   if (opts.length < 2) { hide(row); return; }
   text(el('ad-edit-place-what'), r.arrived ? 'Parked at' : 'Transfer to');
-  text(el('ad-edit-place-where'), r.arrived ? 'move it if it is somewhere else' : 'another site in the block');
+  text(el('ad-edit-place-where'), r.arrived ? 'move it if it is somewhere else' : 'any site');
   text(el('ad-edit-place-go'), r.arrived ? 'Move' : 'Transfer');
   select.innerHTML = '';
   opts.forEach(function (o) {
