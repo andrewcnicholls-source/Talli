@@ -18,13 +18,14 @@ test.afterEach(async () => {
   await clearLost();
 });
 
-async function openNight(page) {
+async function openNight(page, scopes = 3) {
   await page.goto('/admin');
   await expect(page.locator('#ad-app')).toBeVisible();
   await expect(page.locator('#ad-live')).toContainText('Fixture night');
   // The night has loaded once the selector has the block and its two
-  // sites (plan B6).
-  await expect(page.locator('#ad-scope option')).toHaveCount(3);
+  // sites (plan B6). The operator sees every site and block, so that
+  // count is not fixed for them: pass null and wait on the sheet instead.
+  if (scopes) await expect(page.locator('#ad-scope option')).toHaveCount(scopes);
 }
 
 test('a warden records a lost space, sees it, and undoes it', async ({ page }) => {
@@ -96,7 +97,7 @@ test('the operator transfers a car not yet in from its sheet, to any site, and i
   await rpc('confirm_booking', { p_booking_id: id, p_payment_intent_id: null });
 
   await signedIn(page, 'operator');
-  await openNight(page);
+  await openNight(page, null);
   await page.getByRole('button', { name: 'Edit ' + rego }).click();
   // Not in yet: the sheet offers a transfer, not a move.
   await expect(page.locator('#ad-edit-place-what')).toHaveText('Transfer to');
