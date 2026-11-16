@@ -30,6 +30,10 @@ export function renderList() {
   // The cars in the selector's scope (plan B6), then the search box.
   var all = view().rows;
   var rows = all.filter(matches);
+  // Refunded in full: not on the list proper, but found by the same search,
+  // so a plate typed at the gate never comes back blank for a car whose
+  // money went back.
+  var refunded = (view().refunded || []).filter(matches);
 
   // Arrivals works the live night and only that one (plan B2). With none
   // live there is nothing to work, nothing to sell, and nothing to pick.
@@ -42,7 +46,7 @@ export function renderList() {
     return;
   }
 
-  if (!rows.length) {
+  if (!rows.length && !refunded.length) {
     list.appendChild(make('p', 'ad-empty',
       all.length ? 'Nothing matches that.'
         : state.rows.length ? 'No bookings at these sites yet.'
@@ -58,6 +62,47 @@ export function renderList() {
     list.appendChild(groupHead(g));
     g.rows.forEach(function (r) { list.appendChild(rowCard(r)); });
   });
+
+  // Last, greyed, and with nothing to tap: they hold no space.
+  if (refunded.length) {
+    var head = make('div', 'ad-group is-refunded');
+    head.appendChild(make('span', 'ad-group-name', 'Refunded'));
+    head.appendChild(make('span', 'ad-group-count', refunded.length + ' not booked'));
+    list.appendChild(head);
+    refunded.forEach(function (r) { list.appendChild(refundedCard(r)); });
+  }
+}
+
+// A booking refunded in full. Shown so the warden can say "your booking was
+// refunded" rather than "I can't find you", and nothing more: it holds no
+// space, so there is no Tick in, no Pay and no sheet to open.
+function refundedCard(r) {
+  var card = make('div', 'ad-row is-refunded');
+  card.setAttribute('aria-label', 'Refunded: ' + (r.vehicle_rego || 'booking ' + r.reference));
+  var main = make('div', 'ad-row-main');
+
+  var top = make('div', 'ad-row-top');
+  top.appendChild(make('span', 'ad-rego', r.vehicle_rego || '— no plate —'));
+  top.appendChild(make('span', 'ad-ref', r.reference));
+  main.appendChild(top);
+
+  var who = [r.customer_name, r.customer_phone].filter(Boolean).join(' · ');
+  if (who) main.appendChild(make('div', 'ad-who', who));
+
+  var meta = make('div', 'ad-meta');
+  meta.appendChild(make('span', 'ad-chip is-refunded',
+    'refunded ' + money(r.refunded_cents) + ' · not booked'));
+  if (r.tier_code) {
+    meta.appendChild(make('span', 'ad-chip', 'was ' + r.tier_code.replace(/_/g, ' ')));
+  }
+  if (multiSite() && (r.booked_property_id || r.property_id)) {
+    meta.appendChild(make('span', 'ad-chip is-site',
+      'was → ' + siteName(r.booked_property_id || r.property_id)));
+  }
+  main.appendChild(meta);
+
+  card.appendChild(main);
+  return card;
 }
 
 function groupHead(g) {

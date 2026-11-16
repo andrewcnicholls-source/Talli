@@ -273,3 +273,34 @@ test('a draft night cannot be made live', async () => {
   const live = await rest('event?is_live=is.true&select=id');
   assert.deepEqual(live.map((e) => e.id), [FIX.night], 'and the live night did not move');
 });
+
+test('a booking refunded in full is listed apart, counted in nothing, and only for its own block', async () => {
+  // Any free space in the Gribblehurst block: the tests above fill some.
+  let id = null;
+  for (const site of [FIX.gribAnchor, FIX.gribNeighbour]) {
+    for (const tier of ['standard', 'priority', 'valet']) {
+      if (!id) id = await bookAt(site, tier).catch(() => null);
+    }
+  }
+  assert.ok(id, 'a space to book in the Gribblehurst block');
+  await rpc('confirm_booking', { p_booking_id: id, p_payment_intent_id: null });
+  // What stripe-webhook does on a full refund.
+  await rpc('record_refund', { p_booking_id: id, p_refunded_cents: 999999 });
+  await rpc('release_booking', { p_booking_id: id, p_status: 'refunded' });
+
+  const op = await gate('operator', { action: 'list', event_id: FIX.night });
+  assert.equal(op.status, 200);
+  assert.ok(!op.body.rows.some((x) => x.booking_id === id), 'not on the list proper');
+  const shown = (op.body.refunded || []).find((x) => x.booking_id === id);
+  assert.ok(shown, 'shown as refunded');
+  assert.equal(shown.status, 'refunded');
+  assert.equal(shown.reference, id.slice(0, 8).toUpperCase());
+  assert.ok(shown.refunded_cents > 0, 'with what went back');
+  assert.equal(op.body.summary.total, op.body.rows.length, 'and the count is of the list proper');
+
+  const grib = await gate('wardenGrib', { action: 'list', event_id: FIX.night });
+  assert.ok(grib.body.refunded.some((x) => x.booking_id === id), "the block's warden sees it");
+  const paice = await gate('wardenPaice', { action: 'list', event_id: FIX.night });
+  assert.equal(paice.status, 200);
+  assert.ok(!paice.body.refunded.some((x) => x.booking_id === id), "another block's warden does not");
+});
