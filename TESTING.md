@@ -255,6 +255,25 @@ What to check on the test site:
 A booking never re-prices. Change the rate mid-night and the sales already
 taken keep the surcharge they were charged.
 
+### Refunds
+
+Stripe test mode, Payments, the booking's payment, **Refund**. Stripe sends
+`charge.refunded` to the test webhook, and the gate screen follows:
+
+- **Partial refund**: the booking stays paid and keeps its space. Its notes
+  say *Partial refund of $X. Bay kept.*, and Settlement takes $X off that
+  night's parking pool (*Refunds −$X*).
+- **Full refund**: the booking becomes `refunded` and its space goes back on
+  sale. On **Arrivals** it moves to a greyed **Refunded** section at the foot
+  of the list: plate struck through, *refunded $X · not booked*, and no Tick
+  in, Pay or sheet. Searching for its plate or reference still finds it. It
+  counts towards no figure on the screen. A warden sees only the ones booked
+  at their own block.
+
+Automated: the unit test in `tests/units/scope.test.js` covers the
+selector, and `tests/functions/gate-ops-access.test.js` covers the server
+and wardens.
+
 ### Where a car goes, and lost spaces (plan B5)
 
 On the fixture night, signed in as the Gribblehurst warden, with the

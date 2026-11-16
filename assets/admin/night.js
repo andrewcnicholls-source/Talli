@@ -113,6 +113,7 @@ export function syncEvent() {
 
 function clearNight() {
   state.rows = [];
+  state.refunded = [];
   state.tiers = [];
   state.sites = [];
   state.lost = [];
@@ -170,6 +171,7 @@ export function loadList(quiet) {
         if (moved) refreshEvents().catch(function () {});
       }
       state.rows = data.rows || [];
+      state.refunded = data.refunded || [];
       state.tiers = data.tiers || [];
       state.sites = data.sites || [];
       state.lost = data.lost || [];

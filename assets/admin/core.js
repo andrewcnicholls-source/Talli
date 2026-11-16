@@ -39,6 +39,9 @@ export var state = {
   pickId: null,
   tab: 'gate',
   rows: [],
+  // Bookings refunded in full: shown greyed under the list, counted in
+  // nothing (see nightState in gate-ops).
+  refunded: [],
   tiers: [],
   // The driveways selling this event, and the one this phone is taken to
   // be standing at. With one site (most nights at Paice Ave) none of this
