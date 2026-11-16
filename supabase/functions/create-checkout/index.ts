@@ -18,8 +18,11 @@
 //  it pays — not for the bay, and not for a poncho.
 // =====================================================================
 
-import Stripe from 'https://esm.sh/stripe@18?target=denonext'
-import { createClient } from 'jsr:@supabase/supabase-js@2'
+import Stripe from 'https://esm.sh/stripe@18.5.0?target=denonext'
+import { createClient } from 'jsr:@supabase/supabase-js@2.119.0'
+import { annotate, logger, serve } from '../_shared/log.ts'
+
+const log = logger('create-checkout')
 
 // Built lazily so a missing secret returns a readable error instead of
 // crashing the whole function at module load.
@@ -99,6 +102,7 @@ function returnBase(candidate: string): string | null {
   try {
     url = new URL(candidate)
   } catch {
+    // not logged: siteUrlFor() logs the one case that matters, a bad secret
     return null
   }
 
@@ -130,10 +134,8 @@ function siteUrlFor(req: Request): string {
   // Loud, because it means a secret is wrong and only the default is
   // saving the customer. Silence here is how the last one went unnoticed.
   if (CONFIGURED_SITE_URL) {
-    console.error(
-      `SITE_URL is set to "${CONFIGURED_SITE_URL}", which this project must ` +
-      `not return customers to. Falling back to ${DEFAULT_SITE_URL}.`,
-    )
+    log.error('SITE_URL is not an address for this project; using the default', {
+      site_url: CONFIGURED_SITE_URL, fallback: DEFAULT_SITE_URL })
   }
   return DEFAULT_SITE_URL
 }
@@ -240,7 +242,7 @@ function expectedPrice(body: Record<string, unknown>): number | null {
   return Number.isInteger(n) ? n : NaN
 }
 
-Deno.serve(async (req) => {
+serve('create-checkout', async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
   if (req.method !== 'POST') return json({ error: 'Use POST' }, 405)
 
@@ -255,8 +257,11 @@ Deno.serve(async (req) => {
   try {
     stripe = getStripe()
   } catch (err) {
-    if (!IS_TEST) {
-      console.error(err)
+    // On test, no key means stubbed payments, below. Production refuses.
+    if (IS_TEST) {
+      log.info('no Stripe key; payments are stubbed', { err })
+    } else {
+      log.error('no Stripe key', { err })
       return json({ error: 'Payments are not configured on this project yet' }, 503)
     }
   }
@@ -266,6 +271,7 @@ Deno.serve(async (req) => {
   try {
     body = await req.json()
   } catch {
+    // not logged: the 400 is the answer, and the request line records it
     return json({ error: 'Body must be JSON' }, 400)
   }
 
@@ -344,7 +350,7 @@ Deno.serve(async (req) => {
     try {
       propertyId = await pick()
     } catch (err) {
-      console.error('pick_block_property failed', err)
+      log.error('pick_block_property failed', { block: blockId, err })
       return json({ error: 'Could not hold a space just then' }, 500)
     }
     if (!propertyId) {
@@ -374,7 +380,10 @@ Deno.serve(async (req) => {
   // Two people raced for the last space at the driveway the block picked.
   // Pick again once: another driveway in the block may still have room.
   if (holdErr && blockId && (holdErr.message ?? '').startsWith('SOLD_OUT')) {
-    const again = await pick().catch(() => '')
+    const again = await pick().catch((err) => {
+      log.warn('second pick_block_property failed', { block: blockId, err })
+      return ''
+    })
     if (again && again !== propertyId) {
       propertyId = again
       ;({ data: bookingId, error: holdErr } = await hold())
@@ -384,8 +393,11 @@ Deno.serve(async (req) => {
   if (holdErr) {
     const code = (holdErr.message ?? '').split(':')[0].trim()
     const known = SALE_ERRORS[code]
-    if (known) return json({ error: known.message, code }, known.status)
-    console.error('hold_booking failed', holdErr)
+    if (known) {
+      annotate({ code })
+      return json({ error: known.message, code }, known.status)
+    }
+    log.error('hold_booking failed', { event: eventId, property: propertyId, tier: tierCode, err: holdErr })
     return json({ error: 'Could not hold a space just then' }, 500)
   }
 
@@ -402,7 +414,7 @@ Deno.serve(async (req) => {
       p_channel: 'online',
     })
     if (addonErr) {
-      console.error('add_booking_addons failed', addonErr)
+      log.error('add_booking_addons failed', { booking: bookingId, err: addonErr })
       await abandon()
       return json({ error: 'We could not add those extras. Try again without them.' }, 400)
     }
@@ -537,8 +549,7 @@ Deno.serve(async (req) => {
       p_booking_id: bookingId,
       p_payment_intent_id: `pi_test_stub_${fakeSession.slice(-12)}`,
     })
-    console.log('stubbed payment for booking', bookingId,
-      'with', (addonRows ?? []).length, 'extras')
+    log.info('stubbed payment', { booking: bookingId, extras: (addonRows ?? []).length })
     return json({
       url: `${siteUrl}/booking-confirmed.html?session_id=${fakeSession}`,
       booking_id: bookingId,
@@ -586,6 +597,10 @@ Deno.serve(async (req) => {
       })
       .eq('id', bookingId)
 
+    log.info('checkout started', {
+      booking: bookingId, session: session.id, event: eventId, tier: tierCode,
+      near_kickoff: nearKickoff })
+
     // The deadline the customer is actually working to.
     return json({
       url: session.url,
@@ -594,8 +609,8 @@ Deno.serve(async (req) => {
     })
   } catch (err) {
     // Stripe refused.
-    console.error('stripe session failed', err)
+    log.error('stripe session failed', { booking: bookingId, err })
     await abandon()
     return json({ error: 'Could not start checkout just then' }, 502)
   }
-})
+}, { cors })

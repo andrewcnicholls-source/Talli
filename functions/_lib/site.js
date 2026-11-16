@@ -414,6 +414,7 @@ ${og.map(([k, v]) => `<meta property="${k}" content="${esc(v)}">`).join('\n')}
 <link href="https://fonts.googleapis.com/css2?family=Poiret+One&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">${opts.booking ? '\n<link rel="stylesheet" href="/assets/vendor/leaflet/leaflet.css">' : ''}
 <link rel="stylesheet" href="/style.css">
 <script src="/assets/talli-config.js"></script>
+<script src="/assets/talli-errors.js"></script>
 <script src="/assets/talli-testgate.js"></script>${ld}
 </head>
 <body>

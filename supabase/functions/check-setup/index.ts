@@ -15,8 +15,11 @@
 //  as the gate screen: a signed-in host, checked the same way.
 // =====================================================================
 
-import Stripe from 'https://esm.sh/stripe@18?target=denonext'
-import { createClient } from 'jsr:@supabase/supabase-js@2'
+import Stripe from 'https://esm.sh/stripe@18.5.0?target=denonext'
+import { createClient } from 'jsr:@supabase/supabase-js@2.119.0'
+import { logger, serve } from '../_shared/log.ts'
+
+const log = logger('check-setup')
 
 const db = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -56,6 +59,7 @@ function returnBase(candidate: string): string | null {
   try {
     url = new URL(candidate)
   } catch {
+    // not logged: an unparseable SITE_URL is reported by the check itself
     return null
   }
 
@@ -117,7 +121,7 @@ async function refuse(req: Request): Promise<Response | null> {
     p_email: email,
   })
   if (accessError) {
-    console.error('host lookup failed', accessError)
+    log.error('host lookup failed', { err: accessError })
     return json({ error: 'Could not check who you are. Try again.' }, 503)
   }
   if (!rows || !(rows as unknown[]).length) {
@@ -138,7 +142,7 @@ const NEEDED_EVENTS = [
   'charge.dispute.created',
 ]
 
-Deno.serve(async (req) => {
+serve('check-setup', async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
   if (req.method !== 'POST') return json({ error: 'Use POST' }, 405)
 
@@ -182,6 +186,9 @@ Deno.serve(async (req) => {
         detail: `Yes. Stripe answered in ${balance.livemode ? 'live' : 'test'} mode.`,
       })
     } catch (err) {
+      // Shown to the signed-in host on purpose: this screen exists to
+      // explain the payment setup. Logged as well, for the record.
+      log.warn('stripe refused the key', { err })
       checks.push({
         name: 'Stripe accepts the key',
         ok: false,
@@ -249,6 +256,7 @@ Deno.serve(async (req) => {
         })
       }
     } catch (err) {
+      log.warn('could not list webhook endpoints', { err })
       checks.push({
         name: 'Webhook endpoint in this mode',
         ok: null,
@@ -304,4 +312,4 @@ Deno.serve(async (req) => {
       ? `No problems found, but ${unknown} check could not run.`
       : `${failures} problem${failures === 1 ? '' : 's'} to fix.`,
   })
-})
+}, { cors })

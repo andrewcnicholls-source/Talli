@@ -1,8 +1,11 @@
 // gate-ops: the service-role client, Stripe, the JSON response, and the
 // small helpers more than one area uses.
 
-import { createClient } from 'jsr:@supabase/supabase-js@2'
-import Stripe from 'https://esm.sh/stripe@18?target=denonext'
+import { createClient } from 'jsr:@supabase/supabase-js@2.119.0'
+import Stripe from 'https://esm.sh/stripe@18.5.0?target=denonext'
+import { type Fields, logger, named as namedFor } from '../_shared/log.ts'
+
+export const log = logger('gate-ops')
 
 export const db = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -61,11 +64,11 @@ export const json = (body: unknown, status = 200) =>
 
 
 // The database raises named errors for the cases that mean something
-// specific. Pass the name through so the screen can say what happened.
-export const named = (err: { message?: string }) => ({
-  error: err.message ?? 'That did not work',
-  code: (err.message ?? '').split(':')[0].trim(),
-})
+// specific ('SOLD_OUT: …'). Pass the name through so the screen can say
+// what happened. Anything else is logged with the request's ref and
+// answered with the ref alone — see _shared/log.ts.
+export const named = (err: { message?: string } | null | undefined, fields?: Fields) =>
+  namedFor(log, err, fields)
 
 // Minutes either side of kickoff, as the modal sends them. An absent field
 // falls back to the caller's default; an explicit null stays null, because
@@ -145,6 +148,7 @@ export function pictureFrom(body: Record<string, unknown>):
   try {
     bytes = Uint8Array.from(atob(String(body.data ?? '')), (c) => c.charCodeAt(0))
   } catch {
+    // not logged: the 400 is the answer, and the request line records it
     return json({ error: 'That picture did not arrive whole. Try again.', code: 'BAD_PICTURE' }, 400)
   }
   if (!bytes.length || bytes.length > PICTURE_MAX_BYTES) {

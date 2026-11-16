@@ -88,7 +88,35 @@ weakened, skipped or special-cased to let a test through; if a test
 cannot sign in honestly, the test is wrong.
 
 There is still no build and no bundler: the site is served as the
-files in this repository.
+files in this repository. Nothing creates a `package.json` at the
+root — Cloudflare Pages would start treating the site as a Node
+project. Never scaffold a second test setup (`npm init playwright`,
+an `e2e/` folder, another workflow); add to `tests/`.
+
+### Logging
+
+Logging is part of the change, the same as its tests. `check.sh`
+enforces it (rules L1–L7, top of `scripts/check-logging.js`):
+
+- An edge function starts with `serve('<its name>', handler, { cors })`
+  from `supabase/functions/_shared/log.ts`, and logs with
+  `const log = logger('<its name>')` — `log.info|warn|error(event,
+  { fields })`. Never `console.*`, never `Deno.serve`.
+- The event is a short fixed phrase ("hold_booking failed"); the
+  details are fields, with the error as `err`. Name the booking,
+  event or session the line is about, so it can be found later.
+- Every `catch` logs, rethrows, returns `named(…)`, or carries a
+  `// not logged: <why>` comment.
+- A response never carries an error's own message. Database errors go
+  through `named()`: `CODE: words` from a `raise exception` reaches the
+  screen, anything else becomes a ref. New database errors meant for
+  people use that `CODE:` shape.
+- Remote imports are pinned to an exact version.
+- Every page loads `assets/talli-errors.js` straight after
+  `talli-config.js`; a request helper that sees a 5xx or no answer calls
+  `TalliErrors.failed(...)`.
+
+`DEPLOYMENT.md` § "Reading the logs" is how to find a line from a ref.
 
 ### Staging is shared, and it is the real test
 
