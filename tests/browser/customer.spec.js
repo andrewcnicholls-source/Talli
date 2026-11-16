@@ -121,9 +121,11 @@ test('the type chips filter the map and its prices', async ({ page }) => {
   const blocks = page.locator('#bk-blocks');
 
   await page.locator('label.bk-chip', { hasText: 'Valet' }).click();
-  // Only Paice Ave sells Valet on this night: Gribblehurst's pin says full.
+  // Only Paice Ave sells Valet on this night. Gribblehurst has nothing to
+  // sell for Valet, so it is not drawn at all: no pin, not even a full one.
   await expect(pin(page, '$45')).toBeVisible();
-  await expect(page.locator('#bk-map .bk-map-pin.is-full')).toHaveCount(1);
+  await expect(page.locator('#bk-map .bk-map-pin')).toHaveCount(1);
+  await expect(page.locator('#bk-map .bk-map-pin.is-full')).toHaveCount(0);
 
   await page.locator('label.bk-chip', { hasText: 'Priority' }).click();
   await expect(pin(page, '$50')).toBeVisible();

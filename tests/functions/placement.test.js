@@ -95,47 +95,56 @@ test('ticking a car in says where it went', async () => {
   assert.equal(r.body.placed.no_room, false);
 });
 
-test('a warden moves a car within their block, never out of it', async () => {
+test('only the operator moves a car between sites, not even within a block', async () => {
   const id = await onlineCar(FIX.gribAnchor);
   await gate('wardenGrib', { action: 'check_in', booking_id: id, property_id: FIX.gribAnchor });
-
-  const out = await gate('wardenGrib', {
-    action: 'place', booking_id: id, property_id: FIX.paice, space_code: 'standard',
-  });
-  assert.equal(out.status, 403);
-  assert.equal(out.body.code, 'NOT_YOUR_SITE');
-
-  const valet = await gate('wardenGrib', {
-    action: 'place', booking_id: id, property_id: FIX.gribNeighbour, space_code: 'valet',
-  });
-  assert.equal(valet.status, 409);
-  assert.equal(valet.body.code, 'WRONG_SPACE');
 
   const moved = await gate('wardenGrib', {
     action: 'place', booking_id: id, property_id: FIX.gribNeighbour, space_code: 'standard',
   });
-  assert.equal(moved.status, 200, JSON.stringify(moved.body));
-  const [row] = await rest(`booking?id=eq.${id}&select=property_id,space_code`);
-  assert.deepEqual(row, { property_id: FIX.gribNeighbour, space_code: null });
-});
-
-test('a warden transfers a car not yet here, and it stays not here', async () => {
-  const id = await onlineCar(FIX.gribAnchor);
-
-  const out = await gate('wardenGrib', {
-    action: 'place', booking_id: id, property_id: FIX.paice, space_code: 'standard',
-    check_in: false,
-  });
-  assert.equal(out.status, 403);
-  assert.equal(out.body.code, 'NOT_YOUR_SITE');
+  assert.equal(moved.status, 403);
+  assert.equal(moved.body.code, 'NOT_OPERATOR');
 
   const sent = await gate('wardenGrib', {
     action: 'place', booking_id: id, property_id: FIX.gribNeighbour, space_code: 'standard',
     check_in: false,
   });
+  assert.equal(sent.status, 403);
+  assert.equal(sent.body.code, 'NOT_OPERATOR');
+
+  const [row] = await rest(`booking?id=eq.${id}&select=property_id,space_code`);
+  assert.deepEqual(row, { property_id: FIX.gribAnchor, space_code: null }, 'and it did not move');
+});
+
+test('the operator moves a car to any site, in any block, and keeps the rules', async () => {
+  const id = await onlineCar(FIX.gribAnchor);
+  await gate('operator', { action: 'check_in', booking_id: id, property_id: FIX.gribAnchor });
+
+  const valet = await gate('operator', {
+    action: 'place', booking_id: id, property_id: FIX.gribNeighbour, space_code: 'valet',
+  });
+  assert.equal(valet.status, 409);
+  assert.equal(valet.body.code, 'WRONG_SPACE');
+
+  const out = await gate('operator', {
+    action: 'place', booking_id: id, property_id: FIX.paice, space_code: 'standard',
+  });
+  assert.equal(out.status, 200, JSON.stringify(out.body));
+  const [row] = await rest(`booking?id=eq.${id}&select=property_id,checked_in_at`);
+  assert.equal(row.property_id, FIX.paice, 'it is at Paice Ave, in another block');
+  assert.notEqual(row.checked_in_at, null, 'and a car that was in is still in');
+});
+
+test('the operator transfers a car not yet here, and it stays not here', async () => {
+  const id = await onlineCar(FIX.gribAnchor);
+
+  const sent = await gate('operator', {
+    action: 'place', booking_id: id, property_id: FIX.paice, space_code: 'standard',
+    check_in: false,
+  });
   assert.equal(sent.status, 200, JSON.stringify(sent.body));
   const [row] = await rest(`booking?id=eq.${id}&select=property_id,checked_in_at`);
-  assert.deepEqual(row, { property_id: FIX.gribNeighbour, checked_in_at: null });
+  assert.deepEqual(row, { property_id: FIX.paice, checked_in_at: null });
 });
 
 test('a check-in is taken back, and the car can be ticked in again', async () => {

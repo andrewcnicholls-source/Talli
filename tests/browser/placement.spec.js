@@ -18,13 +18,14 @@ test.afterEach(async () => {
   await clearLost();
 });
 
-async function openNight(page) {
+async function openNight(page, scopes = 3) {
   await page.goto('/admin');
   await expect(page.locator('#ad-app')).toBeVisible();
   await expect(page.locator('#ad-live')).toContainText('Fixture night');
   // The night has loaded once the selector has the block and its two
-  // sites (plan B6).
-  await expect(page.locator('#ad-scope option')).toHaveCount(3);
+  // sites (plan B6). The operator sees every site and block, so that
+  // count is not fixed for them: pass null and wait on the sheet instead.
+  if (scopes) await expect(page.locator('#ad-scope option')).toHaveCount(scopes);
 }
 
 test('a warden records a lost space, sees it, and undoes it', async ({ page }) => {
@@ -86,7 +87,7 @@ test('a car\'s sheet says which site it is booked into, and where it was moved t
   await expect(where).toContainText('parked at TEST Gribblehurst neighbour');
 });
 
-test('a car not yet in is transferred from its sheet, and stays not in', async ({ page }) => {
+test('the operator transfers a car not yet in from its sheet, to any site, and it stays not in', async ({ page }) => {
   const rego = plate('GC');
   made.push(rego);
   const id = await rpc('hold_booking', {
@@ -95,18 +96,33 @@ test('a car not yet in is transferred from its sheet, and stays not in', async (
   });
   await rpc('confirm_booking', { p_booking_id: id, p_payment_intent_id: null });
 
-  await signedIn(page, 'wardenGrib');
-  await openNight(page);
+  await signedIn(page, 'operator');
+  await openNight(page, null);
   await page.getByRole('button', { name: 'Edit ' + rego }).click();
   // Not in yet: the sheet offers a transfer, not a move.
   await expect(page.locator('#ad-edit-place-what')).toHaveText('Transfer to');
   await expect(page.locator('#ad-edit-place-go')).toHaveText('Transfer');
-  await page.selectOption('#ad-edit-place', FIX.gribNeighbour + '|standard');
+  await page.selectOption('#ad-edit-place', FIX.paice + '|standard');
   await page.click('#ad-edit-place-go');
   await expect(page.locator('#ad-edit')).toBeHidden();
 
   const [row] = await rest(`booking?id=eq.${id}&select=property_id,checked_in_at`);
-  expect(row).toEqual({ property_id: FIX.gribNeighbour, checked_in_at: null });
+  expect(row).toEqual({ property_id: FIX.paice, checked_in_at: null });
+});
+
+test('a warden does not see the transfer field at all', async ({ page }) => {
+  const rego = plate('GW');
+  made.push(rego);
+  const id = await rpc('hold_booking', {
+    p_event_id: FIX.night, p_property_id: FIX.gribAnchor, p_tier_code: 'standard',
+    p_email: 'transfer.warden@example.com', p_rego: rego,
+  });
+  await rpc('confirm_booking', { p_booking_id: id, p_payment_intent_id: null });
+
+  await signedIn(page, 'wardenGrib');
+  await openNight(page);
+  await page.getByRole('button', { name: 'Edit ' + rego }).click();
+  await expect(page.locator('#ad-edit-place-row')).toBeHidden();
 });
 
 test('a car is checked in from its sheet, and the check-in is taken back there and on the list', async ({ page }) => {

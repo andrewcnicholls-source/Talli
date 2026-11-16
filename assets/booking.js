@@ -475,7 +475,12 @@
       .then(function (rows) {
         // A slow answer for a night they have since moved off is dropped.
         if (!state.event || state.event.id !== eventId) return;
-        state.rows = rows || [];
+        // Nothing on sale online and nothing held for the gate is not shown at
+        // all: no card, no map area, no chip. A walk-up space still counts,
+        // so its "sold out online, walk-ups" card stays.
+        state.rows = (rows || []).filter(function (r) {
+          return r.spots_left > 0 || r.walk_ups_on_the_night;
+        });
         var types = typesIn(state.rows);
         if (!types.length) {
           cards.innerHTML = '';
@@ -820,6 +825,8 @@
     var framed = [EDEN_PARK];
     var offer = {};
     rowsOfType().forEach(function (r) { offer[r.block_id] = r; });
+    // A block with nothing to show for this type is not drawn either.
+    pins = pins.filter(function (p) { return !!offer[p.block_id]; });
     pins.forEach(function (p) {
       var a = byBlock[p.block_id];
       if (!a) {

@@ -87,7 +87,7 @@ select ok(not has_function_privilege('anon',
   'public.record_lost_space(uuid, uuid, text, text, text, uuid)', 'execute'),
   'nor record one');
 select ok(not has_function_privilege('anon',
-  'public.place_booking(uuid, uuid, text, uuid)', 'execute'),
+  'public.place_booking(uuid, uuid, text, uuid, boolean)', 'execute'),
   'nor place a car');
 select ok(not has_function_privilege('anon',
   'public.check_in_placed(uuid, uuid, uuid)', 'execute'),
