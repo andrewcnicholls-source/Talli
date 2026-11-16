@@ -250,10 +250,34 @@ against Supabase, done **before** the front end goes out:
 1. `apply_migration` against `oxzwfemyavznykqixhvk`, one file at a
    time, verified between each.
 2. `deploy_edge_function` for anything changed under
-   `supabase/functions/`.
+   `supabase/functions/`. A change to `supabase/functions/_shared/`
+   changes **every** function that imports it — today, all of them —
+   so each is redeployed, with `../_shared/log.ts` included in its
+   files. (`supabase functions deploy` bundles it on its own.)
 3. Then the fast-forward push.
 
 A green Pages deployment proves nothing about either.
+
+### Reading the logs
+
+Every edge function writes one JSON line per event through
+`supabase/functions/_shared/log.ts`, and one summary line per request
+(`"event":"request"`, with status, milliseconds and, for gate-ops, the
+action). Each line carries a `ref` — eight characters, the same code a
+customer or warden sees in "Something went wrong … quote reference
+1A2B3C4D". To find out what happened from a screenshot, search the
+project's Edge Function logs (Dashboard → Edge Functions → Logs, or the
+`query_logs` MCP tool) for that ref.
+
+Errors from people's browsers arrive through the `client-error`
+function as `"event":"browser error"` lines, with the ref of the server
+request they were about when there was one. It is deployed like any
+other function, on both projects, and needs no secrets.
+
+Keys, tokens and signatures are redacted and customer emails cut to
+`j***@example.com` before a line is written. `scripts/check.sh` fails
+any change that logs around the logger; the rules are at the top of
+`scripts/check-logging.js`.
 
 ### The one function that is not called by anything
 

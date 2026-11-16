@@ -11,7 +11,10 @@
 //  keen, and it answers the same way.
 // =====================================================================
 
-import { createClient } from 'jsr:@supabase/supabase-js@2'
+import { createClient } from 'jsr:@supabase/supabase-js@2.119.0'
+import { logger, serve } from '../_shared/log.ts'
+
+const log = logger('register-interest')
 
 const db = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -33,7 +36,7 @@ const json = (body: unknown, status = 200) =>
     headers: { ...cors, 'Content-Type': 'application/json' },
   })
 
-Deno.serve(async (req) => {
+serve('register-interest', async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
   if (req.method !== 'POST') return json({ error: 'Use POST' }, 405)
 
@@ -41,6 +44,7 @@ Deno.serve(async (req) => {
   try {
     body = await req.json()
   } catch {
+    // not logged: the 400 is the answer, and the request line records it
     return json({ error: 'Body must be JSON' }, 400)
   }
 
@@ -62,7 +66,10 @@ Deno.serve(async (req) => {
     .eq('id', eventId)
     .maybeSingle()
 
-  if (evErr) return json({ error: 'Could not load that event' }, 500)
+  if (evErr) {
+    log.error('event lookup failed', { err: evErr, event_id: eventId })
+    return json({ error: 'Could not load that event' }, 500)
+  }
   if (!ev) return json({ error: 'No such event' }, 404)
   if (ev.status !== 'announced') {
     return json({ error: 'That event is not taking registrations', code: 'NOT_ANNOUNCED' }, 409)
@@ -75,7 +82,7 @@ Deno.serve(async (req) => {
   // 23505 is the one-per-person index doing its job. Already on the list is
   // the outcome they wanted, so say so rather than showing them an error.
   if (error && error.code !== '23505') {
-    console.error('interest insert failed', error)
+    log.error('interest insert failed', { err: error, event_id: eventId })
     return json({ error: 'Could not add you to the list just then' }, 500)
   }
 
@@ -84,4 +91,4 @@ Deno.serve(async (req) => {
     already: error?.code === '23505',
     event_name: ev.name,
   })
-})
+}, { cors })

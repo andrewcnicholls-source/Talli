@@ -30,8 +30,11 @@
 //  DEPLOYMENT.md. Nothing here assumes it is called on time.
 // =====================================================================
 
-import Stripe from 'https://esm.sh/stripe@18?target=denonext'
-import { createClient } from 'jsr:@supabase/supabase-js@2'
+import Stripe from 'https://esm.sh/stripe@18.5.0?target=denonext'
+import { createClient } from 'jsr:@supabase/supabase-js@2.119.0'
+import { logger, serve } from '../_shared/log.ts'
+
+const log = logger('expire-holds')
 
 const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
@@ -66,7 +69,7 @@ function sameSecret(given: string, expected: string): boolean {
   return diff === 0
 }
 
-Deno.serve(async (req) => {
+serve('expire-holds', async (req) => {
   // ---- Who is allowed to call this.
   //
   // verify_jwt is not enough on its own: the anon key satisfies it and the
@@ -93,7 +96,7 @@ Deno.serve(async (req) => {
     .limit(BATCH)
 
   if (error) {
-    console.error('could not read stale holds', error)
+    log.error('could not read stale holds', { err: error })
     return json({ error: 'could not read stale holds' }, 500)
   }
   if (!stale?.length) return json({ expired: 0 })
@@ -129,17 +132,16 @@ Deno.serve(async (req) => {
         alreadyDone++
         continue
       }
-      console.error('could not expire session', sessionId, msg)
+      log.error('could not expire session', { session: sessionId, err })
       failures.push(sessionId)
     }
   }
 
   // Logged every run, because silence from a sweep is indistinguishable
   // from a sweep that is not running at all.
-  console.log(
-    `expire-holds: ${stale.length} stale, ${expired} expired, ` +
-    `${alreadyDone} already closed, ${failures.length} failed`,
-  )
+  log.info('sweep', {
+    stale: stale.length, expired, already_closed: alreadyDone, failed: failures.length,
+  })
 
   return json({ examined: stale.length, expired, alreadyDone, failed: failures.length })
 })

@@ -2,9 +2,9 @@
 // check-in, extras, walk-up sales, fixing a booking, and card by QR.
 // A warden may call these, for their own blocks.
 
-import type Stripe from 'https://esm.sh/stripe@18?target=denonext'
+import type Stripe from 'https://esm.sh/stripe@18.5.0?target=denonext'
 import { type Ctx, type Handler } from '../auth.ts'
-import { CARD_LINK_MINUTES, db, EVENT_FIELDS, isGateAddress, json, named, optText, PAY_METHODS, priceCents, type Row, SITE_URL, stripeOrNull, TAP_REFUSED } from '../shared.ts'
+import { CARD_LINK_MINUTES, db, EVENT_FIELDS, isGateAddress, json, log, named, optText, PAY_METHODS, priceCents, type Row, SITE_URL, stripeOrNull, TAP_REFUSED } from '../shared.ts'
 import { nightState } from '../night.ts'
 
 // The nights a caller is shown. The operator sees every one; a warden
@@ -286,7 +286,7 @@ export const arrivals: Record<string, Handler> = {
       if (aErr) {
         // The space is sold and the car is being waved in; an extras
         // failure must not read as a failed sale. Say so and move on.
-        console.error('gate addons failed', aErr)
+        log.error('gate addons failed', { booking: data, err: aErr })
         return json({ ok: true, booking_id: data, addons_failed: true })
       }
       // Handed over across the bonnet, there and then.
@@ -438,7 +438,7 @@ export const arrivals: Record<string, Handler> = {
         if (was.status === 'open') await stripe.checkout.sessions.expire(old)
       } catch (err) {
         // A session Stripe no longer knows is no risk of paying twice.
-        console.error('card_link: old session', old, err)
+        log.warn('card_link: old session not reusable', { session: old, err })
       }
     }
 
@@ -486,7 +486,8 @@ export const arrivals: Record<string, Handler> = {
     })
     if (session.amount_total !== total) {
       await stripe.checkout.sessions.expire(session.id)
-      console.error('card_link: Stripe total', session.amount_total, 'expected', total)
+      log.error('card_link: Stripe total did not match', {
+        booking: id, stripe_total: session.amount_total, expected: total })
       return json({ error: 'The card amount did not add up. Take cash or a transfer.',
         code: 'AMOUNT_MISMATCH' }, 502)
     }
