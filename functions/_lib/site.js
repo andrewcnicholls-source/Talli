@@ -524,7 +524,9 @@ export function renderSeries(project, series, opts) {
 
   const nights = series.nights.map((n) => {
     const state = nightState(n, now);
-    const nightPicture = n.picture_path ? pictureUrl(project, n.picture_path) : null;
+    // No picture in a night's row: the series picture is already at the
+    // top of the page. A night's own picture still reaches search engines
+    // (eventJsonLd) and the What's on card when the series has none.
     // The data-night-* attributes are what assets/booking.js needs to open
     // the flow for this night without asking the database what it is.
     const fullName = n.night_label ? series.name + ' — ' + n.night_label : n.name;
@@ -541,7 +543,6 @@ export function renderSeries(project, series, opts) {
         </span>
         <span class="ev-from" data-event-ids="${esc(n.id)}"></span>
       </span>
-      ${nightPicture ? `<img class="ev-night-pic" src="${esc(nightPicture)}" alt="" loading="lazy">` : ''}
       <a class="btn ${state.key === 'on_sale' ? 'btn-primary' : 'btn-outline'} ev-night-go"
          href="/events/${esc(series.slug)}?night=${esc(encodeURIComponent(n.id))}">${esc(state.action)}</a>
     </li>`;

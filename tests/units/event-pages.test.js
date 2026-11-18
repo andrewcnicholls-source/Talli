@@ -109,6 +109,11 @@ test('a series page has its title, canonical, Open Graph and each night', async 
   assert.match(html, /id="bk-nights"/);
   assert.match(html, /<script src="\/assets\/booking\.js"><\/script>/);
   assert.ok(!/\/book\?event=/.test(html), 'no night leaves the page to book');
+  // A night's row carries no picture of its own, even when the night has
+  // one: the series picture at the top is the page's only picture.
+  assert.ok(!/nights\/e2\.jpg/.test(html.replace(/<script type="application\/ld\+json">[\s\S]*?<\/script>/g, '')),
+    'a night picture is not shown in its row');
+  assert.ok(!/ev-night-pic/.test(html), 'no picture element in the night rows');
 });
 
 test('a series with nothing to come carries no booking flow', async () => {
