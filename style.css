@@ -2849,7 +2849,6 @@ body.ad-guide-open { overflow: hidden; }
   padding: 4px 9px;
 }
 
-.ev-night-pic { width: 96px; aspect-ratio: 1; object-fit: cover; border-radius: 3px; }
 .ev-night-go { flex: none; }
 @media (max-width: 519px) {
   .ev-night-go { flex: 1 1 100%; }
