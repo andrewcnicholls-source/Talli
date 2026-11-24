@@ -20,6 +20,7 @@ var DETAIL_NAMES = {
 var ENDINGS = {
   cancelled: 'Cancelled', expired: 'Hold ran out', refunded: 'Refunded',
   no_show: 'No-show', checked_in: 'Checked in', paid: 'Paid',
+  check_in_undone: 'Check-in undone',
 };
 
 function method(m) {

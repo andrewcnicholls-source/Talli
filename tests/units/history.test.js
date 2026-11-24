@@ -91,3 +91,7 @@ test('the endings read as words', () => {
   assert.equal(t('refunded'), 'Refunded');
   assert.equal(t('checked_in'), 'Checked in');
 });
+
+test('an undone check-in reads as words', () => {
+  assert.equal(historyEntries([line('check_in_undone')])[0].text, 'Check-in undone');
+});

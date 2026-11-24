@@ -15,7 +15,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(27);
+select plan(29);
 
 create temp table fx (k text primary key, id uuid);
 insert into fx values
@@ -83,6 +83,19 @@ select is((select after->>'property_id' from booking_change
             where booking_id = pg_temp.fx('sale') and kind = 'moved'
             order by created_at desc limit 1),
   pg_temp.fx('neigh')::text, 'a move says where it went');
+
+-- A car put in another kind of space where it was booked has not moved.
+select pg_temp.act(pg_temp.fx('max')::text);
+update booking set space_code = 'priority' where id = pg_temp.fx('sale');
+select is((select count(*)::int from booking_change
+            where booking_id = pg_temp.fx('sale') and kind = 'moved'), 1,
+  'a change of space at the same site is not a move');
+
+-- A check-in undone is said, so a later one is not read as the first.
+update booking set checked_in_at = null where id = pg_temp.fx('sale');
+select is((select by_host_user from booking_change
+            where booking_id = pg_temp.fx('sale') and kind = 'check_in_undone'),
+  pg_temp.fx('max'), 'undoing a check-in is a line, with who');
 
 -- ---------------------------------------- a header that is not a person
 select pg_temp.act('not-a-uuid');

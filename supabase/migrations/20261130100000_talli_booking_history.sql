@@ -121,7 +121,8 @@ alter table booking_change alter column after  drop not null;
 alter table booking_change drop constraint if exists booking_change_kind_check;
 alter table booking_change add constraint booking_change_kind_check
   check (kind in ('created', 'paid', 'details', 'payment', 'tier', 'price',
-                  'checked_in', 'moved', 'cancelled', 'expired', 'refunded', 'no_show'));
+                  'checked_in', 'check_in_undone', 'moved', 'cancelled', 'expired',
+                  'refunded', 'no_show'));
 
 -- Every booking made before today gets the line that says it was made,
 -- at the time it was. Who made it was never written down, and is not
@@ -209,8 +210,17 @@ begin
       v_who, case when v_who is null then 'System' end);
   end if;
 
-  if new.property_id is distinct from old.property_id
-     or new.space_code is distinct from old.space_code then
+  -- Undone: said, so a later check-in is not read as the first, and a car
+  -- that was ticked in by mistake does not stay "checked in" here.
+  if old.checked_in_at is not null and new.checked_in_at is null then
+    insert into booking_change (booking_id, kind, before, after, by_host_user, by_label)
+    values (new.id, 'check_in_undone', null, null,
+      v_who, case when v_who is null then 'System' end);
+  end if;
+
+  -- A move is a different site. A car put in another kind of space where
+  -- it was booked (a Standard car in a Priority space) has not moved.
+  if new.property_id is distinct from old.property_id then
     insert into booking_change (booking_id, kind, before, after, by_host_user, by_label)
     values (new.id, 'moved',
       jsonb_build_object('property_id', old.property_id, 'space_code', old.space_code),
@@ -271,7 +281,7 @@ as $$
    order by c.created_at,
             -- Within one moment, in the order it happened.
             array_position(array['created','paid','payment','details','tier','price',
-                                 'moved','checked_in','cancelled','expired',
+                                 'moved','checked_in','check_in_undone','cancelled','expired',
                                  'refunded','no_show'], c.kind),
             c.id
 $$;
