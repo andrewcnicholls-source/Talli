@@ -143,23 +143,8 @@
        they have no cash. Filled in by renderInfo(). Wardens see this and
        Arrivals, nothing else. -->
   <section id="ad-pane-info" class="ad-info" role="tabpanel" aria-labelledby="ad-tab-info" hidden>
-    <p class="ad-info-site" id="ad-info-site"></p>
-    <p class="ad-info-address" id="ad-info-address"></p>
-    <div class="ad-info-maps" id="ad-info-maps"></div>
-
-    <!-- The Locate Us card (plan A4): what a driver scans or photographs.
-         Tap it to fill the screen and hold it up to the window. -->
-    <button type="button" class="ad-guide-card" id="ad-guide-card" hidden
-            aria-label="Show the Locate Us card full screen"></button>
-    <p class="ad-hint ad-guide-hint" id="ad-guide-hint" hidden>Tap the card to fill the screen,
-      then hold it up to the driver&rsquo;s window.</p>
-
-    <div class="ad-guide-park" id="ad-guide-park" hidden>
-      <h2 class="ad-info-head">Where to park</h2>
-      <p class="ad-guide-notes" id="ad-guide-notes" hidden></p>
-      <div class="ad-guide-pics" id="ad-guide-pics"></div>
-      <p class="ad-guide-link" id="ad-guide-link" hidden></p>
-    </div>
+    <!-- Order, top to bottom: bank transfer, the Locate Us card, then the
+         pictures of where to park. -->
 
     <h2 class="ad-info-head">Pay by bank transfer</h2>
     <p class="ad-empty" id="ad-info-bank-empty" hidden></p>
@@ -175,6 +160,23 @@
     </dl>
     <p class="ad-hint">Sell it on Arrivals as &ldquo;Bank transfer&rdquo;. It is matched
       to the car later, from the plate on the bank statement.</p>
+
+    <p class="ad-info-site" id="ad-info-site"></p>
+    <p class="ad-info-address" id="ad-info-address"></p>
+
+    <!-- The Locate Us card (plan A4): what a driver scans or photographs.
+         Tap it to fill the screen and hold it up to the window. -->
+    <button type="button" class="ad-guide-card" id="ad-guide-card" hidden
+            aria-label="Show the Locate Us card full screen"></button>
+    <p class="ad-hint ad-guide-hint" id="ad-guide-hint" hidden>Tap the card to fill the screen,
+      then hold it up to the driver&rsquo;s window.</p>
+
+    <div class="ad-guide-park" id="ad-guide-park" hidden>
+      <h2 class="ad-info-head">Where to park</h2>
+      <p class="ad-guide-notes" id="ad-guide-notes" hidden></p>
+      <div class="ad-guide-pics" id="ad-guide-pics"></div>
+      <p class="ad-guide-link" id="ad-guide-link" hidden></p>
+    </div>
   </section>
 
   <!-- The card, full screen. Tap anywhere to close. -->
@@ -313,17 +315,17 @@
 
     <p class="ad-edit-sub" id="ad-series-event"></p>
 
-    <label class="ad-label" for="ad-series-pick">Series <span>what customers look for: the act, or the team</span></label>
+    <label class="ad-label" for="ad-series-pick" title="The act or team customers look for. Its page groups every night in it.">Series <span>what customers look for: the act, or the team</span></label>
     <select id="ad-series-pick" class="ad-select"></select>
 
     <label class="ad-label" for="ad-series-night">This night <span>&ldquo;Night 2&rdquo;, &ldquo;v Hurricanes&rdquo; &mdash; optional</span></label>
     <input type="text" id="ad-series-night" class="ad-input" maxlength="80">
 
-    <label class="ad-label">Picture for this night <span>optional &mdash; otherwise the series&rsquo;</span></label>
+    <label class="ad-label" for="ad-series-night-file" title="Shown for this night only. Leave it empty to use the series picture instead.">Night picture <span>optional &mdash; otherwise the series picture</span></label>
     <div class="ad-pic" id="ad-series-night-pic-box">
       <img id="ad-series-night-pic" alt="" hidden>
-      <input type="file" id="ad-series-night-file" accept="image/jpeg,image/png,image/webp">
-      <button type="button" class="ad-link" id="ad-series-night-pic-remove" hidden>Remove</button>
+      <input type="file" id="ad-series-night-file" accept="image/jpeg,image/png,image/webp" title="Choose a JPEG, PNG or WebP picture up to 5 MB for this night only.">
+      <button type="button" class="ad-link" id="ad-series-night-pic-remove" title="Take this night's picture off. It is removed when you save." hidden>Remove</button>
     </div>
 
     <h3 class="ad-sheet-sub">The series</h3>
@@ -368,11 +370,11 @@
       <span>Listed on the website</span>
     </label>
 
-    <label class="ad-label">Series picture</label>
+    <label class="ad-label" for="ad-series-file" title="Shown on this series' page and for every night in it, unless a night has its own picture.">Series picture</label>
     <div class="ad-pic">
       <img id="ad-series-pic" alt="" hidden>
-      <input type="file" id="ad-series-file" accept="image/jpeg,image/png,image/webp">
-      <button type="button" class="ad-link" id="ad-series-pic-remove" hidden>Remove</button>
+      <input type="file" id="ad-series-file" accept="image/jpeg,image/png,image/webp" title="Choose a JPEG, PNG or WebP picture up to 5 MB for the whole series.">
+      <button type="button" class="ad-link" id="ad-series-pic-remove" title="Take the series picture off. It is removed when you save." hidden>Remove</button>
     </div>
 
     <label class="ad-label">Nights in this series</label>
@@ -531,6 +533,22 @@
     </select>
     <p class="ad-hint" id="ad-sell-later-hint" hidden>Saves the car and ticks it in.
       Tap the booking in the list when they pay.</p>
+    <!-- Bank transfer picked: the account to read out, right here. Filled
+         by renderPayBank() in assets/admin/site-info.js, from gate-ops. -->
+    <div class="ad-pay-bank" id="ad-sell-bank" hidden>
+      <h3 class="ad-pay-bank-head">Bank details for the transfer</h3>
+      <p class="ad-empty" id="ad-sell-bank-empty" hidden></p>
+      <dl class="ad-info-bank" id="ad-sell-bank-list" hidden>
+        <dt>Account name</dt>
+        <dd id="ad-sell-bank-name"></dd>
+        <dt>Account number</dt>
+        <dd id="ad-sell-bank-number" class="ad-info-big"></dd>
+        <dt>Particulars</dt>
+        <dd>Their number plate</dd>
+        <dt>Reference</dt>
+        <dd id="ad-sell-bank-reference" class="ad-info-big"></dd>
+      </dl>
+    </div>
 
     <!-- What to actually ask for. The sign price is the cash price, so a card
          sale is a different number and the marshal should not be doing that
@@ -671,6 +689,20 @@
       <option value="stripe" disabled>Card online</option>
     </select>
     <p class="ad-hint" id="ad-edit-payment-hint" hidden></p>
+    <div class="ad-pay-bank" id="ad-edit-bank" hidden>
+      <h3 class="ad-pay-bank-head">Bank details for the transfer</h3>
+      <p class="ad-empty" id="ad-edit-bank-empty" hidden></p>
+      <dl class="ad-info-bank" id="ad-edit-bank-list" hidden>
+        <dt>Account name</dt>
+        <dd id="ad-edit-bank-name"></dd>
+        <dt>Account number</dt>
+        <dd id="ad-edit-bank-number" class="ad-info-big"></dd>
+        <dt>Particulars</dt>
+        <dd>Their number plate</dd>
+        <dt>Reference</dt>
+        <dd id="ad-edit-bank-reference" class="ad-info-big"></dd>
+      </dl>
+    </div>
 
     <div class="ad-charge" id="ad-edit-charge">
       <div class="ad-charge-total">

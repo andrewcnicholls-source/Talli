@@ -5,7 +5,8 @@
 
 import { button, call, el, hide, make, money, shortName, show, state,
   surchargeOn, text, toast } from './core.js';
-import { chosenHere, loadList, multiSite, siteName, tiersHere } from './night.js';
+import { chosenHere, currentSite, loadList, multiSite, siteName, tiersHere } from './night.js';
+import { renderPayBank } from './site-info.js';
 import { inGateOrder } from './tonight.js';
 import { openCardQr } from './card-qr.js';
 import { sayPlaced, spillSays } from './placement.js';
@@ -247,6 +248,7 @@ function sellExtrasTotal() {
 // sale is described; this is the number the driver hands over, and it moves
 // the moment the payment method does.
 export function renderSellCharge() {
+  renderPayBank('ad-sell', el('ad-sell-payment').value, chosenHere() || currentSite());
   var box = el('ad-sell-charge');
   var tier = tiersHere().filter(function (t) { return t.code === state.sellTier; })[0];
   if (!tier) {

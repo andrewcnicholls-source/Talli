@@ -2563,12 +2563,11 @@ textarea.ad-input { resize: vertical; min-height: 56px; font-family: inherit; }
 .ad-info { padding: 18px 16px 28px; }
 .ad-info-site { margin: 0 0 4px; color: var(--grey); font-size: 0.95rem; }
 .ad-info-address { margin: 0 0 14px; font-size: 1.6rem; line-height: 1.25; font-weight: 500; color: var(--ink); }
-.ad-info-maps { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 26px; }
-.ad-info-maps a {
-  flex: 1 1 140px; text-align: center; padding: 12px 10px; border-radius: 6px;
-  background: var(--blue); color: var(--white); text-decoration: none; font-weight: 500;
-}
 .ad-info-head { font-size: 1.05rem; margin: 0 0 10px; color: var(--blue-deep); }
+.ad-pay-bank { margin: 8px 0 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; }
+.ad-pay-bank-head { margin: 0 0 8px; font-size: 0.95rem; font-weight: 600; }
+.ad-pay-bank .ad-info-bank { margin: 0; }
+.ad-pay-bank .ad-empty { margin: 0; }
 .ad-info-bank { margin: 0 0 14px; display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; align-items: baseline; }
 .ad-info-bank dt { color: var(--grey); font-size: 0.9rem; }
 .ad-info-bank dd { margin: 0; font-size: 1.1rem; overflow-wrap: anywhere; }

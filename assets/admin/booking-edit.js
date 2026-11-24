@@ -9,6 +9,7 @@ import { loadList, tierClass, tiersFor } from './night.js';
 import { inGateOrder } from './tonight.js';
 import { pickTile, priceSlot } from './walk-up.js';
 import { renderCheckIn, renderPlace } from './placement.js';
+import { renderPayBank } from './site-info.js';
 
 /* ----------------------------------------------------- one booking */
 
@@ -199,6 +200,10 @@ function editAmounts() {
 export function renderEditCharge() {
   var r = state.edit;
   if (!r) return;
+  var pay = el('ad-edit-payment');
+  // Not on a card payment Stripe holds: that select is locked.
+  renderPayBank('ad-edit', pay.disabled ? '' : pay.value,
+    siteRow(r.booked_property_id || r.property_id));
   var a = editAmounts();
 
   var hint = el('ad-edit-move-hint');

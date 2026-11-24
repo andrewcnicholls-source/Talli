@@ -1,9 +1,9 @@
 /* Talli Parking — gate screen: site-info.js
 
-   The Site guide tab: for the site or area chosen at the top, the address
-   and directions, the Locate Us card (plan A4) to hold up to a driver's
-   window, the pictures of where to park, and the bank details for a
-   walk-up paying by transfer.
+   The Site guide tab: for the site or area chosen at the top, the bank
+   details for a walk-up paying by transfer, then the address, the Locate Us
+   card (plan A4) to hold up to a driver's window, and last the pictures of
+   where to park.
 
    Only ever sites the server sent: a warden's night carries their own
    blocks' sites and nothing else, so the guide cannot show another's.
@@ -20,18 +20,60 @@ import { chosenHere, currentSite, multiSite } from './night.js';
 // first time the tab opens, and again if that failed.
 export function openInfo() {
   renderInfo();
+  loadBank(renderInfo);
+}
+
+// One fetch shared by the Site info tab and the payment sheets; then()
+// redraws whichever asked. Already loaded, nothing is fetched again.
+var bankLoading = null;
+function loadBank(then) {
   if (state.bank) return;
-  call('bank_details', {})
-    .then(function (data) {
-      state.bank = data;
+  if (!bankLoading) {
+    bankLoading = call('bank_details', {})
+      .then(function (data) {
+        state.bank = data;
+        state.bankFailed = false;
+      })
+      .catch(function (err) {
+        if (!fatal(err)) state.bankFailed = true;
+      })
+      .then(function () { bankLoading = null; });
+  }
+  bankLoading.then(then);
+}
+
+// Under "Paid by" on the walk-up and edit sheets: with Bank transfer
+// picked, the account to read out at the window, so the warden does not
+// have to leave the sheet for the Site info tab. Hidden for anything else.
+// prefix is 'ad-sell' or 'ad-edit'; site gives the reference.
+export function renderPayBank(prefix, method, site) {
+  var box = el(prefix + '-bank');
+  if (!box) return;
+  if (method !== 'bank_transfer') { hide(box); return; }
+  show(box);
+  var bank = state.bank;
+  var list = el(prefix + '-bank-list');
+  var empty = el(prefix + '-bank-empty');
+  if (!(bank && bank.account_name && bank.account_number)) {
+    hide(list);
+    text(empty, state.bankFailed ? 'Could not load the bank details. Pick Bank transfer again.'
+      : bank ? 'Bank details are not set up yet. Ask Andrew.'
+      : 'Loading…');
+    show(empty);
+    if (!bank) {
       state.bankFailed = false;
-      renderInfo();
-    })
-    .catch(function (err) {
-      if (fatal(err)) return;
-      state.bankFailed = true;
-      renderInfo();
-    });
+      loadBank(function () {
+        var pay = el(prefix + '-payment');
+        if (pay && pay.value === 'bank_transfer') renderPayBank(prefix, pay.value, site);
+      });
+    }
+    return;
+  }
+  hide(empty);
+  text(el(prefix + '-bank-name'), bank.account_name);
+  text(el(prefix + '-bank-number'), bank.account_number);
+  text(el(prefix + '-bank-reference'), bankReference(site) || '—');
+  show(list);
 }
 
 // What the driver types into the reference field: the location, which is
@@ -146,23 +188,6 @@ export function renderInfo() {
       (multiSite() ? ' — change site at the top' : '')
     : 'No site selling tonight.');
   text(el('ad-info-address'), site ? (site.address || site.name) : '');
-
-  var maps = el('ad-info-maps');
-  maps.innerHTML = '';
-  if (site) {
-    var to = site.lat != null && site.lng != null
-      ? site.lat + ',' + site.lng
-      : (site.address || site.name);
-    var google = make('a', '', 'Google Maps');
-    google.href = 'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(to);
-    var apple = make('a', '', 'Apple Maps');
-    apple.href = 'https://maps.apple.com/?daddr=' + encodeURIComponent(to);
-    [google, apple].forEach(function (a) {
-      a.target = '_blank';
-      a.rel = 'noopener';
-      maps.appendChild(a);
-    });
-  }
 
   var bank = state.bank;
   var empty = el('ad-info-bank-empty');
