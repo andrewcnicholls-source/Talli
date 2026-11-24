@@ -174,6 +174,8 @@ export const OPERATOR_ONLY = new Set([
   // Who may work the gate (plan B8). A warden changing wardens, their own
   // areas included, would undo the whole scope check.
   'staff_list', 'invite_warden', 'set_warden_block', 'set_warden_active',
+  // Reviews carry customers' names and contact details.
+  'reviews',
 ])
 
 export const denied = (c: Caller | Denied): c is Denied =>

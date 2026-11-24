@@ -2975,3 +2975,62 @@ body.ad-guide-open { overflow: hidden; }
 .ad-edit-status.is-on { background: var(--blue-tint); }
 .ad-edit-status-text { font-weight: 500; color: var(--blue-deep); }
 .ad-edit-status .ad-tick { width: auto; min-width: 132px; padding: 0 14px; }
+
+/* ---------- Rate us (homepage, docs/plans/reviews-and-contact.md) ---------- */
+.rate { border-top: 1px solid var(--line); padding-top: 40px; }
+.rate-intro { margin: 0 0 22px; color: var(--grey); }
+.rate-form { max-width: 620px; }
+.rate-form fieldset { border: 0; padding: 0; margin: 0 0 18px; min-width: 0; }
+.rate-form legend {
+  font-size: 0.8rem; letter-spacing: 0.09em; text-transform: uppercase;
+  color: var(--grey); margin-bottom: 7px;
+}
+.rate-form .bk-field textarea,
+.rate-form .bk-field select {
+  width: 100%; font-family: var(--body); font-size: 1rem; font-weight: 300;
+  color: var(--ink); background: var(--white);
+  border: 1px solid var(--line); border-radius: 3px; padding: 13px 14px;
+}
+.rate-form .bk-field textarea { resize: vertical; min-height: 96px; }
+.rate-form .bk-field textarea:focus,
+.rate-form .bk-field select:focus {
+  outline: none; border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(43, 76, 126, 0.12);
+}
+
+/* Five radios drawn as stars. The input stays in the page, visually
+   hidden, so the keyboard and screen readers work as for any radio. */
+.rate-stars { display: flex; gap: 4px; }
+.rate-stars legend { width: 100%; }
+.rate-stars input, .rate-hp, .rate-sr {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; border: 0; padding: 0; margin: -1px;
+}
+.rate-stars label {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 48px; height: 48px; cursor: pointer;
+  font-size: 2.1rem; line-height: 1; color: var(--line);
+  transition: color 0.12s;
+}
+.rate-stars label.is-on { color: #C8932B; }
+.rate-stars input:focus-visible + label { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 4px; }
+
+.rate-booked { margin: 0 0 18px; font-size: 0.95rem; color: var(--grey); }
+.rate-thumbs { display: flex; flex-wrap: wrap; gap: 4px 32px; }
+.rate-thumb label { display: inline-flex; align-items: center; gap: 6px; margin-right: 18px; min-height: 44px; cursor: pointer; }
+.rate-thumb input { width: 18px; height: 18px; accent-color: var(--blue); }
+
+.rate-done { max-width: 620px; }
+.rate-done h3 { margin-bottom: 8px; }
+.rate-done p { margin-bottom: 6px; }
+.cf-rate { margin-top: 22px; color: var(--grey); }
+
+/* Gate screen: Reviews, on the Insights tab. */
+.ad-reviews { list-style: none; margin: 0 0 24px; padding: 0; }
+.ad-review { padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.ad-review:last-child { border-bottom: none; }
+.ad-review-head { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+.ad-review-stars { color: #C8932B; letter-spacing: 0.05em; }
+.ad-review-when { font-size: 0.82rem; color: var(--grey); }
+.ad-review-text { margin: 6px 0 0; white-space: pre-line; }
+.ad-review-meta, .ad-review-who { margin: 4px 0 0; font-size: 0.84rem; color: var(--grey); }

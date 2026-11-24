@@ -44,6 +44,7 @@ function renderInsightOptions() {
 }
 
 export function openInsights() {
+  loadReviews();
   renderInsightOptions();
   if (!state.insightId) {
     state.insight = null;
@@ -172,4 +173,74 @@ export function renderInsight() {
   if (s.cash_due_cents) loose.push(['Still to collect', money(s.cash_due_cents), true]);
   if (noShows) loose.push(['Paid, never ticked in', cars(noShows), false]);
   if (loose.length) moneyRows(insightSection(wrap, 'Loose ends'), loose);
+}
+
+/* ------------------------------------------------------------ reviews */
+
+// What customers said, from the rating form on the homepage
+// (docs/plans/reviews-and-contact.md). Every review, whichever night is
+// picked above: most come from the homepage and say no night. Loaded each
+// time the tab opens, so a review sent while it was shut is there.
+export function loadReviews() {
+  var wrap = el('ad-reviews');
+  if (!wrap) return;
+  wrap.setAttribute('aria-busy', 'true');
+  return call('reviews', {})
+    .then(function (data) { renderReviews(data); })
+    .catch(function (err) { toast(err.message, 'bad'); })
+    .finally(function () { wrap.removeAttribute('aria-busy'); });
+}
+
+function starsText(n) {
+  var whole = Math.round(Number(n) || 0);
+  return '★★★★★'.slice(0, whole) + '☆☆☆☆☆'.slice(0, 5 - whole);
+}
+
+function thumbs(yes, no, what) {
+  if (!yes && !no) return null;
+  return what + ' ' + yes + ' / ' + (yes + no);
+}
+
+export function renderReviews(data) {
+  var wrap = el('ad-reviews');
+  wrap.innerHTML = '';
+  wrap.appendChild(make('h2', 'ad-section', 'Reviews'));
+  var overall = (data && data.overall) || { count: 0 };
+  if (!overall.count) {
+    wrap.appendChild(make('p', 'ad-empty', 'No reviews yet. The form is at the bottom of the homepage.'));
+    return;
+  }
+  wrap.appendChild(make('p', 'ad-section-note',
+    overall.average + ' average from ' + overall.count +
+    (overall.count === 1 ? ' review' : ' reviews') + '. Not shown anywhere public.'));
+
+  // Each site's own average, and the two thumbs about the site itself.
+  var box = make('div', 'ad-money');
+  wrap.appendChild(box);
+  moneyRows(box, (data.sites || []).map(function (s) {
+    var notes = [s.count + (s.count === 1 ? ' review' : ' reviews'),
+      thumbs(s.find_yes, s.find_no, 'easy to find'),
+      thumbs(s.leave_yes, s.leave_no, 'easy to leave')].filter(Boolean);
+    return [s.label, s.average + ' ' + starsText(s.average), false, notes.join(' · ')];
+  }));
+
+  // The latest, newest first, with whatever they told us.
+  var list = make('ul', 'ad-reviews');
+  (data.latest || []).forEach(function (r) {
+    var li = make('li', 'ad-review');
+    var head = make('div', 'ad-review-head');
+    head.appendChild(make('span', 'ad-review-stars', starsText(r.rating)));
+    head.appendChild(make('span', 'ad-review-when', asDate(r.created_at)));
+    li.appendChild(head);
+    if (r.comment) li.appendChild(make('p', 'ad-review-text', r.comment));
+    var about = [r.site || 'Site not said', r.event,
+      r.easy_to_find === false ? 'hard to find' : null,
+      r.easy_to_leave === false ? 'hard to get out' : null,
+      r.source === 'booking' ? 'from a booking' : null].filter(Boolean);
+    li.appendChild(make('p', 'ad-review-meta', about.join(' · ')));
+    var who = [r.name, r.contact].filter(Boolean).join(' · ');
+    if (who) li.appendChild(make('p', 'ad-review-who', who));
+    list.appendChild(li);
+  });
+  wrap.appendChild(list);
 }

@@ -66,6 +66,82 @@
   </div>
 </main>
 
+<!-- Rate us (docs/plans/reviews-and-contact.md). Opened with ?s=<checkout
+     session> from a booking, the review is tied to that booking and the
+     site list is not asked: assets/rate-us.js. Nothing here is published;
+     it goes to Andrew, on the gate screen's Insights tab. -->
+<section class="wrap tight rate" id="rate" aria-labelledby="rate-title">
+  <div class="section-label">After the game</div>
+  <h2 id="rate-title">How was your night?</h2>
+  <p class="rate-intro">Tell us what worked and what didn&rsquo;t. Every one of these gets read.</p>
+
+  <form id="rate-form" class="rate-form" novalidate>
+    <fieldset class="rate-stars" id="rate-stars">
+      <legend>Your rating</legend>
+      <input type="radio" name="rating" id="rate-1" value="1"><label for="rate-1" title="1 star"><span class="rate-star" aria-hidden="true">&#9733;</span><span class="rate-sr">1 star</span></label>
+      <input type="radio" name="rating" id="rate-2" value="2"><label for="rate-2" title="2 stars"><span class="rate-star" aria-hidden="true">&#9733;</span><span class="rate-sr">2 stars</span></label>
+      <input type="radio" name="rating" id="rate-3" value="3"><label for="rate-3" title="3 stars"><span class="rate-star" aria-hidden="true">&#9733;</span><span class="rate-sr">3 stars</span></label>
+      <input type="radio" name="rating" id="rate-4" value="4"><label for="rate-4" title="4 stars"><span class="rate-star" aria-hidden="true">&#9733;</span><span class="rate-sr">4 stars</span></label>
+      <input type="radio" name="rating" id="rate-5" value="5"><label for="rate-5" title="5 stars"><span class="rate-star" aria-hidden="true">&#9733;</span><span class="rate-sr">5 stars</span></label>
+    </fieldset>
+
+    <div class="bk-field">
+      <label for="rate-comment">Comments <span class="bk-optional">optional</span></label>
+      <textarea id="rate-comment" name="comment" rows="4" maxlength="2000"></textarea>
+    </div>
+
+    <div class="bk-field" id="rate-site-field">
+      <label for="rate-site">Where did you park? <span class="bk-optional">optional</span></label>
+      <select id="rate-site" name="property_id">
+        <option value="">Not sure / didn&rsquo;t park with us</option>
+      </select>
+    </div>
+    <p class="rate-booked" id="rate-booked" hidden>This review goes with your booking, so we know where you parked.</p>
+
+    <div class="rate-thumbs" id="rate-thumbs" hidden>
+      <fieldset class="rate-thumb">
+        <legend>Easy to find?</legend>
+        <label><input type="radio" name="easy_to_find" value="yes"> Yes</label>
+        <label><input type="radio" name="easy_to_find" value="no"> No</label>
+      </fieldset>
+      <fieldset class="rate-thumb">
+        <legend>Easy to get out?</legend>
+        <label><input type="radio" name="easy_to_leave" value="yes"> Yes</label>
+        <label><input type="radio" name="easy_to_leave" value="no"> No</label>
+      </fieldset>
+    </div>
+
+    <div class="bk-field-row">
+      <div class="bk-field">
+        <label for="rate-name">Name <span class="bk-optional">optional</span></label>
+        <input type="text" id="rate-name" name="name" autocomplete="name" maxlength="120">
+      </div>
+      <div class="bk-field">
+        <label for="rate-contact">Email or phone <span class="bk-optional">only if you&rsquo;d like a reply</span></label>
+        <input type="text" id="rate-contact" name="contact" autocomplete="email" maxlength="200">
+      </div>
+    </div>
+
+    <!-- The honeypot. Hidden from people and from screen readers; a bot
+         that fills it in is thanked and nothing is kept. -->
+    <div class="rate-hp" aria-hidden="true">
+      <label for="rate-website">Website</label>
+      <input type="text" id="rate-website" name="website" tabindex="-1" autocomplete="off">
+    </div>
+
+    <p class="bk-error" id="rate-error" role="alert" hidden></p>
+    <button type="submit" class="btn btn-primary" id="rate-submit">Send</button>
+    <p class="bk-fineprint">This comes to us, not to a public page. We only use your contact details to reply.</p>
+  </form>
+
+  <div class="rate-done" id="rate-done" role="status" hidden>
+    <h3>Thank you</h3>
+    <p id="rate-done-text">We&rsquo;ve got it.</p>
+    <p>If you have a minute, a Google review helps more people find us.</p>
+    <div class="btn-row"><a class="btn btn-outline" href="review.html">Review us on Google</a></div>
+  </div>
+</section>
+
 <footer>
   <div class="footer-inner">
     <div>
@@ -81,5 +157,6 @@
   </div>
 </footer>
 
+<script src="assets/rate-us.js"></script>
 </body>
 </html>
