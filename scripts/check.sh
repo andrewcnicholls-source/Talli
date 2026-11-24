@@ -1472,6 +1472,7 @@ run_stack_suites() {
   local envs
   envs=$("$SB" status --workdir . -o env 2>/dev/null)
   eval "$(printf '%s\n' "$envs" | grep -E '^(API_URL|ANON_KEY|SERVICE_ROLE_KEY|FUNCTIONS_URL|JWT_SECRET)=' | sed 's/^/export /')"
+  : "${FUNCTIONS_URL:=$API_URL/functions/v1}"  # newer CLIs leave it out of `status -o env`; same default as tests/lib/stack.js
 
   if out=$("$SB" test db --workdir . 2>&1); then
     pass "database suite ($(printf '%s' "$out" | sed -n 's/^Files=[0-9]*, Tests=\([0-9]*\).*/\1/p') assertions)"
