@@ -81,6 +81,39 @@ test('a warden sells a walk-up: cash by default, no tap to pay', async ({ page }
   expect([FIX.gribAnchor, FIX.gribNeighbour]).toContain(row.property_id);
 });
 
+test('picking bank transfer on a walk-up shows the account to pay into', async ({ page }) => {
+  const rego = plate('GB');
+  made.push(rego);
+  await signedIn(page, 'wardenGrib');
+  await openNight(page);
+
+  await page.click('#ad-sell-open');
+  await expect(page.locator('#ad-sell-bank')).toBeHidden();
+
+  await page.selectOption('#ad-sell-payment', 'bank_transfer');
+  await expect(page.locator('#ad-sell-bank')).toBeVisible();
+  await expect(page.locator('#ad-sell-bank-name')).toHaveText('TEST Talli');
+  await expect(page.locator('#ad-sell-bank-number')).toHaveText('00-0000-0000000-00');
+  await expect(page.locator('#ad-sell-bank-reference')).not.toHaveText(/^(—)?$/);
+
+  await page.selectOption('#ad-sell-payment', 'cash');
+  await expect(page.locator('#ad-sell-bank')).toBeHidden();
+
+  // Sold as a transfer, then opened again: the edit sheet shows it too.
+  await page.selectOption('#ad-sell-payment', 'bank_transfer');
+  await page.fill('#ad-sell-rego', rego);
+  await page.click('#ad-sell-submit');
+  await expect(page.locator('#ad-sell')).toBeHidden();
+  const [row] = await rest(`booking?vehicle_rego=eq.${rego}&select=payment_method`);
+  expect(row.payment_method).toBe('bank_transfer');
+
+  await page.getByRole('button', { name: 'Edit ' + rego }).click();
+  await expect(page.locator('#ad-edit')).toBeVisible();
+  await expect(page.locator('#ad-edit-bank-number')).toHaveText('00-0000-0000000-00');
+  await page.selectOption('#ad-edit-payment', 'cash');
+  await expect(page.locator('#ad-edit-bank')).toBeHidden();
+});
+
 test('the operator sees every block, and the operator tabs', async ({ page }) => {
   await signedIn(page, 'operator');
   await openNight(page);
