@@ -1245,6 +1245,34 @@ else
 fi
 
 # ---------------------------------------------------------------------
+head "Reviews are written through submit-review and read by the operator only"
+# ---------------------------------------------------------------------
+# A review can hold a customer's name, email or phone. The homepage form
+# writes through the submit-review edge function; only gate-ops, for the
+# operator, reads them back. Nothing may open the table to the anon key.
+REV_MIG="$(grep -l 'create table if not exists review (' supabase/migrations/*.sql | sed -n 1p)"
+if [ -z "$REV_MIG" ]; then
+  fail "no migration creates the review table"
+else
+  if grep -q 'revoke all on review from public, anon, authenticated' "$REV_MIG" &&
+     grep -q 'alter table review enable row level security' "$REV_MIG"; then
+    pass "review has row level security and no grant to anon or authenticated"
+  else
+    fail "review may be readable with the anon key"
+  fi
+  if grep -lE '(grant[^;]*on (table )?(public\.)?review [^;]*to[^;]*(anon|authenticated)|create policy[^;]*on (public\.)?review )' supabase/migrations/*.sql >/dev/null 2>&1; then
+    fail "a migration grants or opens review to anon or authenticated"
+  else
+    pass "no migration opens review to anon or authenticated"
+  fi
+fi
+if grep -q "^  'reviews',$" supabase/functions/gate-ops/auth.ts; then
+  pass "only the operator reads reviews on the gate screen"
+else
+  fail "the gate-ops reviews action is not OPERATOR_ONLY"
+fi
+
+# ---------------------------------------------------------------------
 head "Bank details reach a signed-in host or warden, and nobody else"
 # ---------------------------------------------------------------------
 # The account walk-ups pay into is shown on the warden's Site info tab.

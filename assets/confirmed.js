@@ -144,6 +144,13 @@
       directions.href = '/go/' + encodeURIComponent(go);
     }
 
+    // The rating form, tied to this booking: the server takes the site
+    // the car was actually at, and the night, from the session.
+    var rate = el('cf-rate');
+    if (rate && sessionId()) {
+      rate.href = 'index.html?s=' + encodeURIComponent(sessionId()) + '#rate';
+    }
+
     var come = el('cf-come-to');
     if (come && whereText(b)) {
       come.textContent = 'Come to ' + whereText(b) + ' — a Talli warden will meet you and show you where to park.';
