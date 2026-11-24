@@ -12,8 +12,11 @@
 //      double-processed booking is a double-sold bay.
 // =====================================================================
 
-import Stripe from 'https://esm.sh/stripe@18?target=denonext'
-import { createClient } from 'jsr:@supabase/supabase-js@2'
+import Stripe from 'https://esm.sh/stripe@18.5.0?target=denonext'
+import { createClient } from 'jsr:@supabase/supabase-js@2.119.0'
+import { annotate, logger, serve } from '../_shared/log.ts'
+
+const log = logger('stripe-webhook')
 
 // Built lazily so a missing secret returns a readable error instead of
 // crashing the whole function at module load.
@@ -41,11 +44,15 @@ const db = createClient(
 // up and returns an error-shaped type instead of a row.
 type Row = Record<string, any>
 
-const ok = (note: string) =>
-  new Response(JSON.stringify({ received: true, note }), {
+// The note is what happened to the event; it goes on the request's summary
+// line as well as back to Stripe, so the logs read as a ledger of deliveries.
+const ok = (note: string) => {
+  annotate({ outcome: note })
+  return new Response(JSON.stringify({ received: true, note }), {
     status: 200,
     headers: { 'Content-Type': 'application/json' },
   })
+}
 
 async function bookingIdFrom(obj: Record<string, any>): Promise<string | null> {
   const direct = obj?.metadata?.booking_id
@@ -60,7 +67,10 @@ async function bookingIdFrom(obj: Record<string, any>): Promise<string | null> {
     try {
       const intent = await getStripe().paymentIntents.retrieve(pi)
       if (intent.metadata?.booking_id) return String(intent.metadata.booking_id)
-    } catch { /* fall through */ }
+    } catch (err) {
+      // Falls through to "no booking", which the caller answers.
+      log.warn('payment intent lookup failed', { payment_intent: pi, err })
+    }
   }
   return null
 }
@@ -117,7 +127,7 @@ async function confirmGateQr(bookingId: string, obj: Record<string, any>) {
       `CARD PAID BY QR BUT THE BOOKING WAS NOT OWING (${result}) — session ${obj.id}, ` +
       `${((obj.amount_total ?? 0) / 100).toFixed(2)} ${String(obj.currency ?? '').toUpperCase()}. ` +
       `Check how they paid and refund one payment.`)
-    console.error('gate QR paid but not owing', bookingId, result)
+    log.error('gate QR paid but not owing', { booking: bookingId, result, session: obj.id })
     return result
   }
   // What Stripe took against what the booking now says it was owed.
@@ -173,7 +183,7 @@ const esc = (s: unknown) =>
 async function sendConfirmationEmail(bookingId: string): Promise<void> {
   const key = Deno.env.get('RESEND_API_KEY')
   if (!key) {
-    console.log('no RESEND_API_KEY on this project; not emailing', bookingId)
+    log.info('no RESEND_API_KEY on this project; not emailing', { booking: bookingId })
     return
   }
 
@@ -363,18 +373,18 @@ async function sendConfirmationEmail(bookingId: string): Promise<void> {
       const detail = (await res.text()).slice(0, 300)
       await unclaim()
       await note(bookingId, `Confirmation email FAILED (${res.status}): ${detail}`)
-      console.error('confirmation email failed', bookingId, res.status, detail)
+      log.error('confirmation email failed', { booking: bookingId, status: res.status, detail })
       return
     }
 
-    console.log('confirmation email sent', bookingId)
+    log.info('confirmation email sent', { booking: bookingId })
   } catch (err) {
     // Reaching here means the booking is paid and the customer has not been
     // told. That is a thing a human has to see, so it goes on the booking
     // where the gate screen shows it, not only into the logs.
     await unclaim()
     await note(bookingId, `Confirmation email FAILED: ${(err as Error).message}`)
-    console.error('confirmation email threw', bookingId, err)
+    log.error('confirmation email threw', { booking: bookingId, err })
   }
 }
 
@@ -386,13 +396,13 @@ async function note(bookingId: string, text: string) {
     .eq('id', bookingId)
 }
 
-Deno.serve(async (req) => {
+serve('stripe-webhook', async (req) => {
   const signature = req.headers.get('Stripe-Signature')
   if (!signature) return new Response('Missing signature', { status: 400 })
 
   const secret = Deno.env.get('STRIPE_WEBHOOK_SIGNING_SECRET')
   if (!secret) {
-    console.error('STRIPE_WEBHOOK_SIGNING_SECRET is not set')
+    log.error('STRIPE_WEBHOOK_SIGNING_SECRET is not set')
     return new Response('Webhook not configured', { status: 503 })
   }
 
@@ -400,7 +410,7 @@ Deno.serve(async (req) => {
   try {
     stripe = getStripe()
   } catch (err) {
-    console.error(err)
+    log.error('no Stripe key', { err })
     return new Response('Payments not configured', { status: 503 })
   }
 
@@ -416,9 +426,11 @@ Deno.serve(async (req) => {
       cryptoProvider,
     )
   } catch (err) {
-    console.error('signature verification failed', err)
+    log.warn('signature verification failed', { err })
     return new Response('Invalid signature', { status: 400 })
   }
+
+  annotate({ stripe_event: event.id, type: event.type })
 
   // Idempotency gate. A conflict means we have already handled this delivery.
   const { error: seenErr } = await db
@@ -426,7 +438,7 @@ Deno.serve(async (req) => {
     .insert({ stripe_event_id: event.id, type: event.type })
   if (seenErr) {
     if (seenErr.code === '23505') return ok('duplicate delivery, ignored')
-    console.error('idempotency insert failed', seenErr)
+    log.error('idempotency insert failed', { err: seenErr })
     // Fail loudly so Stripe retries rather than us silently skipping work.
     return new Response('Could not record event', { status: 500 })
   }
@@ -473,7 +485,7 @@ Deno.serve(async (req) => {
             `PAID BUT NOT ALLOCATED — status was "${after?.status}" when payment ` +
             `landed. Refund or place manually.`,
           )
-          console.error('PAID BUT NOT ALLOCATED', bookingId, after?.status)
+          log.error('PAID BUT NOT ALLOCATED', { booking: bookingId, status: after?.status })
           return ok('paid but booking was not holdable — flagged')
         }
         // Last, and never able to fail this handler: see above.
@@ -557,7 +569,7 @@ Deno.serve(async (req) => {
           `${String(obj.currency).toUpperCase()}, reason "${obj.reason}". ` +
           `Respond in the Stripe Dashboard. NZ$25 fee applies.`,
         )
-        console.error('dispute opened', bookingId, obj.reason)
+        log.error('dispute opened', { booking: bookingId, reason: obj.reason })
         return ok('dispute flagged on the booking')
       }
 
@@ -565,7 +577,7 @@ Deno.serve(async (req) => {
         return ok(`ignored ${event.type}`)
     }
   } catch (err) {
-    console.error('handler failed', event.type, err)
+    log.error('handler failed', { err })
     // Let Stripe retry. The idempotency row is already written, so remove it
     // first or the retry would be treated as a duplicate.
     await db.from('processed_webhook_event')

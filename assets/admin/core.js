@@ -167,6 +167,12 @@ export function call(action, params) {
   return post(FN, body);
 }
 
+// What a request was, for a report: the gate-ops action, or the function.
+function actionOf(url, body) {
+  var fn = String(url).split('/functions/v1/')[1] || String(url);
+  return body && body.action ? fn + ':' + body.action : fn;
+}
+
 export function post(url, body) {
   return AUTH.accessToken().then(function (token) {
     // No token, or a refresh that came back refused. The server would
@@ -188,10 +194,18 @@ export function post(url, body) {
         Authorization: 'Bearer ' + token,
       },
       body: JSON.stringify(body),
+    }).catch(function (err) {
+      // Never got there: no signal in the driveway, or the function is
+      // down. Reported (assets/talli-errors.js), then passed on as before.
+      if (window.TalliErrors) window.TalliErrors.failed(actionOf(url, body), 0, null, err);
+      throw err;
     });
   }).then(function (res) {
     return res.json().then(function (data) {
       if (!res.ok) {
+        // A 5xx is reported with the server's ref, so the log line from
+        // the phone and the one from gate-ops can be read side by side.
+        if (window.TalliErrors) window.TalliErrors.failed(actionOf(url, body), res.status, data);
         var err = new Error(data.error || ('Request failed (' + res.status + ')'));
         err.status = res.status;
         err.code = data.code;

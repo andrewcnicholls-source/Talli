@@ -251,10 +251,10 @@ head "Unit tests"
 # on a matchday, or a session outlives its welcome.
 if command -v node >/dev/null 2>&1; then
   if out=$(node --test 'tests/units/*.test.js' 2>&1); then
-    pass "unit tests ($(printf '%s' "$out" | sed -n 's/^# pass //p') passed)"
+    pass "unit tests ($(printf '%s' "$out" | sed -nE 's/^(# |ℹ )pass //p') passed)"
   else
     fail "unit tests failed"
-    printf '%s\n' "$out" | grep -E '^not ok|^# (pass|fail)' | sed 's/^/      /'
+    printf '%s\n' "$out" | grep -E '^not ok|^(# |ℹ )(pass|fail)|^✖' | sed 's/^/      /'
   fi
 else
   skip "node not installed — unit tests NOT run"
@@ -405,10 +405,12 @@ fi
 # holds the actions, and index.ts is the one door between them. The split
 # is only as safe as that door, so hold it to three things.
 GO=supabase/functions/gate-ops
-# 1. One entry point. A handler file with its own Deno.serve, or one that
-#    is handed the raw request, could answer before anyone is checked.
-others=$(grep -l "Deno.serve(" $(find "$GO" -name '*.ts' ! -path "$GO/index.ts") 2>/dev/null || true)
-if [ "$(grep -c "^Deno.serve(" "$GO/index.ts")" = "1" ] && [ -z "$others" ] \
+# 1. One entry point. A handler file with its own serve() or Deno.serve,
+#    or one that is handed the raw request, could answer before anyone is
+#    checked. (index.ts starts through the shared serve(), which logs the
+#    request; the logging rules below forbid Deno.serve everywhere else.)
+others=$(grep -lE "\bserve\(|Deno\.serve\(" $(find "$GO" -name '*.ts' ! -path "$GO/index.ts") 2>/dev/null || true)
+if [ "$(grep -cE "^serve\('gate-ops'|^Deno\.serve\(" "$GO/index.ts")" = "1" ] && [ -z "$others" ] \
    && ! grep -qE "\breq\b|Request" "$GO"/handlers/*.ts; then
   pass "gate-ops: index.ts is the only entry point, and no handler sees the request"
 else
@@ -908,6 +910,59 @@ if [ -z "$svc" ]; then
 else
   fail "possible service-role key committed"
   printf '      %s\n' "$svc"
+fi
+
+# ---------------------------------------------------------------------
+head "Errors are logged, with a ref, and never shown raw"
+# ---------------------------------------------------------------------
+# Every edge function logs through supabase/functions/_shared/log.ts —
+# JSON lines, keys and emails scrubbed, each tagged with the ref the
+# caller is shown — and every page reports its own errors through
+# assets/talli-errors.js. The rules, and why each exists, are at the top
+# of scripts/check-logging.js. A new function, a new catch or a new page
+# that skips them fails here, so good logging is part of every change
+# rather than a clean-up after one.
+if command -v node >/dev/null 2>&1; then
+  out=$(node scripts/check-logging.js 2>&1)
+  status=$?
+  while IFS='|' read -r kind text; do
+    case "$kind" in
+      ok)     pass "$text" ;;
+      fail)   fail "$text" ;;
+      detail) printf '      %s\n' "$text" ;;
+    esac
+  done <<< "$out"
+  # A crash prints no rule lines at all, and must not read as a pass.
+  if [ "$status" -ne 0 ] && ! printf '%s\n' "$out" | grep -q '^fail|'; then
+    fail "scripts/check-logging.js did not run"
+    printf '%s\n' "$out" | tail -10 | sed 's/^/      /'
+  fi
+else
+  skip "node not installed — the logging rules are NOT checked"
+fi
+
+# ---------------------------------------------------------------------
+head "Dependencies have no known vulnerabilities"
+# ---------------------------------------------------------------------
+# The test tools in tests/ are the only npm dependencies; nothing there is
+# served. The edge functions' imports are URLs, pinned to exact versions
+# by the rule above, which npm audit cannot see — upgrade those by hand
+# when Stripe or supabase-js announce a fix.
+if [ ! -f tests/package-lock.json ]; then
+  skip "no tests/package-lock.json — nothing to audit"
+elif ! command -v npm >/dev/null 2>&1; then
+  skip "npm not installed — dependencies NOT audited"
+elif out=$(npm audit --prefix tests --audit-level=high 2>&1); then
+  pass "npm audit: no high or critical advisories in tests/"
+elif printf '%s' "$out" | grep -qiE "ENOTFOUND|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|audit endpoint returned an error"; then
+  if [ "${CI:-}" = "true" ]; then
+    fail "npm audit could not reach the registry"
+  else
+    skip "npm audit cannot reach the registry from here — dependencies NOT audited"
+  fi
+else
+  fail "npm audit found high or critical advisories in tests/"
+  printf '%s\n' "$out" | grep -E "^[a-z@].*|Severity|fix available" | sed -n '1,20p' | sed 's/^/      /'
 fi
 
 # ---------------------------------------------------------------------
@@ -1465,6 +1520,44 @@ run_stack_suites() {
     return
   fi
 
+  # One stack per machine, and agents run in sibling worktrees (CLAUDE.md).
+  # Two runs at once reset each other's database mid-suite, and a stack
+  # left running by another worktree serves THAT worktree's edge functions
+  # — its suite passes or fails against code this branch does not have.
+  # So: take the machine's stack lock, and restart the stack if it is
+  # mounted on somebody else's supabase/functions.
+  STACK_LOCK="${TMPDIR:-${TMP:-/tmp}}/talli-local-stack.lock"
+  local waited=0
+  while ! mkdir "$STACK_LOCK" 2>/dev/null; do
+    holder=$(cat "$STACK_LOCK/pid" 2>/dev/null || true)
+    if [ -n "$holder" ] && ! kill -0 "$holder" 2>/dev/null; then
+      rm -rf "$STACK_LOCK"
+      continue
+    fi
+    if [ "$waited" -eq 0 ]; then
+      printf '      another checkout is using the local stack (%s); waiting\n' \
+        "$(cat "$STACK_LOCK/root" 2>/dev/null || echo unknown)"
+    fi
+    waited=1
+    sleep 10
+  done
+  echo $$ > "$STACK_LOCK/pid"
+  echo "$ROOT" > "$STACK_LOCK/root"
+  trap 'rm -rf "$STACK_LOCK"' EXIT
+
+  if "$SB" status --workdir . >/dev/null 2>&1; then
+    # Docker Desktop on Windows reports the host path without its drive
+    # letter (/Users/…); Git Bash spells ROOT with one (/c/Users/…).
+    serving=$(docker inspect supabase_edge_runtime_talli \
+      --format '{{range .Mounts}}{{.Destination}}{{"\n"}}{{end}}' 2>/dev/null \
+      | grep '/supabase/functions$' | sed -n 1p)
+    want=$(printf '%s/supabase/functions' "$ROOT" | sed -E 's#^/[a-zA-Z]/#/#; s#^[A-Za-z]:##')
+    if [ -n "$serving" ] && [ "$serving" != "$want" ]; then
+      printf '      the running stack serves %s; restarting it from this checkout\n' "$serving"
+      "$SB" stop --workdir . >/dev/null 2>&1 || true
+    fi
+  fi
+
   if ! "$SB" status --workdir . >/dev/null 2>&1; then
     printf '      starting the local stack (first run pulls images; minutes)\n'
     if ! out=$("$SB" start --workdir . -x "$SUITES_EXCLUDE" 2>&1); then
@@ -1526,6 +1619,8 @@ run_stack_suites() {
   # And wait for each function to boot, so a cold start is not a failure.
   for fn in supabase/functions/*/; do
     fn=$(basename "$fn")
+    # _shared holds code the functions import; it is not a function.
+    case "$fn" in _*) continue ;; esac
     for _ in $(seq 1 60); do
       code=$(curl -s -o /dev/null -w '%{http_code}' -X OPTIONS "$FUNCTIONS_URL/$fn" \
         -H "apikey: $ANON_KEY" -H "Authorization: Bearer $ANON_KEY")
@@ -1536,7 +1631,7 @@ run_stack_suites() {
   done
 
   if out=$(node --test --test-concurrency=1 'tests/functions/*.test.js' 2>&1); then
-    pass "functions suite ($(printf '%s' "$out" | sed -n 's/^# pass //p') passed)"
+    pass "functions suite ($(printf '%s' "$out" | sed -nE 's/^(# |ℹ )pass //p') passed)"
   else
     fail "functions suite failed"
     printf '%s\n' "$out" | grep -E '^not ok|^# (pass|fail)|AssertionError|code:' | sed -n 1,30p | sed 's/^/      /'

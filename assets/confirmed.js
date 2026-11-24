@@ -235,6 +235,12 @@
           setTimeout(load, POLL_EVERY_MS);
           return;
         }
+        // Someone who has just paid cannot see their booking. Whatever the
+        // status, that is worth a line in the log: it is the worst moment
+        // in the whole flow to be left wondering.
+        if (window.TalliErrors) {
+          window.TalliErrors.report(err, { kind: 'handled', context: 'get-booking: gave up waiting' });
+        }
         problem(err.message);
       });
   }

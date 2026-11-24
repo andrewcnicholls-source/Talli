@@ -11,7 +11,10 @@
 //  returned — no email, no payment identifiers.
 // =====================================================================
 
-import { createClient } from 'jsr:@supabase/supabase-js@2'
+import { createClient } from 'jsr:@supabase/supabase-js@2.119.0'
+import { logger, serve } from '../_shared/log.ts'
+
+const log = logger('get-booking')
 
 const db = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -55,7 +58,7 @@ async function whereToCome(eventId: string, property: Row | null) {
     : { address: own, nearby: false }
 }
 
-Deno.serve(async (req) => {
+serve('get-booking', async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
   if (req.method !== 'POST') return json({ error: 'Use POST' }, 405)
 
@@ -63,6 +66,7 @@ Deno.serve(async (req) => {
   try {
     body = await req.json()
   } catch {
+    // not logged: the 400 is the answer, and the request line records it
     return json({ error: 'Body must be JSON' }, 400)
   }
 
@@ -83,7 +87,7 @@ Deno.serve(async (req) => {
     .maybeSingle()
 
   if (error) {
-    console.error('booking lookup failed', error)
+    log.error('booking lookup failed', { err: error })
     return json({ error: 'Could not look that booking up' }, 500)
   }
   if (!bookingRow) return json({ error: 'No booking found for that session' }, 404)
@@ -135,4 +139,4 @@ Deno.serve(async (req) => {
     // rule as the confirmation email.
     where: await whereToCome(booking.event_id, property as Row | null),
   })
-})
+}, { cors })

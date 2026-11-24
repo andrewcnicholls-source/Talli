@@ -2,7 +2,7 @@
 // info tab shows, and the Sites tab, which is Andrew's alone.
 
 import { type Ctx, type Handler } from '../auth.ts'
-import { db, json, named, pictureFrom, type Row } from '../shared.ts'
+import { db, json, log, named, pictureFrom, type Row } from '../shared.ts'
 
 // The pictures of where to park at a site (plan A4). Public to read; only
 // this function writes, with the service role.
@@ -469,7 +469,7 @@ export const sites: Record<string, Handler> = {
     if (error) throw error
     if (!data?.length) return json({ error: 'That picture is gone.', code: 'NOT_FOUND' }, 404)
     const { error: rmErr } = await db.storage.from(SITE_PICTURE_BUCKET).remove([String(data[0].path)])
-    if (rmErr) console.error('site picture left in the bucket', data[0].path, rmErr)
+    if (rmErr) log.warn('site picture left in the bucket', { path: data[0].path, err: rmErr })
     return json({ ok: true })
   },
 }

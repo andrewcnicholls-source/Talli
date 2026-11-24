@@ -176,12 +176,26 @@
 
   /* ------------------------------------------------------------ transport */
 
+  // A request that broke (5xx) or never arrived goes to the log as well as
+  // to the customer — see assets/talli-errors.js. Guarded, because a page
+  // that failed to load that script must still take a booking.
+  function failed(context, status, data, err) {
+    if (window.TalliErrors) window.TalliErrors.failed(context, status, data, err);
+  }
+
   function read(path) {
+    var what = 'read ' + path.split('?')[0];
     return fetch(REST + path, {
       headers: { apikey: CFG.anonKey, Authorization: 'Bearer ' + CFG.anonKey },
     }).then(function (res) {
-      if (!res.ok) throw new Error('Could not reach the booking system (' + res.status + ')');
+      if (!res.ok) {
+        failed(what, res.status);
+        throw new Error('Could not reach the booking system (' + res.status + ')');
+      }
       return res.json();
+    }, function (err) {
+      failed(what, 0, null, err);
+      throw err;
     });
   }
 
@@ -423,10 +437,13 @@
       }),
     })
       .then(function (res) {
-        return res.json().then(function (d) { return { ok: res.ok, data: d }; });
+        return res.json().then(function (d) { return { ok: res.ok, status: res.status, data: d }; });
       })
       .then(function (result) {
-        if (!result.ok) throw new Error(result.data.error || 'That did not work.');
+        if (!result.ok) {
+          failed('register-interest', result.status, result.data);
+          throw new Error(result.data.error || 'That did not work.');
+        }
         el('bk-interest-form').hidden = true;
         text(el('bk-interest-done'), result.data.already
           ? 'You\u2019re already on the list for this one — we\u2019ll be in touch.'
@@ -1409,11 +1426,13 @@
           return;
         }
 
+        failed('create-checkout', result.status, result.data);
         fail(result.data.error || 'Something went wrong starting checkout.');
         // Availability may have moved under us; refresh so the counts are honest.
         loadNight(state.event.id);
       })
-      .catch(function () {
+      .catch(function (err) {
+        failed('create-checkout', 0, null, err);
         fail('We could not reach the booking system. Check your connection and try again.');
       })
       .finally(function () {

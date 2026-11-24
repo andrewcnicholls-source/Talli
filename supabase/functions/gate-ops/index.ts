@@ -39,11 +39,12 @@
 //   handlers/staff      who may work the gate: inviting wardens (Andrew)
 //   handlers/reviews    what customers said: ratings by site (Andrew)
 //
-// Every action goes through the one Deno.serve below. A handler is only
+// Every action goes through the one serve() below. A handler is only
 // ever called from it, after the caller has been resolved and checked.
 
 import { allowedProperties, type Caller, callerFrom, type Denied, denied, type Handler, LIVE_SCOPED, mayTouchBooking, OPERATOR_ONLY } from './auth.ts'
-import { cors, json, liveEvent } from './shared.ts'
+import { cors, json, liveEvent, log } from './shared.ts'
+import { annotate, serve, unexpected } from '../_shared/log.ts'
 import { arrivals } from './handlers/arrivals.ts'
 import { events } from './handlers/events.ts'
 import { sites } from './handlers/sites.ts'
@@ -53,7 +54,7 @@ import { reviews } from './handlers/reviews.ts'
 
 const handlers: Record<string, Handler> = { ...arrivals, ...events, ...sites, ...settlement, ...staff, ...reviews }
 
-Deno.serve(async (req) => {
+serve('gate-ops', async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
   if (req.method !== 'POST') return json({ error: 'Use POST' }, 405)
 
@@ -66,7 +67,7 @@ Deno.serve(async (req) => {
   try {
     caller = await callerFrom(req)
   } catch (err) {
-    console.error('host lookup failed', err)
+    log.error('host lookup failed', { err })
     return json({ error: 'Could not check who you are. Try again.' }, 503)
   }
   if (denied(caller)) {
@@ -77,11 +78,15 @@ Deno.serve(async (req) => {
   try {
     body = await req.json()
   } catch {
+    // not logged: the 400 is the answer, and the request line records it
     return json({ error: 'Body must be JSON' }, 400)
   }
 
   const action = String(body.action ?? '')
   let eventId = String(body.event_id ?? '')
+  // On the request's summary line, so the logs can say which action failed
+  // or was slow, and whether a warden or the operator asked.
+  annotate({ action, scope: caller.all ? 'all' : 'blocks' })
 
   if (!caller.all && OPERATOR_ONLY.has(action)) {
     return json({ error: 'Only Andrew can change that.', code: 'OPERATOR_ONLY' }, 403)
@@ -127,7 +132,9 @@ Deno.serve(async (req) => {
     // by the catch below rather than escaping it.
     return await handler({ caller, body, eventId, allowed, bookingGuard, live })
   } catch (err) {
-    console.error(action, err)
-    return json({ error: (err as Error).message ?? 'Something went wrong' }, 500)
+    // Never the error's own message: it can be a database or Stripe
+    // internal. The log has it in full; the screen gets the ref.
+    log.error('action failed', { action, err })
+    return json(unexpected(), 500)
   }
-})
+}, { cors })
