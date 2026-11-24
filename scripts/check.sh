@@ -89,7 +89,7 @@ bad = []
 pat = re.compile(r'(?:src|href)\s*=\s*["\']([^"\']+)["\']', re.I)
 for page in sorted(glob.glob('*.html')):
     for ref in pat.findall(open(page, encoding='utf-8').read()):
-        if re.match(r'^(https?:)?//|^(mailto|tel|data|javascript):|^#', ref, re.I):
+        if re.match(r'^(https?:)?//|^(mailto|tel|sms|data|javascript):|^#', ref, re.I):
             continue
         target = ref.split('?')[0].split('#')[0]
         if not target:
@@ -1325,6 +1325,32 @@ if grep -q "^  'reviews',$" supabase/functions/gate-ops/auth.ts; then
   pass "only the operator reads reviews on the gate screen"
 else
   fail "the gate-ops reviews action is not OPERATOR_ONLY"
+fi
+
+# ---------------------------------------------------------------------
+head "Contact messages are written through submit-contact and read by the operator only"
+# ---------------------------------------------------------------------
+# Every contact_message row is someone's email or phone number.
+CM_MIG="$(grep -l 'create table if not exists contact_message (' supabase/migrations/*.sql | sed -n 1p)"
+if [ -z "$CM_MIG" ]; then
+  fail "no migration creates the contact_message table"
+else
+  if grep -q 'revoke all on contact_message from public, anon, authenticated' "$CM_MIG" &&
+     grep -q 'alter table contact_message enable row level security' "$CM_MIG"; then
+    pass "contact_message has row level security and no grant to anon or authenticated"
+  else
+    fail "contact_message may be readable with the anon key"
+  fi
+  if grep -lE '(grant[^;]*on (table )?(public\.)?contact_message [^;]*to[^;]*(anon|authenticated)|create policy[^;]*on (public\.)?contact_message )' supabase/migrations/*.sql >/dev/null 2>&1; then
+    fail "a migration grants or opens contact_message to anon or authenticated"
+  else
+    pass "no migration opens contact_message to anon or authenticated"
+  fi
+fi
+if grep -q "'contact_messages', 'set_contact_handled'," supabase/functions/gate-ops/auth.ts; then
+  pass "only the operator reads and ticks off contact messages"
+else
+  fail "the gate-ops contact actions are not OPERATOR_ONLY"
 fi
 
 # ---------------------------------------------------------------------

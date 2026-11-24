@@ -292,6 +292,9 @@
     <div id="ad-insight"></div>
     <!-- What customers said (docs/plans/reviews-and-contact.md): every
          review, not just the night picked above. Operator only. -->
+    <!-- Messages from the homepage contact form (slice 2). Operator only;
+         emailed to bookings@ too, where the project has a mail key. -->
+    <div id="ad-messages"></div>
     <div id="ad-reviews"></div>
   </section>
 
@@ -627,6 +630,17 @@
     <p class="ad-edit-sub" id="ad-edit-sub"></p>
     <!-- Which site this car is booked into, and where it is if it was moved. -->
     <p class="ad-edit-where" id="ad-edit-where" hidden></p>
+
+    <!-- Reach the driver (docs/plans/reviews-and-contact.md, slice 2):
+         call, text, or a ready-made text with the plate in it. Shown only
+         when the booking has a phone number. Filled by booking-edit.js. -->
+    <div class="ad-reach" id="ad-edit-reach" hidden>
+      <div class="ad-reach-main">
+        <a class="ad-reach-btn" id="ad-reach-call" href="#">Call</a>
+        <a class="ad-reach-btn" id="ad-reach-text" href="#">Text</a>
+      </div>
+      <div class="ad-reach-quick" id="ad-reach-quick"></div>
+    </div>
 
     <!-- In or not, and the one button that changes it either way: the
          wrong car gets ticked when it is busy, and this takes it back. -->

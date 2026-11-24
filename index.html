@@ -143,6 +143,67 @@
   </div>
 </section>
 
+<!-- Contact us (docs/plans/reviews-and-contact.md, slice 2). Two kinds
+     of contact: before the night, where email suits most things; and on
+     the night, where a text is what gets read at a noisy gate. The
+     number is written here so it works without JavaScript;
+     assets/contact-us.js replaces it from TALLI.contact, which is the
+     one place to change it. -->
+<section class="wrap tight contact" id="contact" aria-labelledby="contact-title">
+  <div class="section-label">Get in touch</div>
+  <h2 id="contact-title">Contact us</h2>
+
+  <div class="contact-ways">
+    <div class="contact-way">
+      <h3>Before the night</h3>
+      <p>Email is best for most things: changing a plate, a question about your booking, a group.</p>
+      <p><a href="mailto:bookings@talli.co.nz" data-talli-email>bookings@talli.co.nz</a></p>
+      <p>Quick question? Call or text <a href="tel:+6421347028" data-talli-phone>021 347 028</a>.</p>
+    </div>
+    <div class="contact-way contact-way-night">
+      <h3>On the night</h3>
+      <p>Running late, can&rsquo;t find us, or blocked in? Text Andrew. A text gets read at the gate when a call can&rsquo;t be heard. Include your plate.</p>
+      <div class="btn-row"><a class="btn btn-primary" href="sms:+6421347028" data-talli-sms>Text Andrew</a></div>
+    </div>
+  </div>
+
+  <form id="contact-form" class="rate-form contact-form" novalidate>
+    <h3>Send us a message</h3>
+    <div class="bk-field">
+      <label for="contact-message">Message</label>
+      <textarea id="contact-message" name="message" rows="4" maxlength="4000" required></textarea>
+    </div>
+    <div class="bk-field">
+      <label for="contact-name">Name <span class="bk-optional">optional</span></label>
+      <input type="text" id="contact-name" name="contactname" autocomplete="name" maxlength="120">
+    </div>
+    <div class="bk-field-row">
+      <div class="bk-field">
+        <label for="contact-email">Email</label>
+        <input type="email" id="contact-email" name="contactemail" autocomplete="email" maxlength="254">
+      </div>
+      <div class="bk-field">
+        <label for="contact-phone">Phone <span class="bk-optional">optional if you give an email</span></label>
+        <input type="tel" id="contact-phone" name="contactphone" autocomplete="tel" maxlength="40">
+      </div>
+    </div>
+
+    <div class="rate-hp" aria-hidden="true">
+      <label for="contact-website">Website</label>
+      <input type="text" id="contact-website" name="website" tabindex="-1" autocomplete="off">
+    </div>
+
+    <p class="bk-error" id="contact-error" role="alert" hidden></p>
+    <button type="submit" class="btn btn-primary" id="contact-submit">Send message</button>
+    <p class="bk-fineprint">We reply by email, or by phone if that&rsquo;s all you leave. Your details are used only to answer you.</p>
+  </form>
+
+  <div class="rate-done" id="contact-done" role="status" hidden>
+    <h3>Message sent</h3>
+    <p>Thanks. We&rsquo;ll get back to you soon.</p>
+  </div>
+</section>
+
 <footer>
   <div class="footer-inner">
     <div>
@@ -153,11 +214,13 @@
     </div>
     <div>
       Book or ask a question:<br>
-      <a href="mailto:bookings@talli.co.nz">bookings@talli.co.nz</a>
+      <a href="mailto:bookings@talli.co.nz">bookings@talli.co.nz</a><br>
+      <a href="#contact">Contact us, or text on the night</a>
     </div>
   </div>
 </footer>
 
 <script src="assets/rate-us.js"></script>
+<script src="assets/contact-us.js"></script>
 </body>
 </html>

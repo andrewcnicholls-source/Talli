@@ -35,18 +35,32 @@ A "How was your night?" section at the bottom of the homepage.
   Nothing is published on the website. Quoting chosen reviews publicly
   is a later decision.
 
-## 2. Contact us
+## 2. Contact us (built)
 
-- Before the night: email stays primary. A short contact form (name,
-  email, optional phone, message) plus the phone number with "call or
-  text, best for quick questions".
-- On the night: a "Text Andrew" `sms:` link prefilled with booking
-  reference and plate, prominent during the event window, on the
-  confirmation page and the reminder. Signs at each site with the same
-  number and a QR code.
-- Gate screen: tap-to-call and tap-to-text on a car's sheet, with
-  ready-made messages (lights on, please move your car).
-- Open question: personal mobile or a second number for the night.
+- **The number** is 021 347 028, Andrew's mobile, kept once in
+  `TALLI.contact` (`assets/talli-config.js`). `assets/contact-us.js` points
+  every `data-talli-phone`, `data-talli-sms` and `data-talli-email` link
+  at it; the markup carries the same number so it works without
+  JavaScript. The confirmation email has its own copy in `stripe-webhook`
+  (`TALLI_NIGHT_PHONE`). To move to a second number later, change both.
+- **Before the night:** a Contact us section on the homepage. Email is
+  recommended for most things, call or text for quick questions, plus a
+  "Send us a message" form (message, name, email, phone; an email or a
+  phone is required). `submit-contact` stores each message in
+  `contact_message`, then emails it to bookings@ with Reply-To set to the
+  sender. With no Resend key (the test project) it is stored and not
+  emailed.
+- **On the night:** "Text Andrew" on the homepage, and on the booking
+  confirmation with the reference and plate already in the text. It is
+  the main button from six hours before the event until six after. The
+  confirmation email says to text, and gives the number.
+- **Gate screen:** a car's sheet has Call and Text buttons, plus ready-made
+  texts (lights on, please move, where are you?) that name the plate.
+  Shown when the booking has a phone number, for wardens too.
+- **Insights:** a Messages list for the operator, with Mark as answered.
+- Every page footer links to the Contact us section.
+- Still to do: the signs at each site (print), and a second number if
+  Andrew wants one.
 
 ## 3. Morning-after message
 

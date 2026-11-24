@@ -38,6 +38,7 @@
 //   handlers/settlement settling a night: pools, hosts, wardens (Andrew)
 //   handlers/staff      who may work the gate: inviting wardens (Andrew)
 //   handlers/reviews    what customers said: ratings by site (Andrew)
+//   handlers/contact    messages from the contact form (Andrew)
 //
 // Every action goes through the one serve() below. A handler is only
 // ever called from it, after the caller has been resolved and checked.
@@ -51,8 +52,9 @@ import { sites } from './handlers/sites.ts'
 import { settlement } from './handlers/settlement.ts'
 import { staff } from './handlers/staff.ts'
 import { reviews } from './handlers/reviews.ts'
+import { contact } from './handlers/contact.ts'
 
-const handlers: Record<string, Handler> = { ...arrivals, ...events, ...sites, ...settlement, ...staff, ...reviews }
+const handlers: Record<string, Handler> = { ...arrivals, ...events, ...sites, ...settlement, ...staff, ...reviews, ...contact }
 
 serve('gate-ops', async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })

@@ -444,7 +444,8 @@ ${opts.body}
     </div>
     <div>
       Book or ask a question:<br>
-      <a href="mailto:bookings@talli.co.nz">bookings@talli.co.nz</a>
+      <a href="mailto:bookings@talli.co.nz">bookings@talli.co.nz</a><br>
+      <a href="/#contact">Contact us, or text on the night</a>
     </div>
   </div>
 </footer>

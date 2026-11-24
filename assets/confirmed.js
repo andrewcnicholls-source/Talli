@@ -151,6 +151,21 @@
       rate.href = 'index.html?s=' + encodeURIComponent(sessionId()) + '#rate';
     }
 
+    // "Text Andrew", with the booking already in the message so nobody
+    // has to be asked which car they are. On the day of the event (from
+    // six hours before it starts until six after) it is the main button,
+    // because that is when it is needed.
+    var textLink = el('cf-text');
+    if (textLink && window.TalliContact) {
+      textLink.href = window.TalliContact.smsHref(
+        'Talli booking ' + b.reference + (b.vehicle_rego ? ', plate ' + b.vehicle_rego : '') + ': ');
+      var starts = b.event && Date.parse(b.event.starts_at);
+      var hours = starts ? (Date.now() - starts) / 3600000 : null;
+      var onTheNight = hours !== null && hours > -6 && hours < 6;
+      textLink.classList.toggle('btn-primary', onTheNight);
+      textLink.classList.toggle('btn-outline', !onTheNight);
+    }
+
     var come = el('cf-come-to');
     if (come && whereText(b)) {
       come.textContent = 'Come to ' + whereText(b) + ' — a Talli warden will meet you and show you where to park.';

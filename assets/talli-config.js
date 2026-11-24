@@ -72,6 +72,15 @@
     // best value first, then the two upsells.
     headlineTiers: ['standard', 'priority', 'valet'],
 
+    // How customers reach Andrew (docs/plans/reviews-and-contact.md). One
+    // number for both: "call or text" before the night, "Text Andrew" on
+    // it. Change it here and every page follows; the signs are printed.
+    contact: {
+      email: 'bookings@talli.co.nz',
+      phone: '021 347 028',
+      phoneIntl: '+6421347028',
+    },
+
     // The running order at the gate, which is not the order the database
     // sorts by. You sell the cheap spaces first and keep the quick exits
     // back: Standard until it's gone, then Priority, then Valet. Anything

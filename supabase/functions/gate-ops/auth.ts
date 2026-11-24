@@ -176,6 +176,8 @@ export const OPERATOR_ONLY = new Set([
   'staff_list', 'invite_warden', 'set_warden_block', 'set_warden_active',
   // Reviews carry customers' names and contact details.
   'reviews',
+  // So does every contact-form message.
+  'contact_messages', 'set_contact_handled',
 ])
 
 export const denied = (c: Caller | Denied): c is Denied =>

@@ -34,6 +34,7 @@ export function openEdit(r) {
   if (r.in_checkout) sub.push('still paying online');
   text(el('ad-edit-sub'), sub.join(' · '));
   renderWhere(r);
+  renderReach(r);
 
   form.rego.value = r.vehicle_rego || '';
   form.editname.value = r.customer_name || '';
@@ -303,4 +304,45 @@ export function cancelUnpaid() {
       text(box, err.message);
       show(box);
     });
+}
+
+/* ------------------------------------------------ reach the driver */
+
+// Ready-made texts for the things that happen on the night. Each names
+// the car, so the driver knows which one without being asked.
+var QUICK_TEXTS = [
+  ['Lights on', 'your lights are on.'],
+  ['Please move', 'could you come back and move your car, please?'],
+  ['Where are you?', 'we’re holding your space. Are you still coming?'],
+];
+
+// A number as it was typed, made dialable: digits and a leading +.
+export function dialable(phone) {
+  var s = String(phone || '').trim();
+  var plus = s.charAt(0) === '+';
+  var digits = s.replace(/[^0-9]/g, '');
+  return digits.length >= 6 ? (plus ? '+' : '') + digits : '';
+}
+
+// "?&body=" is the one form both iOS and Android read.
+export function smsLink(phone, body) {
+  return 'sms:' + phone + (body ? '?&body=' + encodeURIComponent(body) : '');
+}
+
+function renderReach(r) {
+  var box = el('ad-edit-reach');
+  var phone = dialable(r.customer_phone);
+  box.hidden = !phone;
+  if (!phone) return;
+  var car = r.vehicle_rego ? 'your car ' + r.vehicle_rego : 'your car';
+  var hello = 'Hi, it’s Talli Parking about ' + car + ': ';
+  el('ad-reach-call').href = 'tel:' + phone;
+  el('ad-reach-text').href = smsLink(phone, hello);
+  var quick = el('ad-reach-quick');
+  quick.innerHTML = '';
+  QUICK_TEXTS.forEach(function (q) {
+    var a = make('a', 'ad-reach-chip', q[0]);
+    a.href = smsLink(phone, hello + q[1]);
+    quick.appendChild(a);
+  });
 }

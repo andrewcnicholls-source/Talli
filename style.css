@@ -3050,3 +3050,36 @@ body.ad-guide-open { overflow: hidden; }
 .ad-review-when { font-size: 0.82rem; color: var(--grey); }
 .ad-review-text { margin: 6px 0 0; white-space: pre-line; }
 .ad-review-meta, .ad-review-who { margin: 4px 0 0; font-size: 0.84rem; color: var(--grey); }
+
+/* ---------- Contact us (homepage, docs/plans/reviews-and-contact.md) ---------- */
+.contact { border-top: 1px solid var(--line); padding-top: 40px; }
+.contact-ways { display: grid; gap: 16px; margin: 18px 0 32px; }
+@media (min-width: 720px) { .contact-ways { grid-template-columns: 1fr 1fr; } }
+.contact-way {
+  background: var(--offwhite); border: 1px solid var(--line);
+  border-radius: 4px; padding: 22px;
+}
+.contact-way h3 { margin-bottom: 8px; }
+.contact-way p { margin-bottom: 8px; }
+.contact-way .btn-row { margin: 14px 0 0; }
+.contact-way-night { border-left: 3px solid var(--blue); }
+.contact-form h3 { margin-bottom: 14px; }
+.cf-text-note { margin-top: 4px; font-size: 0.92rem; color: var(--grey); }
+
+/* Gate screen: call or text the driver, from a car's sheet. */
+.ad-reach { margin: 0 0 16px; }
+.ad-reach-main { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.ad-reach-btn {
+  display: flex; align-items: center; justify-content: center; min-height: 48px;
+  border: 1px solid var(--blue); border-radius: 6px; color: var(--blue);
+  font-weight: 500; text-decoration: none; background: var(--white);
+}
+.ad-reach-btn:active { background: var(--blue-tint); }
+.ad-reach-quick { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.ad-reach-chip {
+  display: inline-flex; align-items: center; min-height: 40px; padding: 0 14px;
+  border: 1px solid var(--line); border-radius: 20px; color: var(--ink);
+  font-size: 0.9rem; text-decoration: none; background: var(--offwhite);
+}
+.ad-message.is-done { opacity: 0.55; }
+.ad-message-done { margin-top: 6px; }

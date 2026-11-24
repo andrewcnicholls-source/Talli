@@ -3,7 +3,7 @@
    The Insights tab: how a night that has happened went.
  */
 
-import { GATE_ORDER, asDate, call, el, make, money, shortName, state, toast } from './core.js';
+import { GATE_ORDER, asDate, button, call, el, make, money, shortName, state, toast } from './core.js';
 import { dayKey, todayKey } from './night.js';
 import { ALL, scopeLabel, scopeNight } from './scope.js';
 import { byChannel, cars, moneyRows, statusMeta } from './tonight.js';
@@ -44,6 +44,7 @@ function renderInsightOptions() {
 }
 
 export function openInsights() {
+  loadMessages();
   loadReviews();
   renderInsightOptions();
   if (!state.insightId) {
@@ -243,4 +244,67 @@ export function renderReviews(data) {
     list.appendChild(li);
   });
   wrap.appendChild(list);
+}
+
+/* ----------------------------------------------------------- messages */
+
+// What people sent from the contact form on the homepage. Each is also
+// emailed to bookings@ where the project has a mail key; here is where a
+// message is ticked off, and where it waits on the test project, which
+// sends no email.
+export function loadMessages() {
+  var wrap = el('ad-messages');
+  if (!wrap) return;
+  wrap.setAttribute('aria-busy', 'true');
+  return call('contact_messages', {})
+    .then(function (data) { renderMessages(data); })
+    .catch(function (err) { toast(err.message, 'bad'); })
+    .finally(function () { wrap.removeAttribute('aria-busy'); });
+}
+
+export function renderMessages(data) {
+  var wrap = el('ad-messages');
+  wrap.innerHTML = '';
+  wrap.appendChild(make('h2', 'ad-section', 'Messages'));
+  var list = (data && data.messages) || [];
+  if (!list.length) {
+    wrap.appendChild(make('p', 'ad-empty', 'No messages yet. The form is at the bottom of the homepage.'));
+    return;
+  }
+  wrap.appendChild(make('p', 'ad-section-note',
+    data.open ? data.open + ' to answer.' : 'All answered.'));
+
+  var ul = make('ul', 'ad-reviews');
+  list.forEach(function (m) {
+    var li = make('li', 'ad-review ad-message' + (m.handled ? ' is-done' : ''));
+    var head = make('div', 'ad-review-head');
+    head.appendChild(make('strong', null, m.name || m.email || m.phone));
+    head.appendChild(make('span', 'ad-review-when', asDate(m.created_at)));
+    li.appendChild(head);
+    li.appendChild(make('p', 'ad-review-text', m.message));
+
+    var ways = make('p', 'ad-review-who');
+    if (m.email) {
+      var mail = make('a', null, m.email);
+      mail.href = 'mailto:' + m.email + '?subject=' + encodeURIComponent('Re: your message to Talli Parking');
+      ways.appendChild(mail);
+    }
+    if (m.phone) {
+      if (m.email) ways.appendChild(document.createTextNode(' · '));
+      var tel = make('a', null, m.phone);
+      tel.href = 'tel:' + m.phone.replace(/[^0-9+]/g, '');
+      ways.appendChild(tel);
+    }
+    if (!m.emailed) ways.appendChild(document.createTextNode(' · not emailed'));
+    li.appendChild(ways);
+
+    li.appendChild(button('ad-link ad-message-done', m.handled ? 'Mark as not answered' : 'Mark as answered',
+      function () {
+        call('set_contact_handled', { id: m.id, handled: !m.handled })
+          .then(loadMessages)
+          .catch(function (err) { toast(err.message, 'bad'); });
+      }));
+    ul.appendChild(li);
+  });
+  wrap.appendChild(ul);
 }

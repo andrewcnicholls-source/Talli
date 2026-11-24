@@ -156,6 +156,8 @@ const TZ = 'Pacific/Auckland'
 const FROM_EMAIL = Deno.env.get('TALLI_FROM_EMAIL') ??
   'Talli Parking <bookings@talli.co.nz>'
 const REPLY_TO = Deno.env.get('TALLI_REPLY_TO') ?? 'bookings@talli.co.nz'
+// The on-the-night number, as assets/talli-config.js has it (TALLI.contact).
+const NIGHT_PHONE = Deno.env.get('TALLI_NIGHT_PHONE') ?? '021 347 028'
 
 const money = (cents: number) =>
   '$' + (cents % 100 === 0 ? (cents / 100).toFixed(0) : (cents / 100).toFixed(2))
@@ -295,6 +297,7 @@ async function sendConfirmationEmail(bookingId: string): Promise<void> {
         ? `Have your plate handy (${b.vehicle_rego}) — that is how we find your booking.`
         : null,
       'Ponchos, earplugs and lolly bags are available on arrival, cash or bank transfer.',
+      `Running late, can’t find us, or blocked in? Text Andrew on ${NIGHT_PHONE} with your reference. A text gets read at the gate when a call can’t be heard.`,
     ].filter((line): line is string => Boolean(line))
 
     const subject = ev?.name
