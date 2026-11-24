@@ -16,7 +16,10 @@
 //  to try again differently.
 // =====================================================================
 
-import { createClient } from 'jsr:@supabase/supabase-js@2'
+import { createClient } from 'jsr:@supabase/supabase-js@2.119.0'
+import { logger, serve } from '../_shared/log.ts'
+
+const log = logger('submit-review')
 
 const db = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -48,7 +51,7 @@ const named = (err: { message?: string }) => {
 const text = (v: unknown) => (typeof v === 'string' ? v : null)
 const yesNo = (v: unknown) => (v === true ? true : v === false ? false : null)
 
-Deno.serve(async (req) => {
+serve('submit-review', async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
   if (req.method !== 'POST') return json({ error: 'Use POST' }, 405)
 
@@ -56,13 +59,14 @@ Deno.serve(async (req) => {
   try {
     body = await req.json()
   } catch {
+    // not logged: the 400 is the answer, and the request line records it
     return json({ error: 'Body must be JSON' }, 400)
   }
 
   if (body.action === 'options') {
     const { data, error } = await db.rpc('review_options')
     if (error) {
-      console.error('review options failed', error)
+      log.error('review options failed', { err: error })
       return json({ error: 'Could not load the sites' }, 500)
     }
     return json({ sites: data })
@@ -94,11 +98,11 @@ Deno.serve(async (req) => {
   if (error) {
     const out = named(error)
     if (out.code === 'FAILED') {
-      console.error('review insert failed', error)
+      log.error('review insert failed', { err: error })
       return json({ error: 'Could not send that just then. Try again?' }, 500)
     }
     return json(out, 400)
   }
 
   return json(data)
-})
+}, { cors })
