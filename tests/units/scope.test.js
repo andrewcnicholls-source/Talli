@@ -144,3 +144,29 @@ test('the site a phone is taken to be at: the site, else the block anchor', asyn
   assert.equal(hereSite(sites, 'block:bG').property_id, 'g1');
   assert.equal(hereSite(sites, 'all').property_id, 'p1');
 });
+
+test('a booking refunded in full is shown where it was booked and counted in nothing', async () => {
+  const { scopeNight } = await load();
+  const refunded = [
+    { booking_id: 'r1', property_id: 'p1', status: 'refunded', refunded_cents: 6864 },
+    // Booked at g1, moved to g2 before the refund: found from either.
+    { booking_id: 'r2', property_id: 'g2', booked_property_id: 'g1', status: 'refunded',
+      refunded_cents: 4000 },
+  ];
+  const withRefunds = { rows, tiers, sites, lost, refunded };
+
+  const all = scopeNight(withRefunds, 'all');
+  assert.deepEqual(all.refunded.map((r) => r.booking_id), ['r1', 'r2']);
+  // Not one figure moves: a refunded car holds no space and took no money.
+  const before = scopeNight(night, 'all').summary;
+  for (const k of NUMBERS) assert.equal(all.summary[k], before[k], k);
+  assert.equal(all.rows.length, rows.length, 'and the list proper is unchanged');
+
+  assert.deepEqual(scopeNight(withRefunds, 'site:p1').refunded.map((r) => r.booking_id), ['r1']);
+  assert.deepEqual(scopeNight(withRefunds, 'site:g1').refunded.map((r) => r.booking_id), ['r2']);
+  assert.deepEqual(scopeNight(withRefunds, 'site:g2').refunded.map((r) => r.booking_id), ['r2']);
+  assert.deepEqual(scopeNight(withRefunds, 'block:bG').refunded.map((r) => r.booking_id), ['r2']);
+  assert.deepEqual(scopeNight(withRefunds, 'block:bP').refunded.map((r) => r.booking_id), ['r1']);
+  // A night loaded before the server sent the field still draws.
+  assert.deepEqual(scopeNight(night, 'all').refunded, []);
+});

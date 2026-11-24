@@ -6,7 +6,7 @@ import { db, isGateAddress, type Row } from './shared.ts'
 // end of a driveway, one request that sometimes carries a little too much
 // beats four that each might not arrive.
 export async function nightState(eventId: string, allowed: Set<string> | null = null) {
-  const [listRes, tierRes, rateRes, chargeRes, siteRes, refRes, lostRes, picRes] = await Promise.all([
+  const [listRes, tierRes, rateRes, chargeRes, siteRes, refRes, lostRes, picRes, refundRes] = await Promise.all([
     db.from('v_gate_list').select('*').eq('event_id', eventId),
     db.from('v_tier_availability').select('*').eq('event_id', eventId)
       .order('sort_order', { ascending: true }),
@@ -39,6 +39,15 @@ export async function nightState(eventId: string, allowed: Set<string> | null = 
     // site's, filtered below to the sites this caller may see.
     db.from('site_picture').select('id, property_id, path, caption, sort_order')
       .order('sort_order', { ascending: true }).order('created_at', { ascending: true }),
+    // Bookings refunded in full. v_gate_list leaves them out, and must: a
+    // refunded car holds no space and counts toward nothing. But a driver
+    // whose money went back can still turn up, and "refunded" has to be
+    // something the warden can see, not the same blank as "never booked".
+    // Drawn apart from the list, never in it, so no count moves.
+    db.from('booking')
+      .select('id, customer_name, customer_phone, vehicle_rego, tier_code, amount_cents, ' +
+              'addons_cents, surcharge_cents, refunded_cents, property_id, booked_property_id, channel')
+      .eq('event_id', eventId).eq('status', 'refunded'),
   ])
   if (listRes.error) throw listRes.error
   const ref = refRes.data ? String(refRes.data) : null
@@ -117,6 +126,27 @@ export async function nightState(eventId: string, allowed: Set<string> | null = 
       t.spill = to ? { property_id: to.property_id, space_code: to.space_code } : null
     }))
 
+  if (refundRes.error) throw refundRes.error
+  const refunded = ((refundRes.data ?? []) as Row[])
+    .filter((b: Row) => allowed === null ||
+      allowed.has(String(b.property_id)) ||
+      (b.booked_property_id && allowed.has(String(b.booked_property_id))))
+    .map((b: Row) => ({
+      booking_id: b.id,
+      reference: String(b.id).slice(0, 8).toUpperCase(),
+      status: 'refunded',
+      customer_name: b.customer_name ?? null,
+      customer_phone: b.customer_phone ?? null,
+      vehicle_rego: b.vehicle_rego ?? null,
+      tier_code: b.tier_code ?? null,
+      channel: b.channel ?? null,
+      property_id: b.property_id,
+      booked_property_id: b.booked_property_id ?? null,
+      refunded_cents: b.refunded_cents ||
+        (b.amount_cents ?? 0) + (b.addons_cents ?? 0) + (b.surcharge_cents ?? 0),
+    }))
+    .sort((a: Row, b: Row) => String(a.vehicle_rego ?? '').localeCompare(String(b.vehicle_rego ?? '')))
+
   const lost = ((lostRes.data ?? []) as Row[])
     .filter((l: Row) => allowed === null || allowed.has(String(l.property_id)))
   if (picRes.error) throw picRes.error
@@ -183,6 +213,7 @@ export async function nightState(eventId: string, allowed: Set<string> | null = 
 
   return {
     rows,
+    refunded,
     tiers,
     sites,
     lost,

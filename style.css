@@ -1160,6 +1160,23 @@ footer a { color: var(--blue); }
   margin-bottom: 8px;
 }
 .ad-row.is-arrived { opacity: 0.5; }
+/* Refunded in full: there to be found, not worked. Struck through so it
+   cannot be mistaken for an arrived car, which is also faded. */
+.ad-row.is-refunded {
+  opacity: 0.65;
+  background: var(--paper, #F4F2EE);
+  border-left: 3px dashed var(--grey);
+}
+.ad-row.is-refunded .ad-rego { text-decoration: line-through; }
+.ad-row.is-refunded .ad-row-main { cursor: default; }
+.ad-ref {
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  color: var(--grey);
+  font-variant-numeric: tabular-nums;
+}
+.ad-chip.is-refunded { color: var(--ink, #1a1a1a); background: #ECEAE6; border-color: var(--line); font-weight: 600; }
+.ad-group.is-refunded { border-left-style: dashed; border-left-color: var(--grey); }
 .ad-row.is-held { border-left: 3px solid #C9942A; }
 
 .ad-row-main {

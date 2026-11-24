@@ -12,6 +12,7 @@ const { FIX, PASSWORD, gate, rest, rpc, plate, forget } = require('../lib/stack'
 const made = [];
 let gribCar;
 let paiceCar;
+let refundedCar;
 
 test.beforeAll(async () => {
   gribCar = plate('GG');
@@ -24,6 +25,16 @@ test.beforeAll(async () => {
     });
     await rpc('confirm_booking', { p_booking_id: id, p_payment_intent_id: null });
   }
+  // Paid, then refunded in full, as stripe-webhook leaves it.
+  refundedCar = plate('GR');
+  made.push(refundedCar);
+  const rid = await rpc('hold_booking', {
+    p_event_id: FIX.night, p_property_id: FIX.gribAnchor, p_tier_code: 'standard',
+    p_email: 'gate.browser@example.com', p_rego: refundedCar,
+  });
+  await rpc('confirm_booking', { p_booking_id: rid, p_payment_intent_id: null });
+  await rpc('record_refund', { p_booking_id: rid, p_refunded_cents: 999999 });
+  await rpc('release_booking', { p_booking_id: rid, p_status: 'refunded' });
 });
 test.afterAll(() => forget(made));
 
@@ -161,4 +172,21 @@ test("a warden's phone follows the live night, and says when there is none", asy
   } finally {
     await setLive({ event_id: FIX.night });
   }
+});
+
+test('a car refunded in full is found, greyed, and cannot be ticked in', async ({ page }) => {
+  await signedIn(page, 'wardenGrib');
+  await openNight(page);
+
+  const refunded = page.locator('#ad-list .ad-row.is-refunded', { hasText: refundedCar });
+  await expect(refunded).toBeVisible();
+  await expect(refunded).toContainText(/refunded \$[\d.]+ · not booked/);
+  await expect(refunded.locator('.ad-tick, .ad-pay, [role="button"]')).toHaveCount(0);
+  await expect(page.locator('#ad-list .ad-group.is-refunded')).toBeVisible();
+
+  // Searched for at the gate, it still comes back, and says what happened.
+  await page.fill('#ad-search', refundedCar);
+  await expect(refunded).toBeVisible();
+  await expect(page.locator('#ad-list .ad-row:not(.is-refunded)')).toHaveCount(0);
+  await expect(page.locator('#ad-list')).not.toContainText('Nothing matches');
 });

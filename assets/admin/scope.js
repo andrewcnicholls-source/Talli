@@ -191,8 +191,8 @@ export function extrasOf(rows) {
   return list.sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
 }
 
-// The night narrowed to a scope: { rows, tiers, sites, lost, extras,
-// summary }. night is what the `list` action returned (or the screen's
+// The night narrowed to a scope: { rows, refunded, tiers, sites, lost,
+// extras, summary }. night is what the `list` action returned (or the screen's
 // copy of it); value is a scope string.
 export function scopeNight(night, value) {
   var sites = night.sites || [];
@@ -202,6 +202,11 @@ export function scopeNight(night, value) {
   var tiers = (night.tiers || []).filter(keep);
   return {
     rows: rows,
+    // Refunded in full: kept by where they were booked, counted in nothing.
+    refunded: (night.refunded || []).filter(function (x) {
+      return ids === null || ids[x.property_id] === true ||
+        (x.booked_property_id && ids[x.booked_property_id] === true);
+    }),
     tiers: tiers,
     sites: sites.filter(keep),
     lost: (night.lost || []).filter(keep),
