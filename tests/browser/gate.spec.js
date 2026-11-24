@@ -125,6 +125,37 @@ test('picking bank transfer on a walk-up shows the account to pay into', async (
   await expect(page.locator('#ad-edit-bank')).toBeHidden();
 });
 
+// The night that started booking history: a warden adds a walk-up who
+// will pay later, then marks it paid by transfer. Opened again, the
+// booking says who added it, when, and who marked it paid.
+test('a booking says who added it and who marked it paid', async ({ page }) => {
+  const rego = plate('GH');
+  made.push(rego);
+  await signedIn(page, 'wardenGrib');
+  await openNight(page);
+
+  await page.click('#ad-sell-open');
+  await page.selectOption('#ad-sell-payment', 'unpaid');
+  await page.fill('#ad-sell-rego', rego);
+  await page.click('#ad-sell-submit');
+  await expect(page.locator('#ad-sell')).toBeHidden();
+
+  await page.getByRole('button', { name: 'Edit ' + rego }).click();
+  const history = page.locator('#ad-edit-history');
+  await expect(history).toContainText('Added at the gate · Not paid yet');
+  const [me] = await rest('host_user?email=eq.warden.test@example.com&select=name');
+  await expect(history).toContainText(me.name);
+
+  await page.selectOption('#ad-edit-payment', 'bank_transfer');
+  await page.click('#ad-edit-submit');
+  await expect(page.locator('#ad-edit')).toBeHidden();
+
+  await page.getByRole('button', { name: 'Edit ' + rego }).click();
+  await expect(history.locator('.ad-history-line')).toHaveCount(2);
+  await expect(history.locator('.ad-history-line').nth(1))
+    .toContainText('Payment: Not paid yet → Bank transfer');
+});
+
 test('the operator sees every block, and the operator tabs', async ({ page }) => {
   await signedIn(page, 'operator');
   await openNight(page);

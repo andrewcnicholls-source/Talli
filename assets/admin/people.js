@@ -26,6 +26,7 @@ var list = null;
 
 var MEANINGS = {
   BAD_EMAIL: 'That is not an email address.',
+  NO_NAME: 'Say what to call them — it is how the booking history names them.',
   NO_BLOCKS_CHOSEN: 'Tick at least one area for the warden.',
   UNKNOWN_BLOCK: 'One of those areas is not on the books any more. Refresh.',
   ALREADY_ON_BOOKS: 'That address is already on the list. Change it from its own card.',
@@ -107,10 +108,13 @@ function render() {
     b.appendChild(make('p', 'ad-site-help',
       'Everything, every area. Not changed from here.'));
     operators.forEach(function (p) {
-      var line = make('p', 'ad-people-op', p.email);
+      var line = make('p', 'ad-people-op');
+      line.appendChild(make('strong', 'ad-people-name', p.name || p.email));
+      line.appendChild(document.createTextNode(' ' + p.email));
       if (!p.active) line.appendChild(make('span', 'ad-chip is-paused', 'switched off'));
       line.appendChild(make('span', 'ad-site-help', ' ' + seen(p)));
       b.appendChild(line);
+      b.appendChild(renameRow(p));
     });
   }
 }
@@ -119,6 +123,17 @@ function inviteForm(parent) {
   var blocks = list.blocks || [];
   var form = make('div', 'ad-settle-block ad-people-invite');
   form.appendChild(make('h3', 'ad-settle-name', 'Invite a warden'));
+
+  var nameLab = make('label', 'ad-label', 'Their name');
+  nameLab.htmlFor = 'ad-people-name';
+  form.appendChild(nameLab);
+  var name = document.createElement('input');
+  name.type = 'text';
+  name.id = 'ad-people-name';
+  name.className = 'ad-input';
+  name.autocomplete = 'off';
+  name.placeholder = 'Max Smith';
+  form.appendChild(name);
 
   var lab = make('label', 'ad-label', 'Their Google email');
   lab.htmlFor = 'ad-people-email';
@@ -144,9 +159,9 @@ function inviteForm(parent) {
     showError(null);
     var chosen = ticks.filter(function (t) { return t.checked; }).map(function (t) { return t.value; });
     send.disabled = true;
-    call('invite_warden', { email: email.value, block_ids: chosen })
+    call('invite_warden', { name: name.value, email: email.value, block_ids: chosen })
       .then(function (res) {
-        toast(res.email + ' is invited. They sign in with Google to start.', 'good');
+        toast((res.name || res.email) + ' is invited. They sign in with Google to start.', 'good');
         return load();
       })
       .catch(function (err) { showError(explain(err)); })
@@ -156,14 +171,49 @@ function inviteForm(parent) {
   parent.appendChild(form);
 }
 
+// A name guessed from an email can be wrong. "Edit name" opens a box in
+// place; saving it changes what every booking's history calls them.
+function renameRow(p) {
+  var row = make('div', 'ad-people-rename');
+  var showError = errorBox(row);
+  var edit = button('btn btn-outline', 'Edit name', function () {
+    edit.hidden = true;
+    box.hidden = false;
+    input.value = p.name || '';
+    input.focus();
+  });
+  var box = make('div', 'ad-people-rename-box');
+  box.hidden = true;
+  var input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'ad-input';
+  input.setAttribute('aria-label', 'Name for ' + p.email);
+  var save = button('btn btn-primary', 'Save name', function () {
+    showError(null);
+    save.disabled = true;
+    call('rename_staff', { host_user_id: p.host_user_id, name: input.value })
+      .then(function () { return load(); })
+      .catch(function (err) { showError(explain(err)); })
+      .then(function () { save.disabled = false; });
+  });
+  box.appendChild(input);
+  box.appendChild(save);
+  row.appendChild(edit);
+  row.appendChild(box);
+  return row;
+}
+
 function wardenCard(p) {
   var card = make('div', 'ad-settle-block ad-people-card' + (p.active ? '' : ' is-off'));
   card.dataset.person = p.host_user_id;
-  var name = make('h3', 'ad-settle-name ad-people-email', p.email);
-  if (!p.active) name.appendChild(make('span', 'ad-chip is-paused', 'switched off'));
-  card.appendChild(name);
+  var head = make('h3', 'ad-settle-name');
+  head.appendChild(make('span', 'ad-people-name', p.name || p.email));
+  if (!p.active) head.appendChild(make('span', 'ad-chip is-paused', 'switched off'));
+  card.appendChild(head);
+  card.appendChild(make('p', 'ad-site-help ad-people-email', p.email));
+  card.appendChild(renameRow(p));
   card.appendChild(make('p', 'ad-site-help', seen(p) +
-    (p.invited_by ? ' Invited by ' + p.invited_by + '.' : '')));
+    (p.invited_by ? ' Invited by ' + (p.invited_by_name || p.invited_by) + '.' : '')));
 
   // Every area in use, ticked where the warden holds it on; plus any area
   // they still hold that has since been retired, so it can be taken away.

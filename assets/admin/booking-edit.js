@@ -3,9 +3,10 @@
    One booking's edit sheet.
  */
 
-import { call, el, hide, make, money, shortName, show, state, surchargeOn,
+import { call, el, hide, make, METHOD_NAMES, money, shortName, show, state, surchargeOn,
   text, toast } from './core.js';
-import { loadList, tierClass, tiersFor } from './night.js';
+import { loadList, siteName, tierClass, tiersFor } from './night.js';
+import { renderHistory } from './history.js';
 import { inGateOrder } from './tonight.js';
 import { pickTile, priceSlot } from './walk-up.js';
 import { renderCheckIn, renderPlace } from './placement.js';
@@ -13,15 +14,25 @@ import { renderPayBank } from './site-info.js';
 
 /* ----------------------------------------------------- one booking */
 
-var METHOD_NAMES = {
-  stripe: 'Card online', tap_to_pay: 'Card (tap to pay)', cash: 'Cash',
-  bank_transfer: 'Bank transfer', free: 'Free / comp', other: 'Other',
-  unpaid: 'Not paid yet',
-};
-
 // Everything that can be wrong about a booking once it exists: the plate,
 // how to reach them, how they paid, and which type of space they actually
 // took. Opened by tapping the row.
+// The booking's history, under the form. Fetched each time the sheet
+// opens, so a line added a moment ago on another phone is there. A sheet
+// reopened on another booking before this answers is left alone.
+function loadHistory(r) {
+  var box = el('ad-edit-history');
+  if (!box) return;
+  box.textContent = '';
+  call('booking_history', { booking_id: r.booking_id }).then(function (res) {
+    if (state.edit !== r) return;
+    renderHistory(box, res.lines, function (id) { return siteName(id) || null; });
+  }).catch(function () {
+    // The sheet works without it; the failure is already reported.
+    if (state.edit === r) box.textContent = '';
+  });
+}
+
 export function openEdit(r) {
   state.edit = r;
   state.editTier = r.tier_code;
@@ -34,6 +45,7 @@ export function openEdit(r) {
   if (r.in_checkout) sub.push('still paying online');
   text(el('ad-edit-sub'), sub.join(' · '));
   renderWhere(r);
+  loadHistory(r);
 
   form.rego.value = r.vehicle_rego || '';
   form.editname.value = r.customer_name || '';

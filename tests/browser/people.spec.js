@@ -29,12 +29,20 @@ test('a warden is invited, given a second area and switched off, by tapping', as
   await expect(people).toBeVisible();
   await expect(people.getByText('operator.test@example.com')).toBeVisible();
 
+  await page.fill('#ad-people-name', 'Bee Eight');
   await page.fill('#ad-people-email', email);
   await people.locator('.ad-people-invite label', { hasText: 'Gribblehurst (test)' }).click();
   await people.getByRole('button', { name: 'Invite' }).click();
 
   const card = people.locator('.ad-people-card', { hasText: email });
   await expect(card).toBeVisible();
+  await expect(card.locator('.ad-people-name')).toHaveText('Bee Eight');
+
+  // A name can be corrected from the card.
+  await card.getByRole('button', { name: 'Edit name' }).click();
+  await card.locator('.ad-people-rename input').fill('Bea Eight');
+  await card.getByRole('button', { name: 'Save name' }).click();
+  await expect(card.locator('.ad-people-name')).toHaveText('Bea Eight');
   await expect(card).toContainText('not signed in yet');
   await expect(card.getByRole('checkbox', { name: 'Gribblehurst (test)' })).toBeChecked();
   await expect(card.getByRole('checkbox', { name: 'Paice Ave' })).not.toBeChecked();
@@ -58,9 +66,22 @@ test('an invitation with no area says so and makes nothing', async ({ page }) =>
   await signedIn(page, 'operator');
   await page.goto('/admin');
   await page.click('#ad-tab-sites');
+  await page.fill('#ad-people-name', 'No Area');
   await page.fill('#ad-people-email', email);
   await page.locator('#ad-people').getByRole('button', { name: 'Invite' }).click();
   await expect(page.locator('#ad-people .ad-people-invite .ad-sheet-error')).toContainText('at least one area');
+  expect(await rest(`host_user?email=eq.${encodeURIComponent(email)}&select=id`)).toEqual([]);
+});
+
+test('an invitation with no name says so and makes nothing', async ({ page }) => {
+  email = `b8.ui.${crypto.randomBytes(3).toString('hex')}@example.com`;
+  await signedIn(page, 'operator');
+  await page.goto('/admin');
+  await page.click('#ad-tab-sites');
+  await page.fill('#ad-people-email', email);
+  await page.locator('#ad-people .ad-people-invite label', { hasText: 'Gribblehurst (test)' }).click();
+  await page.locator('#ad-people').getByRole('button', { name: 'Invite' }).click();
+  await expect(page.locator('#ad-people .ad-people-invite .ad-sheet-error')).toContainText('what to call them');
   expect(await rest(`host_user?email=eq.${encodeURIComponent(email)}&select=id`)).toEqual([]);
 });
 

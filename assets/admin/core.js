@@ -103,6 +103,13 @@ export function show(n) { if (n) n.hidden = false; }
 export function hide(n) { if (n) n.hidden = true; }
 export function text(n, v) { if (n) n.textContent = v; return n; }
 
+// How a booking was paid, in the words the screen uses everywhere.
+export var METHOD_NAMES = {
+  stripe: 'Card online', tap_to_pay: 'Card (tap to pay)', cash: 'Cash',
+  bank_transfer: 'Bank transfer', free: 'Free / comp', other: 'Other',
+  unpaid: 'Not paid yet',
+};
+
 export function money(cents) {
   var d = (cents || 0) / 100;
   return '$' + (cents % 100 === 0 ? d.toFixed(0) : d.toFixed(2));
