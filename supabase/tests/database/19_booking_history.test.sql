@@ -15,7 +15,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(25);
+select plan(27);
 
 create temp table fx (k text primary key, id uuid);
 insert into fx values
@@ -152,6 +152,13 @@ select is((select count(*)::int from booking b
 select ok(not has_function_privilege('authenticated',
   'public.booking_history(uuid)', 'execute'),
   'a signed-in browser cannot read history directly — only gate-ops');
+
+-- gate-ops calls in as the service role, and every booking write runs
+-- these. Without the grant, every sale through the API fails.
+select ok(has_function_privilege('service_role', 'private.current_actor()', 'execute'),
+  'the service role can ask who is acting');
+select ok(has_function_privilege('service_role', 'private.name_from_email(text)', 'execute'),
+  'and can name someone from their email');
 
 select * from finish();
 rollback;

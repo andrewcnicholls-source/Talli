@@ -398,7 +398,8 @@ as $function$
                'claimed',      hu.user_id is not null,
                'claimed_at',   hu.claimed_at,
                'last_seen_at', hu.last_seen_at,
-               'invited_by',   inv.name,
+               'invited_by',   inv.email,
+               'invited_by_name', inv.name,
                'blocks', coalesce((
                  select jsonb_agg(jsonb_build_object(
                           'block_id', g.block_id, 'name', b.name, 'active', g.active)
@@ -418,5 +419,10 @@ revoke all on function public.staff_list() from public, anon, authenticated;
 grant execute on function public.staff_list() to service_role;
 
 -- --------------------------------------------- the private helpers
+-- Every write to a booking runs current_actor (the trigger, and
+-- booking_change's default) as whoever made it: gate-ops and the payment
+-- functions, as the service role. Not the public.
 revoke all on function private.name_from_email(text) from public, anon, authenticated;
 revoke all on function private.current_actor() from public, anon, authenticated;
+grant execute on function private.name_from_email(text) to service_role;
+grant execute on function private.current_actor() to service_role;

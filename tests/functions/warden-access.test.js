@@ -95,7 +95,7 @@ test('an invited warden signs in, sees their one area, and follows every switch'
   assert.equal(r.body.code, 'NOT_A_HOST');
 
   // Andrew invites them, typed with capitals and spaces.
-  r = await gate('operator', { action: 'invite_warden',
+  r = await gate('operator', { action: 'invite_warden', name: 'B8 Warden',
     email: `  ${newEmail.toUpperCase()} `, block_ids: [grib] });
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.equal(r.body.email, newEmail, 'stored as one address, lower case');
@@ -147,18 +147,18 @@ test('an invited warden signs in, sees their one area, and follows every switch'
 
 test('an invitation for someone already on the books, or with no area, is refused by name', async () => {
   const grib = await gribBlock();
-  let r = await gate('operator', { action: 'invite_warden',
+  let r = await gate('operator', { action: 'invite_warden', name: 'B8 Warden',
     email: 'Operator.Test@example.com', block_ids: [grib] });
   assert.equal(r.status, 409);
   assert.equal(r.body.code, 'ALREADY_ON_BOOKS');
 
-  r = await gate('operator', { action: 'invite_warden', email: 'not an email', block_ids: [grib] });
+  r = await gate('operator', { action: 'invite_warden', name: 'B8 Warden', email: 'not an email', block_ids: [grib] });
   assert.equal(r.body.code, 'BAD_EMAIL');
 
-  r = await gate('operator', { action: 'invite_warden', email: 'b8.none@example.com', block_ids: [] });
+  r = await gate('operator', { action: 'invite_warden', name: 'B8 Warden', email: 'b8.none@example.com', block_ids: [] });
   assert.equal(r.body.code, 'NO_BLOCKS_CHOSEN');
 
-  r = await gate('operator', { action: 'invite_warden', email: 'b8.none@example.com',
+  r = await gate('operator', { action: 'invite_warden', name: 'B8 Warden', email: 'b8.none@example.com',
     block_ids: [crypto.randomUUID()] });
   assert.equal(r.body.code, 'UNKNOWN_BLOCK');
 

@@ -1,16 +1,34 @@
 // gate-ops: the service-role client, Stripe, the JSON response, and the
 // small helpers more than one area uses.
 
+import { AsyncLocalStorage } from 'node:async_hooks'
 import { createClient } from 'jsr:@supabase/supabase-js@2.119.0'
 import Stripe from 'https://esm.sh/stripe@18.5.0?target=denonext'
 import { type Fields, logger, named as namedFor } from '../_shared/log.ts'
 
 export const log = logger('gate-ops')
 
+// Who this request is (host_user.id), for as long as its handler runs.
+// index.ts sets it from the caller callerFrom verified, and nowhere else.
+export const actor = new AsyncLocalStorage<string>()
+
+// Every database call made while a request is being handled says who made
+// it, in the x-talli-actor header. The database's booking history reads it
+// (private.current_actor), so every line says who, whichever handler —
+// today's or one added later — wrote the booking. Nothing from the request
+// body ever reaches it.
+function fetchAsActor(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const who = actor.getStore()
+  if (!who) return fetch(input, init)
+  const headers = new Headers(init?.headers)
+  headers.set('x-talli-actor', who)
+  return fetch(input, { ...init, headers })
+}
+
 export const db = createClient(
   Deno.env.get('SUPABASE_URL')!,
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
-  { auth: { persistSession: false } },
+  { auth: { persistSession: false }, global: { fetch: fetchAsActor } },
 )
 
 export const ALLOWED_ORIGIN = Deno.env.get('ALLOWED_ORIGIN') ?? '*'

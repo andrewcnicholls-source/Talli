@@ -43,7 +43,7 @@
 // ever called from it, after the caller has been resolved and checked.
 
 import { allowedProperties, type Caller, callerFrom, type Denied, denied, type Handler, LIVE_SCOPED, mayTouchBooking, OPERATOR_ONLY } from './auth.ts'
-import { cors, json, liveEvent, log } from './shared.ts'
+import { actor, cors, json, liveEvent, log } from './shared.ts'
 import { annotate, serve, unexpected } from '../_shared/log.ts'
 import { arrivals } from './handlers/arrivals.ts'
 import { events } from './handlers/events.ts'
@@ -130,7 +130,9 @@ serve('gate-ops', async (req) => {
     if (!handler) return json({ error: 'Unknown action' }, 400)
     // Awaited here, inside the try, so a handler that throws is answered
     // by the catch below rather than escaping it.
-    return await handler({ caller, body, eventId, allowed, bookingGuard, live })
+    // Run as the caller, so every write it makes is put down to them.
+    return await actor.run(caller.me, async () =>
+      await handler({ caller, body, eventId, allowed, bookingGuard, live }))
   } catch (err) {
     // Never the error's own message: it can be a database or Stripe
     // internal. The log has it in full; the screen gets the ref.
