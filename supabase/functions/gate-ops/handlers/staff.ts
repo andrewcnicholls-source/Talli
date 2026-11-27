@@ -34,8 +34,20 @@ export const staff: Record<string, Handler> = {
     if (!blocks) return json({ error: 'block_ids must be a list' }, 400)
     const { data, error } = await db.rpc('invite_warden', {
       p_email: String(body.email ?? ''),
+      p_name: String(body.name ?? ''),
       p_block_ids: blocks,
       p_by: caller.me,
+    })
+    if (error) return json(named(error), 409)
+    return json({ ok: true, ...(data as Record<string, unknown>) })
+  },
+
+  // The name the screen calls someone by — in booking history and here.
+  // Filled from the email for people already on the books, so it can be
+  // wrong; anyone on the list may be corrected, an operator included.
+  async rename_staff({ body }: Ctx) {
+    const { data, error } = await db.rpc('rename_staff', {
+      p_host_user_id: id(body.host_user_id), p_name: String(body.name ?? ''),
     })
     if (error) return json(named(error), 409)
     return json({ ok: true, ...(data as Record<string, unknown>) })

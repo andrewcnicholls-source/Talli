@@ -21,9 +21,9 @@ language sql as $$ select id from fx where k = p_k $$;
 
 -- ------------------------------------------------------------- reachable
 
-select ok(not has_function_privilege('anon', 'public.invite_warden(text, uuid[], uuid)', 'execute'),
+select ok(not has_function_privilege('anon', 'public.invite_warden(text, text, uuid[], uuid)', 'execute'),
   'anon cannot invite');
-select ok(not has_function_privilege('authenticated', 'public.invite_warden(text, uuid[], uuid)', 'execute'),
+select ok(not has_function_privilege('authenticated', 'public.invite_warden(text, text, uuid[], uuid)', 'execute'),
   'a signed-in browser session cannot invite');
 select ok(not has_function_privilege('authenticated', 'public.set_warden_block(uuid, uuid, boolean)', 'execute'),
   'a signed-in browser session cannot switch an area');
@@ -35,25 +35,25 @@ select ok(not has_function_privilege('anon', 'public.staff_list()', 'execute'),
 -- ---------------------------------------------------------------- invite
 
 select throws_like(
-  $$ select invite_warden('nope', array[pg_temp.fx('grib')], null) $$,
+  $$ select invite_warden('nope', 'B8 Db', array[pg_temp.fx('grib')], null) $$,
   'BAD_EMAIL%', 'a bad address is refused');
 select throws_like(
-  $$ select invite_warden('b8.db@example.com', '{}', null) $$,
+  $$ select invite_warden('b8.db@example.com', 'B8 Db', '{}', null) $$,
   'NO_BLOCKS_CHOSEN%', 'an invitation with no area is refused');
 select throws_like(
-  $$ select invite_warden('b8.db@example.com', array[null]::uuid[], null) $$,
+  $$ select invite_warden('b8.db@example.com', 'B8 Db', array[null]::uuid[], null) $$,
   'NO_BLOCKS_CHOSEN%', 'nulls are not areas');
 select throws_like(
-  $$ select invite_warden('b8.db@example.com', array[pg_temp.fx('grib'), gen_random_uuid()], null) $$,
+  $$ select invite_warden('b8.db@example.com', 'B8 Db', array[pg_temp.fx('grib'), gen_random_uuid()], null) $$,
   'UNKNOWN_BLOCK%', 'an area not on the books is refused');
 select is((select count(*)::int from host_user where email = 'b8.db@example.com'), 0,
   'a refused invitation leaves nothing behind');
 select throws_like(
-  $$ select invite_warden('OPERATOR.test@example.com', array[pg_temp.fx('grib')], null) $$,
+  $$ select invite_warden('OPERATOR.test@example.com', 'Op', array[pg_temp.fx('grib')], null) $$,
   'ALREADY_ON_BOOKS%', 'someone on the books is not re-invited, whatever the case');
 
 insert into fx
-select 'w', (invite_warden(' B8.DB@example.com ',
+select 'w', (invite_warden(' B8.DB@example.com ', 'B8 Db',
               array[pg_temp.fx('grib'), pg_temp.fx('grib')], pg_temp.fx('op')) ->> 'host_user_id')::uuid;
 
 select results_eq(

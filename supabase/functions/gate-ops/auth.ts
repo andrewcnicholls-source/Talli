@@ -173,7 +173,7 @@ export const OPERATOR_ONLY = new Set([
   'save_settlement_setting', 'save_host_details',
   // Who may work the gate (plan B8). A warden changing wardens, their own
   // areas included, would undo the whole scope check.
-  'staff_list', 'invite_warden', 'set_warden_block', 'set_warden_active',
+  'staff_list', 'invite_warden', 'set_warden_block', 'set_warden_active', 'rename_staff',
   // Reviews carry customers' names and contact details.
   'reviews',
 ])

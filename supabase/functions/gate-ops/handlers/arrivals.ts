@@ -377,6 +377,18 @@ export const arrivals: Record<string, Handler> = {
     return json({ ok: true, booking: data })
   },
 
+  // What has happened to one booking, oldest first, and who did it: the
+  // bottom of its edit sheet. A warden reads only what they could edit.
+  async booking_history({ body, bookingGuard }: Ctx) {
+    const blocked = await bookingGuard()
+    if (blocked) return blocked
+    const { data, error } = await db.rpc('booking_history', {
+      p_booking_id: String(body.booking_id),
+    })
+    if (error) return json(named(error), 409)
+    return json({ lines: data ?? [] })
+  },
+
   // A "pay later" walk-up who drove off, or was never really there.
   async cancel_unpaid({ body, bookingGuard }: Ctx) {
     const blocked = await bookingGuard()
